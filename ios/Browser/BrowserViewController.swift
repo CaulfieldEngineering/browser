@@ -297,7 +297,13 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let row = UIStackView(arrangedSubviews: [backButton, field, more, cancel])
         row.spacing = 4
         row.alignment = .center
+        // [Claude 2026-10-29] Ask HQ opens Joe's own HQ app; a reviewer or tester does not have it, so the button would do
+        // nothing. The App Store and TestFlight build leaves it out (Joe: "should we remove "Ask HQ" before submitting").
+        #if APPSTORE
+        let tools = UIStackView(arrangedSubviews: [newTabButton, allTabs])
+        #else
         let tools = UIStackView(arrangedSubviews: [askHQ, newTabButton, allTabs])
+        #endif
         tools.distribution = .fillEqually
 
         for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, tabsView, moreDot] as [UIView] {
