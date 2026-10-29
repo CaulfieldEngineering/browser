@@ -26,8 +26,25 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let window = UIWindow(windowScene: windowScene)
         window.overrideUserInterfaceStyle = .dark
         window.backgroundColor = Look.bg
-        window.rootViewController = BrowserViewController()
+        let browser = BrowserViewController()
+        window.rootViewController = browser
         window.makeKeyAndVisible()
         self.window = window
+        openLinks(connectionOptions.urlContexts)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        openLinks(URLContexts)
+    }
+
+    /// A link handed over by another app (cebrowser://open?url=<address>) opens in a new tab.
+    private func openLinks(_ contexts: Set<UIOpenURLContext>) {
+        guard let browser = window?.rootViewController as? BrowserViewController else { return }
+        for context in contexts {
+            let parts = URLComponents(url: context.url, resolvingAgainstBaseURL: false)
+            guard let value = parts?.queryItems?.first(where: { $0.name == "url" })?.value, let url = URL(string: value),
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
+            browser.open(external: url)
+        }
     }
 }

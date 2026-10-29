@@ -20,6 +20,18 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Links from our other apps (HQ, Blocks) come here as cebrowser://open?url=..., since Safari is blocked (2026-10-29). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.caulfieldengineering.browser</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cebrowser</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- A browser opens plain http pages too; only web content, nothing else in the app talks to the network. -->

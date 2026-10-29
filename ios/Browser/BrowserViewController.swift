@@ -426,6 +426,13 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         saveTabs()
     }
 
+    /// A link from another app (HQ, Blocks), in a tab of its own.
+    func open(external url: URL) {
+        loadViewIfNeeded()
+        newTab()
+        webView.load(URLRequest(url: url))
+    }
+
     /// A new tab, opened. With no address it is the start page, with the address field ready to type in.
     @discardableResult
     private func newTab(webView made: WKWebView? = nil, focus: Bool = false) -> Tab {
