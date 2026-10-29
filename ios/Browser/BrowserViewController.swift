@@ -1,13 +1,18 @@
 import UIKit
 import WebKit
 
-// Joe's browser (prototype): one page at a time in a web view, a bar at the bottom within thumb reach like Safari's
-// (the address, then back, forward, share, reload), a thin progress line, swipe back and forward, pull to refresh.
-// Every navigation goes through Policy (Policy.swift); what it blocks shows a calm page of its own over the web view.
+// Joe's browser (prototype), laid out like Chrome on the iPhone (Joe, 2026-10-29: "I'd actually like chromes layout
+// please"): a top bar with back, the address pill (the site, centred, with share inside it) and a ••• menu; the page in
+// a card with rounded bottom corners; a bottom toolbar of three labelled buttons, Ask HQ, New Tab and All Tabs. Tabs
+// (Tabs.swift) are each a web view; a thin progress line under the top bar; swipe back and forward; pull to refresh;
+// video in picture in picture and sound that keeps playing when the app is left (AppDelegate sets the audio session).
+// Every navigation in every tab goes through Policy (Policy.swift); what it blocks shows a calm page in the card.
 // No private mode, no downloads, no settings for DNS or proxies: it is only a browser.
 
 enum Look {
     static let bg = UIColor(red: 0x14 / 255.0, green: 0x15 / 255.0, blue: 0x18 / 255.0, alpha: 1)
+    /// The bars around the page, a step lighter than it, as Chrome's are.
+    static let chrome = UIColor(red: 0x1d / 255.0, green: 0x1e / 255.0, blue: 0x22 / 255.0, alpha: 1)
     static let raised = UIColor(white: 1, alpha: 0.08)
     static let text = UIColor(red: 0xe3 / 255.0, green: 0xe4 / 255.0, blue: 0xe8 / 255.0, alpha: 1)
     static let muted = UIColor(red: 0x9a / 255.0, green: 0x9e / 255.0, blue: 0xa8 / 255.0, alpha: 1)
@@ -17,55 +22,70 @@ enum Look {
 }
 
 final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITextFieldDelegate {
+    /// The open tab's web view, in the page card. Every tab's web view has this controller as its delegates.
     private var webView: WKWebView!
-    private let bar = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialDark))
-    private let progress = UIProgressView(progressViewStyle: .bar)
+    private var tabs: [Tab] = []
+    private var current: Tab!
+
+    private let topBar = UIView()
+    private let backButton = UIButton(type: .system)
     private let field = UITextField()
+    private let shareInField = UIButton(type: .system)
+    private let more = UIButton(type: .system)
+    private let moreDot = UIView()
     private let cancel = UIButton(type: .system)
-    private let buttons = UIStackView()
-    private let back = UIButton(type: .system)
-    private let forward = UIButton(type: .system)
-    private let share = UIButton(type: .system)
-    private let reload = UIButton(type: .system)
+    private let progress = UIProgressView(progressViewStyle: .bar)
+    /// The page card: the web view, the start page and the blocked page, rounded at the bottom.
+    private let card = UIView()
+    private let bottomBar = UIView()
+    private let askHQ = UIButton(type: .system)
+    private let newTabButton = UIButton(type: .system)
+    private let allTabs = UIButton(type: .system)
     private let blocked = BlockedView()
     private let empty = UILabel()
-    /// Shown above the bar when the install page has a newer build (Joe, 2026-10-29: "As always let's build in an
-    /// updater or link into the app"). Tapping it asks iOS to install from the install page's manifest directly.
-    private let updateButton = UIButton(type: .system)
-    private static let installPage = "https://caulfieldengineering.github.io/browser-install/"
+    private let tabsView = TabsView()
     private var watches: [NSKeyValueObservation] = []
-    /// The bar's distance above the keyboard: a little at rest, more while typing (Joe, 2026-10-29: "Can we do more of a
-    /// gap between the URL bar and the keyboard").
-    private var barToKeyboard: NSLayoutConstraint!
-    private static let restGap: CGFloat = 2
-    private static let typingGap: CGFloat = 14
 
-    private static let lastPageKey = "lastPage"
+    /// Shown above the toolbar, and in the ••• menu, when the install page has a newer build (Joe, 2026-10-29: "As
+    /// always let's build in an updater or link into the app"). It asks iOS to install from the install page's manifest.
+    private let updateButton = UIButton(type: .system)
+    private var newerVersion: String?
+    private static let installPage = "https://caulfieldengineering.github.io/browser-install/"
+    /// HQ, Joe's own chat app, in Chrome's place for its assistant. Only this one app.
+    private static let askHQURL = URL(string: "hq://chat")!
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
 
     override func loadView() {
         view = UIView()
-        view.backgroundColor = Look.bg
+        view.backgroundColor = Look.chrome
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        makeWebView()
-        makeBar()
+        makeTopBar()
+        makeCard()
+        makeBottomBar()
         makeOverlays()
         layout()
-        watch()
         checkForUpdate()
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.checkForUpdate()
         }
-
-        if let last = UserDefaults.standard.string(forKey: Self.lastPageKey), let url = URL(string: last) {
-            open(url)
-        } else {
-            updateBar()
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.snapshotCurrent()
+            self?.saveTabs()
         }
+
+        let restored = TabStore.load()
+        tabs = restored.tabs
+        select(tabs[restored.current])
+    }
+
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        // Background tabs give up their pages; each keeps its address and loads it again when opened.
+        for tab in tabs where tab !== current { tab.webView = nil }
     }
 
     // MARK: - Updates
@@ -73,7 +93,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private static var myVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
     private static var myBuild: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0 }
 
-    /// Reads the install page's version.json; a higher build number shows the Update button.
+    /// Reads the install page's version.json; a higher build number shows the Update button and the menu's line.
     private func checkForUpdate() {
         guard let url = URL(string: Self.installPage + "version.json") else { return }
         var request = URLRequest(url: url)
@@ -83,52 +103,41 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
                   let build = info["build"] as? Int, let version = info["version"] as? String else { return }
             DispatchQueue.main.async {
                 guard let self else { return }
-                let newer = build > Self.myBuild
+                self.newerVersion = build > Self.myBuild ? version : nil
                 self.updateButton.configuration?.title = "Update to \(version)"
-                self.updateButton.isHidden = !newer
+                self.updateButton.isHidden = self.newerVersion == nil
+                self.moreDot.isHidden = self.newerVersion == nil
             }
         }.resume()
     }
 
-    // MARK: - Building
-
-    private func makeWebView() {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default() // never a private (non-persistent) store
-        config.allowsInlineMediaPlayback = true
-        config.preferences.isFraudulentWebsiteWarningEnabled = true
-        config.defaultWebpagePreferences.preferredContentMode = .mobile
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
-        webView.allowsBackForwardNavigationGestures = true
-        webView.allowsLinkPreview = true
-        webView.isOpaque = false
-        webView.backgroundColor = Look.bg
-        webView.underPageBackgroundColor = Look.bg
-        webView.scrollView.backgroundColor = Look.bg
-        webView.scrollView.keyboardDismissMode = .interactive
-
-        let refresh = UIRefreshControl()
-        refresh.tintColor = Look.muted
-        refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
-        webView.scrollView.refreshControl = refresh
-        view.addSubview(webView)
+    private func installUpdate() {
+        let manifest = Self.installPage + "manifest.plist"
+        if let url = URL(string: "itms-services://?action=download-manifest&url=\(manifest)") { UIApplication.shared.open(url) }
     }
 
-    private func makeBar() {
-        progress.progressTintColor = Look.accent
-        progress.trackTintColor = .clear
-        progress.isHidden = true
+    // MARK: - Building
+
+    private static func symbol(_ name: String, _ size: CGFloat = 19) -> UIImage? {
+        UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .regular))
+    }
+
+    private func makeTopBar() {
+        topBar.backgroundColor = Look.chrome
+
+        backButton.setImage(Self.symbol("arrow.left"), for: .normal)
+        backButton.tintColor = Look.text
+        backButton.accessibilityLabel = "Back"
+        backButton.addTarget(self, action: #selector(goBack), for: .touchUpInside)
 
         field.delegate = self
         field.backgroundColor = Look.raised
-        field.layer.cornerRadius = 12
+        field.layer.cornerRadius = 20
         field.layer.cornerCurve = .continuous
         field.textColor = Look.text
         field.tintColor = Look.accent
         field.font = .systemFont(ofSize: 16)
-        field.attributedPlaceholder = NSAttributedString(string: "Search or enter address", attributes: [.foregroundColor: Look.muted])
+        field.attributedPlaceholder = NSAttributedString(string: "Search or type URL", attributes: [.foregroundColor: Look.muted])
         field.textAlignment = .center
         field.keyboardType = .webSearch
         field.returnKeyType = .go
@@ -139,11 +148,27 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         field.smartQuotesType = .no
         field.clearButtonMode = .whileEditing
         field.enablesReturnKeyAutomatically = true
-        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
-        field.leftViewMode = .always
-        field.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1))
-        field.rightViewMode = .unlessEditing
         field.accessibilityLabel = "Address"
+        setFieldInsets(editing: false)
+
+        // Share, inside the pill on its right (at rest).
+        shareInField.setImage(Self.symbol("square.and.arrow.up", 15), for: .normal)
+        shareInField.tintColor = Look.muted
+        shareInField.accessibilityLabel = "Share"
+        shareInField.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+        shareInField.addTarget(self, action: #selector(sharePage), for: .touchUpInside)
+        field.rightView = shareInField
+        field.rightViewMode = .unlessEditing
+
+        more.setImage(Self.symbol("ellipsis"), for: .normal)
+        more.tintColor = Look.text
+        more.accessibilityLabel = "More"
+        more.showsMenuAsPrimaryAction = true
+        more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.menuItems() ?? []) }])
+        moreDot.backgroundColor = Look.accent
+        moreDot.layer.cornerRadius = 3.5
+        moreDot.isHidden = true
+        moreDot.isUserInteractionEnabled = false
 
         cancel.setTitle("Cancel", for: .normal)
         cancel.titleLabel?.font = .systemFont(ofSize: 16)
@@ -152,31 +177,81 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         cancel.addTarget(self, action: #selector(cancelEditing), for: .touchUpInside)
         cancel.setContentHuggingPriority(.required, for: .horizontal)
 
-        func setUp(_ button: UIButton, _ symbol: String, _ label: String, _ action: Selector) {
-            button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .regular)), for: .normal)
-            button.tintColor = Look.text
-            button.accessibilityLabel = label
-            button.addTarget(self, action: action, for: .touchUpInside)
-            button.heightAnchor.constraint(equalToConstant: 44).isActive = true
-        }
-        setUp(back, "chevron.backward", "Back", #selector(goBack))
-        setUp(forward, "chevron.forward", "Forward", #selector(goForward))
-        setUp(share, "square.and.arrow.up", "Share", #selector(sharePage))
-        setUp(reload, "arrow.clockwise", "Reload", #selector(reloadOrStop))
-        [back, forward, share, reload].forEach(buttons.addArrangedSubview)
-        buttons.axis = .horizontal
-        buttons.distribution = .fillEqually
+        progress.progressTintColor = Look.accent
+        progress.trackTintColor = .clear
+        progress.isHidden = true
+    }
 
-        view.addSubview(bar)
+    private func setFieldInsets(editing: Bool) {
+        // At rest the left matches the share button on the right, so the site sits in the middle.
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: editing ? 14 : 40, height: 1))
+        field.leftViewMode = .always
+    }
+
+    private func makeCard() {
+        card.backgroundColor = Look.bg
+        card.layer.cornerRadius = 18
+        card.layer.cornerCurve = .continuous
+        card.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        card.clipsToBounds = true
+    }
+
+    /// Icon over a small label, as in Chrome's toolbar.
+    private static func toolLook(_ image: UIImage?, _ title: String) -> UIButton.Configuration {
+        var look = UIButton.Configuration.plain()
+        look.image = image
+        look.imagePlacement = .top
+        look.imagePadding = 4
+        look.baseForegroundColor = Look.text
+        var text = AttributedString(title)
+        text.font = .systemFont(ofSize: 11, weight: .medium)
+        look.attributedTitle = text
+        look.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+        return look
+    }
+
+    /// The All Tabs icon: the count in a rounded square.
+    private static func countImage(_ n: Int) -> UIImage {
+        let size = CGSize(width: 24, height: 24)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let path = UIBezierPath(roundedRect: CGRect(x: 1.5, y: 1.5, width: 21, height: 21), cornerRadius: 5.5)
+            path.lineWidth = 1.8
+            Look.text.setStroke()
+            path.stroke()
+            let text = (n > 99 ? ":)" : "\(n)") as NSString
+            let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: Look.text]
+            let s = text.size(withAttributes: attrs)
+            text.draw(at: CGPoint(x: (size.width - s.width) / 2, y: (size.height - s.height) / 2), withAttributes: attrs)
+        }.withRenderingMode(.alwaysOriginal)
+    }
+
+    private func makeBottomBar() {
+        bottomBar.backgroundColor = Look.chrome
+
+        askHQ.configuration = Self.toolLook(Self.symbol("bubble.left", 20), "Ask HQ")
+        askHQ.addAction(UIAction { _ in UIApplication.shared.open(Self.askHQURL) }, for: .touchUpInside)
+
+        newTabButton.configuration = Self.toolLook(Self.symbol("plus.circle", 20), "New Tab")
+        newTabButton.addAction(UIAction { [weak self] _ in self?.newTab(focus: true) }, for: .touchUpInside)
+
+        allTabs.configuration = Self.toolLook(Self.countImage(1), "All Tabs")
+        allTabs.addTarget(self, action: #selector(showTabs), for: .touchUpInside)
+        // A long press: New Tab, Close This Tab.
+        allTabs.menu = UIMenu(children: [
+            UIAction(title: "New Tab", image: UIImage(systemName: "plus.square.on.square")) { [weak self] _ in self?.newTab(focus: true) },
+            UIAction(title: "Close This Tab", image: UIImage(systemName: "xmark"), attributes: .destructive) { [weak self] _ in
+                if let tab = self?.current { self?.close(tab) }
+            },
+        ])
+        allTabs.showsMenuAsPrimaryAction = false
     }
 
     private func makeOverlays() {
-        empty.text = "Search or enter an address below.\n\nBrowser \(Self.myVersion)"
+        empty.text = "Search or type an address above.\n\nBrowser \(Self.myVersion)"
         empty.textColor = Look.faint
         empty.font = .systemFont(ofSize: 15)
         empty.textAlignment = .center
         empty.numberOfLines = 0
-        view.addSubview(empty)
 
         var look = UIButton.Configuration.filled()
         look.baseBackgroundColor = Look.accent
@@ -185,77 +260,271 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         look.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         updateButton.configuration = look
         updateButton.isHidden = true
-        updateButton.addAction(UIAction { _ in
-            let manifest = Self.installPage + "manifest.plist"
-            if let url = URL(string: "itms-services://?action=download-manifest&url=\(manifest)") { UIApplication.shared.open(url) }
-        }, for: .touchUpInside)
-        view.addSubview(updateButton)
+        updateButton.addAction(UIAction { [weak self] _ in self?.installUpdate() }, for: .touchUpInside)
 
         blocked.isHidden = true
         blocked.onBack = { [weak self] in self?.leaveBlocked() }
-        view.addSubview(blocked)
+
+        tabsView.isHidden = true
+        tabsView.onSelect = { [weak self] tab in
+            self?.select(tab)
+            self?.hideTabs()
+        }
+        tabsView.onClose = { [weak self] tab in
+            guard let self else { return }
+            self.close(tab)
+            self.tabsView.current = self.current
+            if self.tabsView.tabs.isEmpty { self.hideTabs() }
+        }
+        tabsView.onNew = { [weak self] in
+            self?.hideTabs()
+            self?.newTab(focus: true)
+        }
+        tabsView.onDone = { [weak self] in self?.hideTabs() }
     }
 
     private func layout() {
-        let topLine = UIView()
-        topLine.backgroundColor = Look.line
-        let fieldRow = UIStackView(arrangedSubviews: [field, cancel])
-        fieldRow.spacing = 12
-        let column = UIStackView(arrangedSubviews: [fieldRow, buttons])
-        column.axis = .vertical
-        column.spacing = 4
+        let row = UIStackView(arrangedSubviews: [backButton, field, more, cancel])
+        row.spacing = 4
+        row.alignment = .center
+        let tools = UIStackView(arrangedSubviews: [askHQ, newTabButton, allTabs])
+        tools.distribution = .fillEqually
 
-        for v in [webView!, bar, topLine, progress, column, empty, blocked, updateButton] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
-        bar.contentView.addSubview(topLine)
-        bar.contentView.addSubview(progress)
-        bar.contentView.addSubview(column)
+        for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, tabsView, moreDot] as [UIView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+        }
+        view.addSubview(card)
+        view.addSubview(topBar)
+        topBar.addSubview(row)
+        topBar.addSubview(progress)
+        card.addSubview(empty)
+        card.addSubview(blocked)
+        view.addSubview(bottomBar)
+        bottomBar.addSubview(tools)
+        view.addSubview(updateButton)
+        view.addSubview(moreDot)
+        view.addSubview(tabsView)
 
-        // The bar rides on the keyboard (keyboardLayoutGuide is the safe area's bottom when there is none).
-        barToKeyboard = column.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -Self.restGap)
-        barToKeyboard.isActive = true
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.barToKeyboard.constant = -Self.typingGap
-        }
-        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.barToKeyboard.constant = -Self.restGap
-        }
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: bar.topAnchor),
+            topBar.topAnchor.constraint(equalTo: view.topAnchor),
+            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            row.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+            row.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 6),
+            row.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -6),
+            row.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8),
+            backButton.widthAnchor.constraint(equalToConstant: 44),
+            backButton.heightAnchor.constraint(equalToConstant: 44),
+            more.widthAnchor.constraint(equalToConstant: 44),
+            more.heightAnchor.constraint(equalToConstant: 44),
+            field.heightAnchor.constraint(equalToConstant: 40),
+            moreDot.widthAnchor.constraint(equalToConstant: 7),
+            moreDot.heightAnchor.constraint(equalToConstant: 7),
+            moreDot.topAnchor.constraint(equalTo: more.topAnchor, constant: 10),
+            moreDot.trailingAnchor.constraint(equalTo: more.trailingAnchor, constant: -8),
 
-            bar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-            topLine.topAnchor.constraint(equalTo: bar.contentView.topAnchor),
-            topLine.leadingAnchor.constraint(equalTo: bar.contentView.leadingAnchor),
-            topLine.trailingAnchor.constraint(equalTo: bar.contentView.trailingAnchor),
-            topLine.heightAnchor.constraint(equalToConstant: 1 / UIScreen.main.scale),
-
-            progress.topAnchor.constraint(equalTo: bar.contentView.topAnchor),
-            progress.leadingAnchor.constraint(equalTo: bar.contentView.leadingAnchor),
-            progress.trailingAnchor.constraint(equalTo: bar.contentView.trailingAnchor),
+            progress.leadingAnchor.constraint(equalTo: topBar.leadingAnchor),
+            progress.trailingAnchor.constraint(equalTo: topBar.trailingAnchor),
+            progress.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
             progress.heightAnchor.constraint(equalToConstant: 2),
 
-            column.topAnchor.constraint(equalTo: bar.contentView.topAnchor, constant: 10),
-            column.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            column.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            field.heightAnchor.constraint(equalToConstant: 44),
+            card.topAnchor.constraint(equalTo: topBar.bottomAnchor),
+            card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+
+            bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            tools.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 4),
+            tools.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
+            tools.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
+            tools.heightAnchor.constraint(equalToConstant: 52),
+            tools.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            updateButton.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: -10),
+            updateButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14),
 
-            empty.centerYAnchor.constraint(equalTo: webView.centerYAnchor),
-            empty.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
-            empty.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+            empty.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+            empty.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 32),
+            empty.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -32),
 
-            blocked.topAnchor.constraint(equalTo: webView.topAnchor),
-            blocked.bottomAnchor.constraint(equalTo: webView.bottomAnchor),
-            blocked.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            blocked.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            blocked.topAnchor.constraint(equalTo: card.topAnchor),
+            blocked.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            blocked.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            blocked.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+
+            tabsView.topAnchor.constraint(equalTo: view.topAnchor),
+            tabsView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            tabsView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
+    }
+
+    /// The ••• menu, built each time it opens.
+    private func menuItems() -> [UIMenuElement] {
+        guard let web = webView else { return [] }
+        let forward = UIAction(title: "Forward", image: UIImage(systemName: "arrow.right"), attributes: web.canGoForward ? [] : .disabled) { [weak self] _ in
+            self?.webView.goForward()
+        }
+        let reload = web.isLoading
+            ? UIAction(title: "Stop", image: UIImage(systemName: "xmark")) { [weak self] _ in self?.webView.stopLoading() }
+            : UIAction(title: "Reload", image: UIImage(systemName: "arrow.clockwise"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in self?.webView.reload() }
+        let newTab = UIAction(title: "New Tab", image: UIImage(systemName: "plus.square.on.square")) { [weak self] _ in self?.newTab(focus: true) }
+        let closeTab = UIAction(title: "Close Tab", image: UIImage(systemName: "xmark.square"), attributes: .destructive) { [weak self] _ in
+            if let tab = self?.current { self?.close(tab) }
+        }
+        let share = UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in
+            self?.sharePage()
+        }
+        var about: [UIMenuElement] = [UIAction(title: "Browser \(Self.myVersion)", attributes: .disabled) { _ in }]
+        if let newer = newerVersion {
+            about.append(UIAction(title: "Update to \(newer)", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.installUpdate() })
+        }
+        return [
+            UIMenu(options: .displayInline, children: [forward, reload]),
+            UIMenu(options: .displayInline, children: [newTab, closeTab]),
+            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: about),
+        ]
+    }
+
+    // MARK: - Tabs
+
+    /// Opens a tab: its web view (made now if it has none, loading its address) goes in the card, the bars follow it.
+    private func select(_ tab: Tab) {
+        if let old = current, old !== tab { snapshotCurrent() }
+        current = tab
+        tab.lastUsed = Date()
+        let web = tab.webView ?? makeWebView()
+        if tab.webView == nil {
+            tab.webView = web
+            if let url = tab.url { web.load(URLRequest(url: url)) }
+        }
+        if webView !== web {
+            webView?.removeFromSuperview()
+            webView = web
+            web.translatesAutoresizingMaskIntoConstraints = false
+            card.insertSubview(web, at: 0)
+            NSLayoutConstraint.activate([
+                web.topAnchor.constraint(equalTo: card.topAnchor),
+                web.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+                web.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+                web.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            ])
+            watch()
+        }
+        if let b = tab.blocked { blocked.show(title: b.title, reason: b.reason, address: b.address, calm: b.calm) } else { blocked.isHidden = true }
+        progress.isHidden = true
+        progress.progress = 0
+        updateBar()
+        saveTabs()
+    }
+
+    /// A new tab, opened. With no address it is the start page, with the address field ready to type in.
+    @discardableResult
+    private func newTab(webView made: WKWebView? = nil, focus: Bool = false) -> Tab {
+        if tabs.count >= TabStore.cap, let oldest = tabs.filter({ $0 !== current }).min(by: { $0.lastUsed < $1.lastUsed }) {
+            remove(oldest)
+        }
+        let tab = Tab()
+        tab.webView = made
+        let at = (tabs.firstIndex { $0 === current } ?? tabs.count - 1) + 1
+        tabs.insert(tab, at: min(max(at, 0), tabs.count))
+        select(tab)
+        if focus { DispatchQueue.main.async { self.field.becomeFirstResponder() } }
+        return tab
+    }
+
+    private func remove(_ tab: Tab) {
+        tab.webView?.stopLoading()
+        tab.webView = nil
+        TabStore.removeSnapshot(for: tab.id)
+        tabs.removeAll { $0 === tab }
+    }
+
+    /// Closes a tab; closing the open one opens its neighbour, and closing the last leaves a fresh start page.
+    private func close(_ tab: Tab) {
+        let index = tabs.firstIndex { $0 === tab } ?? 0
+        let wasCurrent = tab === current
+        remove(tab)
+        if tabs.isEmpty {
+            current = nil
+            newTab()
+        } else if wasCurrent {
+            current = nil
+            select(tabs[min(index, tabs.count - 1)])
+        } else {
+            updateBar()
+            saveTabs()
+        }
+    }
+
+    private func saveTabs() {
+        TabStore.save(tabs, current: current)
+    }
+
+    /// The open tab's picture for the overview, kept small, and on disk for the next launch.
+    private func snapshotCurrent(then done: (() -> Void)? = nil) {
+        guard let tab = current, let web = webView, web.url != nil, web.bounds.width > 0 else { done?(); return }
+        let config = WKSnapshotConfiguration()
+        config.snapshotWidth = NSNumber(value: 360)
+        web.takeSnapshot(with: config) { image, _ in
+            if let image {
+                tab.snapshot = image
+                TabStore.saveSnapshot(image, for: tab.id)
+            }
+            done?()
+        }
+    }
+
+    @objc private func showTabs() {
+        field.resignFirstResponder()
+        snapshotCurrent { [weak self] in
+            guard let self else { return }
+            self.tabsView.tabs = self.tabs
+            self.tabsView.current = self.current
+            self.tabsView.alpha = 0
+            self.tabsView.isHidden = false
+            self.tabsView.reload()
+            UIView.animate(withDuration: 0.2) { self.tabsView.alpha = 1 }
+        }
+    }
+
+    private func hideTabs() {
+        UIView.animate(withDuration: 0.2, animations: { self.tabsView.alpha = 0 }, completion: { _ in self.tabsView.isHidden = true })
+    }
+
+    private func tab(for web: WKWebView) -> Tab? { tabs.first { $0.webView === web } }
+
+    // MARK: - A tab's web view
+
+    /// A tab's web view. A page that opens a window hands its own configuration (`given`), which must be used.
+    private func makeWebView(_ given: WKWebViewConfiguration? = nil) -> WKWebView {
+        let config = given ?? WKWebViewConfiguration()
+        config.websiteDataStore = .default() // never a private (non-persistent) store
+        config.allowsInlineMediaPlayback = true
+        // Picture in picture (Joe, 2026-10-29: "PIP player would be nice"): WebKit's own, from a video's controls or
+        // on leaving the app while a video plays, as in Safari.
+        config.allowsPictureInPictureMediaPlayback = true
+        config.preferences.isFraudulentWebsiteWarningEnabled = true
+        config.defaultWebpagePreferences.preferredContentMode = .mobile
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.navigationDelegate = self
+        web.uiDelegate = self
+        web.allowsBackForwardNavigationGestures = true
+        web.allowsLinkPreview = true
+        web.isOpaque = false
+        web.backgroundColor = Look.bg
+        web.underPageBackgroundColor = Look.bg
+        web.scrollView.backgroundColor = Look.bg
+        web.scrollView.keyboardDismissMode = .interactive
+
+        let refresh = UIRefreshControl()
+        refresh.tintColor = Look.muted
+        refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
+        web.scrollView.refreshControl = refresh
+        return web
     }
 
     private func watch() {
@@ -265,25 +534,25 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             webView.observe(\.canGoBack, options: [.new]) { [weak self] _, _ in self?.updateBar() },
             webView.observe(\.canGoForward, options: [.new]) { [weak self] _, _ in self?.updateBar() },
             webView.observe(\.url, options: [.new]) { [weak self] _, _ in self?.updateBar() },
+            webView.observe(\.title, options: [.new]) { [weak self] web, _ in self?.tab(for: web)?.title = web.title ?? "" },
         ]
     }
 
-    // MARK: - The bar
+    // MARK: - The bars
 
     private func updateBar() {
-        back.isEnabled = webView.canGoBack || !blocked.isHidden
-        forward.isEnabled = webView.canGoForward
-        share.isEnabled = webView.url != nil && blocked.isHidden
-        let symbol = webView.isLoading ? "xmark" : "arrow.clockwise"
-        reload.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 19, weight: .regular)), for: .normal)
-        reload.accessibilityLabel = webView.isLoading ? "Stop" : "Reload"
-        reload.isEnabled = webView.url != nil
-        for b in [back, forward, share, reload] { b.tintColor = b.isEnabled ? Look.text : Look.faint }
-        empty.isHidden = webView.url != nil || !blocked.isHidden
-        if !field.isEditing { field.text = Self.shortAddress(webView.url) }
-        if let url = webView.url, url.scheme == "https" || url.scheme == "http" {
-            UserDefaults.standard.set(url.absoluteString, forKey: Self.lastPageKey)
+        guard let web = webView else { return }
+        backButton.isEnabled = web.canGoBack || !blocked.isHidden
+        backButton.tintColor = backButton.isEnabled ? Look.text : Look.faint
+        shareInField.isHidden = web.url == nil || !blocked.isHidden
+        empty.isHidden = web.url != nil || !blocked.isHidden
+        if !field.isEditing { field.text = Self.shortAddress(web.url) }
+        if let url = web.url, url.scheme == "https" || url.scheme == "http", current.url != url {
+            current.url = url
+            saveTabs()
         }
+        allTabs.configuration?.image = Self.countImage(tabs.count)
+        allTabs.accessibilityLabel = tabs.count == 1 ? "All tabs, 1 tab" : "All tabs, \(tabs.count) tabs"
     }
 
     private func updateProgress() {
@@ -299,7 +568,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         }
     }
 
-    /// At rest the bar shows the site, not the whole address ("nytimes.com").
+    /// At rest the pill shows the site, not the whole address ("nytimes.com").
     static func shortAddress(_ url: URL?) -> String {
         guard let url, let host = url.host else { return "" }
         if host.hasSuffix("duckduckgo.com"), let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "q" })?.value {
@@ -308,23 +577,28 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 
+    // The pill is at the top, so the keyboard comes up well clear of it; while typing, Cancel takes the ••• place.
     func textFieldDidBeginEditing(_ textField: UITextField) {
         field.textAlignment = .natural
+        setFieldInsets(editing: true)
         field.text = webView.url?.absoluteString ?? ""
         cancel.isHidden = false
-        buttons.isHidden = true
+        more.isHidden = true
+        moreDot.alpha = 0
         DispatchQueue.main.async { textField.selectAll(nil) }
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
         field.textAlignment = .center
+        setFieldInsets(editing: false)
         cancel.isHidden = true
-        buttons.isHidden = false
+        more.isHidden = false
+        moreDot.alpha = 1
         updateBar()
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        if let url = Search.destination(for: textField.text ?? "") { open(url) }
+        if let url = Search.destination(for: textField.text ?? "") { webView.load(URLRequest(url: url)) }
         textField.resignFirstResponder()
         return false
     }
@@ -333,19 +607,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     // MARK: - Actions
 
-    private func open(_ url: URL) {
-        webView.load(URLRequest(url: url))
-    }
-
     @objc private func goBack() {
         if !blocked.isHidden { return leaveBlocked() }
         webView.goBack()
-    }
-
-    @objc private func goForward() { webView.goForward() }
-
-    @objc private func reloadOrStop() {
-        if webView.isLoading { webView.stopLoading() } else { webView.reload() }
     }
 
     @objc private func pulled() {
@@ -356,19 +620,28 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     @objc private func sharePage() {
         guard let url = webView.url else { return }
         let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        sheet.popoverPresentationController?.sourceView = share
+        sheet.popoverPresentationController?.sourceView = shareInField
         present(sheet, animated: true)
     }
 
     // MARK: - Blocked pages
 
-    private func showBlocked(_ title: String, _ reason: String, _ url: URL?) {
-        blocked.show(title: title, reason: reason, address: url?.host ?? url?.absoluteString ?? "")
+    /// The calm page, kept on its tab: shown now if that tab is open, else when it is opened.
+    private func showBlocked(_ info: BlockedInfo, in web: WKWebView) {
+        guard let tab = tab(for: web) else { return }
+        tab.blocked = info
+        guard tab === current else { return }
+        blocked.show(title: info.title, reason: info.reason, address: info.address, calm: info.calm)
         updateProgress()
         updateBar()
     }
 
+    private func showBlocked(_ title: String, _ reason: String, _ url: URL?, in web: WKWebView) {
+        showBlocked(BlockedInfo(title: title, reason: reason, address: url?.host ?? url?.absoluteString ?? "", calm: false), in: web)
+    }
+
     private func leaveBlocked() {
+        current.blocked = nil
         blocked.isHidden = true
         updateBar()
     }
@@ -379,13 +652,17 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
         switch Policy.decide(request: navigationAction.request, isMainFrame: isMainFrame) {
         case .allow:
-            // A link with no frame of its own (target=_blank) opens here, in the same view.
+            // A link with no frame of its own that did not get a new tab (below) opens in a new tab here.
             if navigationAction.targetFrame == nil {
                 decisionHandler(.cancel)
-                webView.load(navigationAction.request)
+                newTab()
+                self.webView.load(navigationAction.request)
                 return
             }
-            if isMainFrame { blocked.isHidden = true }
+            if isMainFrame, let tab = tab(for: webView) {
+                tab.blocked = nil
+                if tab === current { blocked.isHidden = true }
+            }
             // Allow without handing the link to another app (a universal link would open that app); WebKit's
             // _WKNavigationActionPolicyAllowWithoutTryingAppLink, which browsers built on WKWebView use.
             decisionHandler(WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2) ?? .allow)
@@ -394,7 +671,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             if let url = navigationAction.request.url { UIApplication.shared.open(url) }
         case let .block(title, reason):
             decisionHandler(.cancel)
-            if isMainFrame || navigationAction.targetFrame == nil { showBlocked(title, reason, navigationAction.request.url) }
+            if isMainFrame || navigationAction.targetFrame == nil { showBlocked(title, reason, navigationAction.request.url, in: webView) }
         }
     }
 
@@ -404,14 +681,21 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             decisionHandler(.allow)
         case let .block(title, reason):
             decisionHandler(.cancel)
-            if navigationResponse.isForMainFrame { showBlocked(title, reason, navigationResponse.response.url) }
+            if navigationResponse.isForMainFrame { showBlocked(title, reason, navigationResponse.response.url, in: webView) }
         }
     }
 
-    // Links and scripts that open a new window open in the same view.
+    // Links and scripts that open a new window open in a new tab. WebKit loads the request into the web view returned
+    // here, through the same delegates, so Policy sees it as it sees every navigation.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if navigationAction.request.url != nil { webView.load(navigationAction.request) }
-        return nil
+        let made = makeWebView(configuration)
+        newTab(webView: made)
+        return made
+    }
+
+    // A page closing a window it opened (window.close()) closes that tab.
+    func webViewDidClose(_ webView: WKWebView) {
+        if let tab = tab(for: webView) { close(tab) }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -424,7 +708,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let e = error as NSError
         if e.code == NSURLErrorCancelled || e.code == 102 /* frame load interrupted, a cancelled navigation */ { return updateBar() }
         let url = (e.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
-        blocked.show(title: "This page did not open", reason: e.localizedDescription, address: url?.host ?? "", calm: true)
+        showBlocked(BlockedInfo(title: "This page did not open", reason: e.localizedDescription, address: url?.host ?? "", calm: true), in: webView)
         updateBar()
     }
 

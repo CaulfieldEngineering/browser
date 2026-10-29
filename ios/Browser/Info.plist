@@ -36,6 +36,11 @@
 	<string>A web page asked for a photo.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>A web page asked for your location.</string>
+	<!-- Sound and picture in picture go on when the app is left. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

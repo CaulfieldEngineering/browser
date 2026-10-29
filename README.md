@@ -4,17 +4,19 @@ Joe's own iPhone browser, a prototype. Joe, 2026-10-29: "Go ahead and build a pr
 
 ## What it does
 
-- One page at a time in a WKWebView, dark, in the house style (HQ/agent/app-design.md).
-- A bar at the bottom within thumb reach, like Safari's: the address field shows the site at rest ("nytimes.com", or the words of a search) and the whole address while editing; text that is not an address searches DuckDuckGo with SafeSearch strict (`kp=1`). Under it: back, forward, share, reload (stop while loading). A thin green progress line on the bar's top edge. The bar rides on the keyboard.
-- Swipe from the edge for back and forward; pull down to reload. The last page opens again at launch.
-- Links and scripts that open a new window open in the same view. Links that would hand off to another app stay in the browser (universal links are not followed out).
-- No private mode (the web view always uses the persistent store), no downloads, no setting for DNS or proxies.
+- Laid out like Chrome on the iPhone (Joe, 2026-10-29: "I'd actually like chromes layout please"), dark, in the house style (HQ/agent/app-design.md): a top bar with back, the address pill (the site centred at rest, the whole address while typing, share inside it on the right) and a ••• menu (Forward, Reload or Stop, New Tab, Close Tab, Share, the version and Update when there is one, with a green dot on •••); the page in a card with rounded bottom corners; a bottom toolbar of three labelled buttons: **Ask HQ** (opens the HQ app, `hq://chat`), **New Tab**, **All Tabs** (the count in a rounded square).
+- Text that is not an address searches DuckDuckGo with SafeSearch strict (`kp=1`).
+- Tabs (`Tabs.swift`): All Tabs shows every tab as a card with its snapshot and title, two across; tap to open, x or a sideways swipe to close, + for a new tab, Done or the open tab's card to go back. A long press on All Tabs: New Tab, Close This Tab. Links and scripts that open a window open a new tab. Tabs, their addresses and snapshots persist across launches; a tab's web view is made only when it is opened, background tabs give theirs up when memory runs low, and at 30 the least recently used closes. No private tabs.
+- A thin green progress line under the top bar, swipe from the edge for back and forward, pull down to reload.
+- Picture in picture and sound in the background: `allowsPictureInPictureMediaPlayback`, the audio session in `.playback`, `UIBackgroundModes` audio. A site that pauses itself when the page is hidden still does.
+- An updater: on opening it reads the install page's `version.json`; a newer build shows a green Update capsule (and a line in the menu) that installs from the install page.
+- Links that would hand off to another app stay in the browser (universal links are not followed out). No private mode, no downloads, no setting for DNS or proxies.
 
 ## The policy: one place every navigation passes through
 
 `ios/Browser/Policy.swift`. `Policy.decide(request:isMainFrame:)` sees every request before it is made, and `Policy.decide(response:isMainFrame:canShow:)` every answer before it is shown; both return `allow`, `openOutside` (tel, mailto, sms, FaceTime go to the system) or `block(title, reason)`, which shows a calm page over the web view with Go back. The rules from the mini PC will plug in there. For now it blocks only:
 - configuration and provisioning profiles, apps and installers, by file extension or MIME type (`.mobileconfig`, `application/x-apple-aspen-config`, `.ipa`, `.mobileprovision` and the like);
-- every scheme that is not the web or the four above (`itms-services` app installs, `itms-apps`, other apps' own links);
+- every scheme that is not the web or the four above (`itms-services` app installs, `itms-apps`, other apps' own links), with one exception: an `itms-services://?action=download-manifest` link whose `url` is exactly `https://caulfieldengineering.github.io/<browser|hq|blocks>-install/manifest.plist`, our own install pages (`Policy.isOwnInstall`);
 - downloads in general (anything the web view cannot show), since the prototype keeps no files.
 
 ## Building and installing
@@ -27,4 +29,4 @@ Joe installs it: Safari on the iPhone, https://caulfieldengineering.github.io/br
 
 ## Not built yet
 
-Tabs, the rules from the mini PC, bookmarks and history lists, find in page, reader mode, downloads.
+The rules from the mini PC, bookmarks and history lists, find in page, reader mode, downloads.

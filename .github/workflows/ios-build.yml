@@ -216,7 +216,7 @@ jobs:
               <p class="meta">Version $VERSION, built $BUILT_ON</p>
               <a class="install" href="itms-services://?action=download-manifest&amp;url=$PAGES/manifest.plist">Install</a>
               <p>Open this page in Safari on the iPhone.</p>
-              <p>A prototype: one page at a time, nothing to set up.</p>
+              <p>Tabs, search and picture in picture; nothing to set up.</p>
             </main>
           </body>
           </html>

@@ -33,6 +33,7 @@ enum Policy {
     static func decide(request: URLRequest, isMainFrame: Bool) -> Decision {
         guard let url = request.url, let scheme = url.scheme?.lowercased() else { return .allow }
         if outsideSchemes.contains(scheme) { return .openOutside }
+        if isOwnInstall(url) { return .openOutside }
         if !webSchemes.contains(scheme) {
             // itms-services (an app install), itms-apps, another app's own link: none leaves the browser.
             return .block(title: "This link opens another app", reason: "Links to other apps and app installs stay closed here.")
@@ -41,6 +42,26 @@ enum Policy {
             return .block(title: "This file installs something", reason: "Profiles and apps are not downloaded here.")
         }
         return .allow
+    }
+
+    /// Our own install pages, and nothing else, may install: Joe opens browser-install in the Browser and taps Install
+    /// (2026-10-29). THE RULE, exactly: the scheme is itms-services, `action` is `download-manifest`, and `url` is
+    /// https://caulfieldengineering.github.io/<name>/manifest.plist with <name> one of `ownInstallPages` (no port, no
+    /// query, no other path). Every other itms-services link and every other app link stays blocked.
+    static let ownInstallPages: Set<String> = ["browser-install", "hq-install", "blocks-install"]
+
+    static func isOwnInstall(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "itms-services",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              items.first(where: { $0.name == "action" })?.value == "download-manifest",
+              let target = items.first(where: { $0.name == "url" })?.value,
+              let manifest = URLComponents(string: target),
+              manifest.scheme == "https", manifest.host == "caulfieldengineering.github.io",
+              manifest.port == nil, manifest.query == nil, manifest.fragment == nil, manifest.user == nil
+        else { return false }
+        let parts = manifest.path.split(separator: "/", omittingEmptySubsequences: false)
+        // "/browser-install/manifest.plist" -> ["", "browser-install", "manifest.plist"]
+        return parts.count == 3 && parts[0].isEmpty && ownInstallPages.contains(String(parts[1])) && parts[2] == "manifest.plist"
     }
 
     static func decide(response: URLResponse, isMainFrame: Bool, canShow: Bool) -> Decision {
