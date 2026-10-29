@@ -2,7 +2,8 @@
 //   npm i --no-save libsodium-wrappers && node scripts/apple-secrets.mjs
 // The certificate is Blocks' (C:\Users\Joe\.apple\blocks\dist.p12 and its password), the profile is the browser's own
 // (C:\Users\Joe\.apple\browser\Browser_AdHoc.mobileprovision), and INSTALL_DEPLOY_KEY lets the build push to the public
-// install page repo (CaulfieldEngineering/browser-install). Nothing is printed but the secret names.
+// install page repo (CaulfieldEngineering/browser-install). Nothing is printed but the secret names. Names given as
+// arguments set only those secrets.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -38,8 +39,17 @@ const secrets = {
   IOS_KEYCHAIN_PASSWORD: () => crypto.randomBytes(16).toString('hex'),
   IOS_TEAM_ID: () => 'D56QY8C7WL',
   INSTALL_DEPLOY_KEY: () => fs.readFileSync(`${OWN}/install_key`, 'utf8'),
+  // TestFlight (.github/workflows/ios-testflight.yml): the App Store profile from apple-testflight.mjs profile, and the
+  // App Store Connect API key the upload signs in with.
+  IOS_APPSTORE_PROFILE_BASE64: () => b64file(`${OWN}/Browser_AppStore.mobileprovision`),
+  ASC_KEY_ID: () => 'KFXSM9CH9R',
+  ASC_ISSUER_ID: () => 'db8a43da-8566-4d1a-93ee-8b09463088b6',
+  ASC_KEY_P8_BASE64: () => b64file('C:/Users/Joe/.apple/AuthKey_KFXSM9CH9R.p8'),
 };
+// Names on the command line set only those: node scripts/apple-secrets.mjs IOS_APPSTORE_PROFILE_BASE64 ASC_KEY_ID
+const only = process.argv.slice(2);
 for (const [name, value] of Object.entries(secrets)) {
+  if (only.length && !only.includes(name)) continue;
   let v;
   try {
     v = value();

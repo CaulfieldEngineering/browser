@@ -94,7 +94,12 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private static var myBuild: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0 }
 
     /// Reads the install page's version.json; a higher build number shows the Update button and the menu's line.
+    /// The TestFlight build (APPSTORE, set by .github/workflows/ios-testflight.yml) updates through TestFlight only, so it
+    /// never looks at the install page.
     private func checkForUpdate() {
+        #if APPSTORE
+        return
+        #endif
         guard let url = URL(string: Self.installPage + "version.json") else { return }
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData

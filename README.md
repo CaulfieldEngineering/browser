@@ -27,6 +27,14 @@ Signing: Blocks' Apple team (`D56QY8C7WL`), App Store Connect API key and Apple 
 
 Joe installs it: Safari on the iPhone, https://caulfieldengineering.github.io/browser-install/, Install.
 
+## TestFlight (for the default browser permission)
+
+Apple assesses the default browser permission only for an app on the App Store or on TestFlight (2026-10-29), so the browser also goes to TestFlight with a public link. Nothing is submitted for App Store review. The app record is **CaulfieldBrowser** (SKU `browser-001`), made by Joe in App Store Connect.
+
+- `node scripts/apple-testflight.mjs profile` makes the App Store profile `Browser AppStore` (same certificate), then `node scripts/apple-secrets.mjs IOS_APPSTORE_PROFILE_BASE64 ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_BASE64` puts it and the API key in the secrets.
+- `.github/workflows/ios-testflight.yml`, run by hand only: archive with the `APPSTORE` flag (no install page updater and no install links in that build), export for App Store Connect, upload. Version `1.0`, build number = that workflow's run number.
+- `node scripts/apple-testflight.mjs builds` until the build is `VALID`, then `beta` (the external group `Public` with a public link for 10 testers, the test notes, the review notes, beta review), and `status`.
+
 ## Not built yet
 
 The rules from the mini PC, bookmarks and history lists, find in page, reader mode, downloads.

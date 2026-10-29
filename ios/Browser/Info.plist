@@ -34,6 +34,9 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Only standard HTTPS through the system (WebKit, URLSession): exempt, so TestFlight does not hold builds for export compliance. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- A browser opens plain http pages too; only web content, nothing else in the app talks to the network. -->

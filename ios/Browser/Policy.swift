@@ -51,6 +51,9 @@ enum Policy {
     static let ownInstallPages: Set<String> = ["browser-install", "hq-install", "blocks-install"]
 
     static func isOwnInstall(_ url: URL) -> Bool {
+        #if APPSTORE
+        return false // the TestFlight build installs nothing, not even our own pages (ios-testflight.yml)
+        #endif
         guard url.scheme?.lowercased() == "itms-services",
               let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
               items.first(where: { $0.name == "action" })?.value == "download-manifest",
