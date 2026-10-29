@@ -30,6 +30,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private let blocked = BlockedView()
     private let empty = UILabel()
     private var watches: [NSKeyValueObservation] = []
+    /// The bar's distance above the keyboard: a little at rest, more while typing (Joe, 2026-10-29: "Can we do more of a
+    /// gap between the URL bar and the keyboard").
+    private var barToKeyboard: NSLayoutConstraint!
+    private static let restGap: CGFloat = 2
+    private static let typingGap: CGFloat = 14
 
     private static let lastPageKey = "lastPage"
 
@@ -163,6 +168,14 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         bar.contentView.addSubview(column)
 
         // The bar rides on the keyboard (keyboardLayoutGuide is the safe area's bottom when there is none).
+        barToKeyboard = column.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -Self.restGap)
+        barToKeyboard.isActive = true
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.barToKeyboard.constant = -Self.typingGap
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.barToKeyboard.constant = -Self.restGap
+        }
         NSLayoutConstraint.activate([
             webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -186,7 +199,6 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             column.topAnchor.constraint(equalTo: bar.contentView.topAnchor, constant: 10),
             column.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             column.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            column.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -2),
             field.heightAnchor.constraint(equalToConstant: 44),
 
             empty.centerYAnchor.constraint(equalTo: webView.centerYAnchor),
