@@ -29,6 +29,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private let reload = UIButton(type: .system)
     private let blocked = BlockedView()
     private let empty = UILabel()
+    /// Shown above the bar when the install page has a newer build (Joe, 2026-10-29: "As always let's build in an
+    /// updater or link into the app"). Tapping it asks iOS to install from the install page's manifest directly.
+    private let updateButton = UIButton(type: .system)
+    private static let installPage = "https://caulfieldengineering.github.io/browser-install/"
     private var watches: [NSKeyValueObservation] = []
     /// The bar's distance above the keyboard: a little at rest, more while typing (Joe, 2026-10-29: "Can we do more of a
     /// gap between the URL bar and the keyboard").
@@ -52,12 +56,38 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         makeOverlays()
         layout()
         watch()
+        checkForUpdate()
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.checkForUpdate()
+        }
 
         if let last = UserDefaults.standard.string(forKey: Self.lastPageKey), let url = URL(string: last) {
             open(url)
         } else {
             updateBar()
         }
+    }
+
+    // MARK: - Updates
+
+    private static var myVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+    private static var myBuild: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0 }
+
+    /// Reads the install page's version.json; a higher build number shows the Update button.
+    private func checkForUpdate() {
+        guard let url = URL(string: Self.installPage + "version.json") else { return }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let data, let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let build = info["build"] as? Int, let version = info["version"] as? String else { return }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let newer = build > Self.myBuild
+                self.updateButton.configuration?.title = "Update to \(version)"
+                self.updateButton.isHidden = !newer
+            }
+        }.resume()
     }
 
     // MARK: - Building
@@ -141,12 +171,25 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeOverlays() {
-        empty.text = "Search or enter an address below."
+        empty.text = "Search or enter an address below.\n\nBrowser \(Self.myVersion)"
         empty.textColor = Look.faint
         empty.font = .systemFont(ofSize: 15)
         empty.textAlignment = .center
         empty.numberOfLines = 0
         view.addSubview(empty)
+
+        var look = UIButton.Configuration.filled()
+        look.baseBackgroundColor = Look.accent
+        look.baseForegroundColor = Look.bg
+        look.cornerStyle = .capsule
+        look.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+        updateButton.configuration = look
+        updateButton.isHidden = true
+        updateButton.addAction(UIAction { _ in
+            let manifest = Self.installPage + "manifest.plist"
+            if let url = URL(string: "itms-services://?action=download-manifest&url=\(manifest)") { UIApplication.shared.open(url) }
+        }, for: .touchUpInside)
+        view.addSubview(updateButton)
 
         blocked.isHidden = true
         blocked.onBack = { [weak self] in self?.leaveBlocked() }
@@ -162,7 +205,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         column.axis = .vertical
         column.spacing = 4
 
-        for v in [webView!, bar, topLine, progress, column, empty, blocked] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
+        for v in [webView!, bar, topLine, progress, column, empty, blocked, updateButton] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false }
         bar.contentView.addSubview(topLine)
         bar.contentView.addSubview(progress)
         bar.contentView.addSubview(column)
@@ -200,6 +243,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             column.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             column.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
             field.heightAnchor.constraint(equalToConstant: 44),
+
+            updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            updateButton.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: -10),
 
             empty.centerYAnchor.constraint(equalTo: webView.centerYAnchor),
             empty.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
