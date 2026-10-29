@@ -118,12 +118,6 @@ if (cmd === 'profile') {
   const rd = await api('GET', `apps/${a.id}/betaAppReviewDetail`);
   const r = rd.attributes;
   console.log('review contact on file:', ['contactFirstName', 'contactLastName', 'contactEmail', 'contactPhone'].map((k) => `${k}=${r[k] ? 'set' : 'MISSING'}`).join(' '));
-  await api('PATCH', `betaAppReviewDetails/${rd.id}`, { data: { type: 'betaAppReviewDetails', id: rd.id, attributes: { demoAccountRequired: false, notes: NOTES } } });
-  const missing = ['contactFirstName', 'contactLastName', 'contactEmail', 'contactPhone'].filter((k) => !r[k]);
-  if (missing.length) {
-    console.log(`STOP: the beta review contact is missing ${missing.join(', ')}. Joe fills it in App Store Connect: Apps, CaulfieldBrowser, TestFlight, Test Information, Beta App Review Information. Then run this again.`);
-    process.exit(2);
-  }
 
   // The external group with its public link, and the build in it.
   let group = (await api('GET', `apps/${a.id}/betaGroups`)).find((g) => g.attributes.name === GROUP);
@@ -141,6 +135,15 @@ if (cmd === 'profile') {
   console.log('group', group.id, group.attributes.name, 'public link', group.attributes.publicLink);
 
   // Beta app review.
+  const missing = ['contactFirstName', 'contactLastName', 'contactEmail', 'contactPhone'].filter((k) => !r[k]);
+  const loc2 = (await api('GET', `apps/${a.id}/betaAppLocalizations`)).find((l) => l.attributes.locale === 'en-US');
+  if (!loc2?.attributes.feedbackEmail) missing.push('feedbackEmail');
+  if (missing.length) {
+    console.log(`STOP: missing ${missing.join(', ')}. Joe fills them in App Store Connect: Apps, CaulfieldBrowser, TestFlight, Test Information (Feedback Email; Beta App Review Information: first and last name, phone, email). Then run this again.`);
+    process.exit(2);
+  }
+  // Apple takes the review notes only together with the contact, so they go in once the contact is there.
+  await api('PATCH', `betaAppReviewDetails/${rd.id}`, { data: { type: 'betaAppReviewDetails', id: rd.id, attributes: { demoAccountRequired: false, notes: NOTES } } });
   const subs = await api('GET', `betaAppReviewSubmissions?filter[build]=${build.id}`);
   if (subs.length) console.log('already submitted:', subs[0].attributes.betaReviewState);
   else {
