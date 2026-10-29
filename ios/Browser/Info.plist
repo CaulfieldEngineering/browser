@@ -29,6 +29,8 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>cebrowser</string>
+				<string>http</string>
+				<string>https</string>
 			</array>
 		</dict>
 	</array>
@@ -44,8 +46,9 @@
 	<string>A web page asked to use the camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>A web page asked to use the microphone.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>A web page asked for a photo.</string>
+	<!-- Saving a photo only: Apple refuses the default browser permission to an app that can read the whole library (uploads go through the system's picker). -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>A web page asked to save a photo.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>A web page asked for your location.</string>
 	<!-- Sound and picture in picture go on when the app is left. -->

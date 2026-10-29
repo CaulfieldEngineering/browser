@@ -37,10 +37,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         openLinks(URLContexts)
     }
 
-    /// A link handed over by another app (cebrowser://open?url=<address>) opens in a new tab.
+    /// A link handed over by another app (cebrowser://open?url=<address>, or the address itself once Browser is the default) opens in a new tab.
     private func openLinks(_ contexts: Set<UIOpenURLContext>) {
         guard let browser = window?.rootViewController as? BrowserViewController else { return }
         for context in contexts {
+            // As the default browser, a link comes as itself.
+            if ["http", "https"].contains(context.url.scheme?.lowercased() ?? "") {
+                browser.open(external: context.url)
+                continue
+            }
             let parts = URLComponents(url: context.url, resolvingAgainstBaseURL: false)
             guard let value = parts?.queryItems?.first(where: { $0.name == "url" })?.value, let url = URL(string: value),
                   ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { continue }
