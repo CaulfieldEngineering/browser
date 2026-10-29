@@ -1,0 +1,230 @@
+# Builds the signed Browser iPhone app (the prototype in ios/: Joe's own browser, 2026-10-29) on GitHub's macOS runners
+# and publishes it for over-the-air install, the same route as the HQ and Blocks iPhone apps: no Mac, no cable.
+#
+# Flow: XcodeGen makes the Xcode project from ios/project.yml, then archive + ad-hoc export, then app.ipa,
+# manifest.plist, version.json and the install page are pushed to the public repo CaulfieldEngineering/browser-install,
+# served by GitHub Pages at https://caulfieldengineering.github.io/browser-install/.
+#
+# Signing: Blocks' Apple team and distribution certificate, the browser's own ad-hoc profile "Browser AdHoc"
+# (scripts/apple-provision.mjs, then scripts/apple-secrets.mjs). Until the profile secret is there, the run only
+# compiles the app unsigned.
+
+name: iOS build (OTA)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PAGES: https://caulfieldengineering.github.io/browser-install
+  BUNDLE_ID: com.caulfieldengineering.browser
+  PROFILE_NAME: Browser AdHoc   # must match the provisioning profile name in the Apple portal
+  APP_TITLE: Browser
+  VERSION: 0.1.${{ github.run_number }}   # the prototype
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+
+      - name: Can it sign?
+        id: signing
+        env:
+          PROFILE: ${{ secrets.IOS_ADHOC_PROFILE_BASE64 }}
+        run: |
+          if [ -n "$PROFILE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::IOS_ADHOC_PROFILE_BASE64 is not set: compiling unsigned only (run scripts/apple-provision.mjs and apple-secrets.mjs)."
+          fi
+
+      - name: Compile (unsigned)
+        if: steps.signing.outputs.signed != 'true'
+        run: |
+          xcodebuild build \
+            -project ios/Browser.xcodeproj -scheme Browser -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Import signing certificate and provisioning profile
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          PROVISION_PROFILE_BASE64: ${{ secrets.IOS_ADHOC_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH=$RUNNER_TEMP/dist.p12
+          PROFILE_PATH=$RUNNER_TEMP/adhoc.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo -n "$PROVISION_PROFILE_BASE64" | base64 --decode -o "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          UUID=$(security cms -D -i "$PROFILE_PATH" | plutil -extract UUID raw -)
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+      - name: Archive
+        if: steps.signing.outputs.signed == 'true'
+        # Signing (identity, team, profile) is in ios/project.yml's Release settings; only the version is set here.
+        run: |
+          xcodebuild archive \
+            -project ios/Browser.xcodeproj -scheme Browser -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Browser.xcarchive" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Export ad-hoc IPA
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key><string>$PROFILE_NAME</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Browser.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+          ls -la "$RUNNER_TEMP/export"
+
+      # A spare copy only; the install page below is what the phone uses. The account's artifact storage (shared with
+      # other repos) fills up (2026-10-28), so a full store does not fail the build.
+      - name: Keep the IPA with the run
+        if: steps.signing.outputs.signed == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browser-${{ env.VERSION }}
+          path: ${{ runner.temp }}/export/*.ipa
+          retention-days: 30
+
+      - name: Publish to the install page (GitHub Pages, browser-install)
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.INSTALL_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then echo "::error::INSTALL_DEPLOY_KEY is not set"; exit 1; fi
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/install_key
+          chmod 600 ~/.ssh/install_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/install_key -o IdentitiesOnly=yes"
+          git clone --depth 1 git@github.com:CaulfieldEngineering/browser-install.git "$RUNNER_TEMP/pages"
+          OUT="$RUNNER_TEMP/pages"
+          cp "$RUNNER_TEMP"/export/*.ipa "$OUT/app.ipa"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BUILT_ON="$(date -u '+%-d %B %Y, %H:%M UTC')"
+
+          cat > "$OUT/manifest.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key><string>software-package</string>
+                    <key>url</key><string>$PAGES/app.ipa</string>
+                  </dict>
+                </array>
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key><string>$BUNDLE_ID</string>
+                  <key>bundle-version</key><string>$VERSION</string>
+                  <key>kind</key><string>software</string>
+                  <key>title</key><string>$APP_TITLE</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          EOF
+
+          cat > "$OUT/version.json" <<EOF
+          {
+            "version": "$VERSION",
+            "build": ${{ github.run_number }},
+            "commit": "${{ github.sha }}",
+            "builtAt": "$BUILT_AT"
+          }
+          EOF
+
+          # The install page, in the HQ look (the house style's dark tokens).
+          cat > "$OUT/index.html" <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+            <title>Install Browser</title>
+            <meta name="color-scheme" content="dark light" />
+            <style>
+              :root { --bg: #141518; --text: #e3e4e8; --muted: #9a9ea8; --faint: #62666f; --accent: #6FB7A0; --on-accent: #0f1f1a; color-scheme: dark light; }
+              @media (prefers-color-scheme: light) { :root { --bg: #fafafa; --text: #1a1b1e; --muted: #666a73; --faint: #a0a3ab; --accent: #3f9a80; --on-accent: #ffffff; } }
+              * { box-sizing: border-box; }
+              body { margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom); background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; }
+              main { max-width: 320px; text-align: center; }
+              h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+              p { margin: 0 0 12px; color: var(--muted); }
+              .install { display: block; margin: 24px auto 20px; padding: 14px 24px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 17px; font-weight: 600; text-decoration: none; }
+              .install:active { opacity: 0.88; }
+              .meta { font-size: 13px; color: var(--faint); }
+            </style>
+          </head>
+          <body>
+            <main>
+              <h1>$APP_TITLE</h1>
+              <p class="meta">Version $VERSION, built $BUILT_ON</p>
+              <a class="install" href="itms-services://?action=download-manifest&amp;url=$PAGES/manifest.plist">Install</a>
+              <p>Open this page in Safari on the iPhone.</p>
+              <p>A prototype: one page at a time, nothing to set up.</p>
+            </main>
+          </body>
+          </html>
+          EOF
+          touch "$OUT/.nojekyll"
+          cd "$OUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Browser iPhone app $VERSION" || echo "nothing changed"
+          git push origin main

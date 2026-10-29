@@ -1,0 +1,6 @@
+{
+  "name": "browser",
+  "private": true,
+  "description": "Joe's own iPhone browser (prototype). Native app in ios/; scripts/ for signing.",
+  "type": "module"
+}
