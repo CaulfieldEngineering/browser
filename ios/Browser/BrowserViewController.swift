@@ -155,9 +155,14 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         shareInField.setImage(Self.symbol("square.and.arrow.up", 15), for: .normal)
         shareInField.tintColor = Look.muted
         shareInField.accessibilityLabel = "Share"
-        shareInField.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+        shareInField.frame = CGRect(x: 4, y: 0, width: 40, height: 40)
         shareInField.addTarget(self, action: #selector(sharePage), for: .touchUpInside)
-        field.rightView = shareInField
+        // In a fixed-width holder: UITextField sizes a bare button down to its icon, which put it against the text.
+        let shareHolder = UIView(frame: CGRect(x: 0, y: 0, width: 48, height: 40))
+        shareHolder.addSubview(shareInField)
+        shareHolder.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        shareHolder.heightAnchor.constraint(equalToConstant: 40).isActive = true
+        field.rightView = shareHolder
         field.rightViewMode = .unlessEditing
 
         more.setImage(Self.symbol("ellipsis"), for: .normal)
@@ -184,7 +189,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     private func setFieldInsets(editing: Bool) {
         // At rest the left matches the share button on the right, so the site sits in the middle.
-        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: editing ? 14 : 40, height: 1))
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: editing ? 14 : 48, height: 1))
         field.leftViewMode = .always
     }
 
