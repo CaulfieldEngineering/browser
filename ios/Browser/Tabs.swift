@@ -82,6 +82,7 @@ enum TabStore {
     }
 
     static func loadSnapshot(for id: UUID) -> UIImage? {
+        guard !BlurSchedule.shared.active else { return nil }
         guard let file = folder?.appendingPathComponent("\(id.uuidString).jpg") else { return nil }
         return UIImage(contentsOfFile: file.path)
     }

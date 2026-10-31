@@ -4,6 +4,7 @@ import UIKit
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        BlurSchedule.shared.start()
         // Video and sound keep playing when the app is left or the screen is off, and a playing video can go into
         // picture in picture (Joe, 2026-10-29: "PIP player would be nice. Keep YouTube or videos playing when I close
         // away from the app?"). With UIBackgroundModes audio in Info.plist.

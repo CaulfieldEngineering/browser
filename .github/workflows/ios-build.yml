@@ -14,13 +14,15 @@ name: iOS build (OTA)
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, codex/scheduled-blur]
     paths:
       - 'ios/**'
       - '.github/workflows/ios-build.yml'
+      - 'tests/**'
+      - 'scripts/blur-window.mjs'
 
 concurrency:
-  group: ios-build
+  group: ios-build-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -39,6 +41,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test native masking and schedule
+        run: swift test --package-path ios/BlurCore
+
+      - name: Test schedule publishing script and content script syntax
+        run: |
+          node --test tests/*.test.mjs
+          node --check ios/Browser/Blur/MediaBlur.js
+
       - name: Make the Xcode project
         run: |
           brew install xcodegen
@@ -49,7 +59,7 @@ jobs:
         env:
           PROFILE: ${{ secrets.IOS_ADHOC_PROFILE_BASE64 }}
         run: |
-          if [ -n "$PROFILE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ -n "$PROFILE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else
             echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "::warning::IOS_ADHOC_PROFILE_BASE64 is not set: compiling unsigned only (run scripts/apple-provision.mjs and apple-secrets.mjs)."
           fi
@@ -60,6 +70,13 @@ jobs:
           xcodebuild build \
             -project ios/Browser.xcodeproj -scheme Browser -configuration Release \
             -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Test WebKit protection on iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if "iPhone" in x["name"]))')
+          xcodebuild test -project ios/Browser.xcodeproj -scheme Browser -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       - name: Import signing certificate and provisioning profile
@@ -135,7 +152,7 @@ jobs:
           retention-days: 30
 
       - name: Publish to the install page (GitHub Pages, browser-install)
-        if: steps.signing.outputs.signed == 'true'
+        if: github.ref == 'refs/heads/main' && steps.signing.outputs.signed == 'true'
         env:
           DEPLOY_KEY: ${{ secrets.INSTALL_DEPLOY_KEY }}
         run: |

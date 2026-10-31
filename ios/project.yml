@@ -13,12 +13,17 @@ settings:
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
+packages:
+  BlurCore:
+    path: BlurCore
 targets:
   Browser:
     type: application
     platform: iOS
     sources:
       - path: Browser
+    dependencies:
+      - package: BlurCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.browser
@@ -34,6 +39,18 @@ targets:
           CODE_SIGN_IDENTITY: Apple Distribution
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: Browser AdHoc
+  BrowserTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: BrowserTests
+    dependencies:
+      - target: Browser
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.browser.tests
+        CODE_SIGNING_ALLOWED: NO
 schemes:
   Browser:
     build:
@@ -41,3 +58,7 @@ schemes:
         Browser: all
     archive:
       config: Release
+    test:
+      config: Debug
+      targets:
+        - BrowserTests

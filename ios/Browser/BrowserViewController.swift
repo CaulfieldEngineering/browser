@@ -45,6 +45,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private let empty = UILabel()
     private let tabsView = TabsView()
     private var watches: [NSKeyValueObservation] = []
+    private var blurObserver: NSObjectProtocol?
 
     /// Shown above the toolbar, and in the ••• menu, when the install page has a newer build (Joe, 2026-10-29: "As
     /// always let's build in an updater or link into the app"). It asks iOS to install from the install page's manifest.
@@ -79,6 +80,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
         let restored = TabStore.load()
         tabs = restored.tabs
+        blurObserver = NotificationCenter.default.addObserver(forName: BlurSchedule.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.rebuildForBlurWindow()
+        }
         select(tabs[restored.current])
     }
 
@@ -487,13 +491,33 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         TabStore.save(tabs, current: current)
     }
 
+    /// Recreate configurations at a schedule boundary, including PiP/AirPlay permissions. Cover first,
+    /// then reload; a playing video or an old tab snapshot cannot outlive the beginning of a window.
+    private func rebuildForBlurWindow() {
+        webView?.isHidden = true
+        for tab in tabs {
+            tab.url = tab.webView?.url ?? tab.url
+            tab.webView?.pauseAllMediaPlayback(completionHandler: nil)
+            tab.webView?.closeAllMediaPresentations(completionHandler: nil)
+            tab.webView?.stopLoading()
+            tab.webView?.removeFromSuperview()
+            tab.webView = nil
+            tab.snapshot = nil
+            TabStore.removeSnapshot(for: tab.id)
+        }
+        webView = nil
+        if let current { select(current) }
+        tabsView.reload()
+    }
+
     /// The open tab's picture for the overview, kept small, and on disk for the next launch.
     private func snapshotCurrent(then done: (() -> Void)? = nil) {
+        guard !BlurSchedule.shared.active else { done?(); return }
         guard let tab = current, let web = webView, web.url != nil, web.bounds.width > 0 else { done?(); return }
         let config = WKSnapshotConfiguration()
         config.snapshotWidth = NSNumber(value: 360)
         web.takeSnapshot(with: config) { image, _ in
-            if let image {
+            if let image, !BlurSchedule.shared.active {
                 tab.snapshot = image
                 TabStore.saveSnapshot(image, for: tab.id)
             }
@@ -529,14 +553,18 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         config.allowsInlineMediaPlayback = true
         // Picture in picture (Joe, 2026-10-29: "PIP player would be nice"): WebKit's own, from a video's controls or
         // on leaving the app while a video plays, as in Safari.
-        config.allowsPictureInPictureMediaPlayback = true
+        let filtering = BlurSchedule.shared.active
+        config.allowsPictureInPictureMediaPlayback = !filtering
+        config.allowsAirPlayForMediaPlayback = !filtering
+        if filtering { config.preferences.isElementFullscreenEnabled = false }
+        BlurBridge.install(on: config, active: filtering)
         config.preferences.isFraudulentWebsiteWarningEnabled = true
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
-        web.allowsLinkPreview = true
+        web.allowsLinkPreview = !filtering
         web.isOpaque = false
         web.backgroundColor = Look.bg
         web.underPageBackgroundColor = Look.bg
@@ -547,6 +575,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         refresh.tintColor = Look.muted
         refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
         web.scrollView.refreshControl = refresh
+        if filtering { BlurProtection.attach(to: web) }
         return web
     }
 
@@ -722,6 +751,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        BlurProtection.reveal(webView)
         webView.scrollView.refreshControl?.endRefreshing()
         updateBar()
     }
