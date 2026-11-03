@@ -4,7 +4,7 @@ import WebKit
 // Every navigation passes through here: each request before it is made (`decide(request:)`) and each answer before it
 // is shown (`decide(response:)`). This is where the rules from the mini PC will plug in later (time of day, the Morning
 // Check-In, focus sessions); for the prototype it allows the web and blocks only what would put something on the phone:
-// configuration profiles, apps and app installs, and links that would hand off to another app.
+// configuration profiles, apps and app installs. Links to other apps open those apps (2026-11-03).
 
 enum Decision: Equatable {
     case allow
@@ -34,9 +34,16 @@ enum Policy {
         guard let url = request.url, let scheme = url.scheme?.lowercased() else { return .allow }
         if outsideSchemes.contains(scheme) { return .openOutside }
         if isOwnInstall(url) { return .openOutside }
+        if scheme == "itms-services" {
+            // An app install from a web page (sideloading): stays closed, except our own install pages above.
+            return .block(title: "This link installs an app", reason: "Apps are not installed from here.")
+        }
         if !webSchemes.contains(scheme) {
-            // itms-services (an app install), itms-apps, another app's own link: none leaves the browser.
-            return .block(title: "This link opens another app", reason: "Links to other apps and app installs stay closed here.")
+            // Another app's own link (itms-appss:// for the App Store, an app's custom scheme) opens that app, the way
+            // Safari does (Joe, 2026-11-03: the Canon R50's QR code forwards to the App Store and was stopped here;
+            // "The refusal to redirect was never a spec of mine"). What can be installed is the phone's call, not ours.
+            // Only from the page itself: an ad's hidden frame does not get to open apps.
+            return isMainFrame ? .openOutside : .block(title: "This link opens another app", reason: "Only the page itself can open another app.")
         }
         if blockedExtensions.contains(url.pathExtension.lowercased()) {
             return .block(title: "This file installs something", reason: "Profiles and apps are not downloaded here.")

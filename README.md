@@ -16,7 +16,7 @@ Joe's own iPhone browser, a prototype. Joe, 2026-10-29: "Go ahead and build a pr
 
 `ios/Browser/Policy.swift`. `Policy.decide(request:isMainFrame:)` sees every request before it is made, and `Policy.decide(response:isMainFrame:canShow:)` every answer before it is shown; both return `allow`, `openOutside` (tel, mailto, sms, FaceTime go to the system) or `block(title, reason)`, which shows a calm page over the web view with Go back. The rules from the mini PC will plug in there. For now it blocks only:
 - configuration and provisioning profiles, apps and installers, by file extension or MIME type (`.mobileconfig`, `application/x-apple-aspen-config`, `.ipa`, `.mobileprovision` and the like);
-- every scheme that is not the web or the four above (`itms-services` app installs, `itms-apps`, other apps' own links), with one exception: an `itms-services://?action=download-manifest` link whose `url` is exactly `https://caulfieldengineering.github.io/<browser|hq|blocks>-install/manifest.plist`, our own install pages (`Policy.isOwnInstall`);
+- `itms-services` app installs (sideloading from a web page), with one exception: an `itms-services://?action=download-manifest` link whose `url` is exactly `https://caulfieldengineering.github.io/<browser|hq|blocks>-install/manifest.plist`, our own install pages (`Policy.isOwnInstall`). Every other scheme that is not the web (`itms-appss://` for the App Store, an app's own link) opens that app, the way Safari does (Joe, 2026-11-03, after the Canon R50's QR code was stopped on its way to the App Store: "The refusal to redirect was never a spec of mine");
 - downloads in general (anything the web view cannot show), since the prototype keeps no files.
 
 ## Building and installing
