@@ -113,6 +113,9 @@ final class SearchBlockTests: XCTestCase {
         defer { web.removeFromSuperview() }
         web.load(URLRequest(url: URL(string: "https://www.google.com/search?q=cats&tbm=isch")!))
         try await Task.sleep(nanoseconds: 1_500_000_000)
-        XCTAssertFalse(web.url?.absoluteString.contains("tbm=isch") ?? false, "the image search page did not load")
+        // web.url can briefly show a requested address that is then cancelled; the document is what counts.
+        XCTAssertFalse(web.isLoading)
+        let location = try? await web.evaluateJavaScript("location.href") as? String
+        XCTAssertFalse(location?.contains("tbm=isch") ?? false, "the image search page did not load (document at \(location ?? "nil"))")
     }
 }
