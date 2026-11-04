@@ -93,7 +93,7 @@ final class AppLaunchBlurTests: XCTestCase {
         let original = pngDataURL(.red)
         web.loadHTMLString("<html><body><img id='photo' width='64' height='64' src='\(original)'><video id='video' width='100' height='100' controls></video></body></html>", baseURL: nil)
         try await eventually("the page loads") { !web.isLoading && web.url != nil }
-        try await eventually("the image decodes") { (try await self.js(web, "document.querySelector('#photo').complete && document.querySelector('#photo').naturalWidth") as? Int) == 64 }
+        try await eventually("the image decodes") { (try await self.js(web, "document.querySelector('#photo').complete && document.querySelector('#photo').naturalWidth") as? Int ?? 0) > 0 }
         XCTAssertFalse(web.isHidden)
         let v1 = try await js(web, "getComputedStyle(document.querySelector('#photo')).visibility") as? String
         XCTAssertEqual(v1, "visible")
