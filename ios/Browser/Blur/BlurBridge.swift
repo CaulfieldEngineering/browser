@@ -45,8 +45,10 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
         #endif
         guard BlurSchedule.shared.active, let body = message.body as? [String: Any], let kind = body["kind"] as? String else { replyHandler(nil, "Inactive"); return }
         if kind == "ready" { replyHandler(true, nil); return }
-        guard inFlight < 3, Self.totalInFlight < 4 else { replyHandler(nil, "Busy"); return }
         let moving = kind == "frame"
+        // A video frame that cannot start now is dropped (the cover stays; the next frame comes in 100 ms).
+        // Images wait their turn instead: a busy refusal used to leave a thumbnail hidden for good (2026-11-03).
+        guard !moving || (inFlight < 3 && Self.totalInFlight < 4) else { replyHandler(nil, "Busy"); return }
         let dimension = moving ? 768 : max(256, min(1536, (body["size"] as? Int) ?? 1024))
         let source = body["source"] as? String ?? ""
         guard source.utf8.count <= 28 * 1024 * 1024 else { replyHandler(nil, "Too large"); return }
@@ -54,11 +56,26 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
         if !moving, source.hasPrefix("http"), let hit = Self.cache.object(forKey: key) {
             replyHandler(["image": "data:image/jpeg;base64," + (hit as Data).base64EncodedString()], nil); return
         }
+        Self.waiting.append { [weak self] in self?.start(source: source, dimension: dimension, moving: moving, key: key, replyHandler: replyHandler) ?? replyHandler(nil, "Closed") }
+        Self.pump()
+    }
+
+    /// Images queued across all tabs, newest page work last; at most four run at once.
+    private static var waiting: [() -> Void] = []
+    private static func pump() {
+        while totalInFlight < 4, !waiting.isEmpty {
+            let next = waiting.removeFirst()
+            next()
+        }
+    }
+
+    private func start(source: String, dimension: Int, moving: Bool, key: NSString, replyHandler: @escaping (Any?, String?) -> Void) {
+        guard BlurSchedule.shared.active else { replyHandler(nil, "Inactive"); return }
         inFlight += 1
         Self.totalInFlight += 1
         let complete: (Data?) -> Void = { [weak self] data in
             guard let data else {
-                DispatchQueue.main.async { self?.inFlight -= 1; Self.totalInFlight -= 1; replyHandler(nil, "Unreadable media") }; return
+                DispatchQueue.main.async { self?.inFlight -= 1; Self.totalInFlight -= 1; Self.pump(); replyHandler(nil, "Unreadable media") }; return
             }
             Self.worker.async {
                 let processed: Data? = autoreleasepool {
@@ -70,6 +87,7 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
                 DispatchQueue.main.async {
                     self?.inFlight -= 1
                     Self.totalInFlight -= 1
+                    Self.pump()
                     guard BlurSchedule.shared.active, let processed else { replyHandler(nil, "Processing failed"); return }
                     replyHandler(["image": "data:image/jpeg;base64," + processed.base64EncodedString()], nil)
                 }

@@ -5,8 +5,26 @@
   const protectedImages = new WeakMap();
   const backgrounds = new WeakMap();
   const pending = new Set();
+  // Elements whose CSS background is checked once the image slots are free (they were skipped for good before).
+  const backgroundPending = new Set();
   const videos = new Map();
   let working = 0;
+  // Counts per stage, read only by the simulator tests (this world is invisible to the page).
+  const stages = { posted: 0, replied: 0, refused: 0, shown: 0, failed: 0, retried: 0, timedOut: 0 };
+  globalThis.__browserBlurStages = () => JSON.stringify({ ...stages, working, pending: pending.size });
+  const retries = new WeakMap();
+  // Nothing may hold a slot forever: a promise that never settles used to stall every image after it (2026-11-03).
+  const within = (promise, ms) => {
+    let timer;
+    const limit = new Promise((_, reject) => { timer = setTimeout(() => { stages.timedOut++; reject(Error('Timed out')); }, ms); });
+    return Promise.race([Promise.resolve(promise).finally(() => clearTimeout(timer)), limit]);
+  };
+  function retryLater(el) {
+    const count = retries.get(el) || 0;
+    if (count >= 4) return;
+    retries.set(el, count + 1); stages.retried++;
+    setTimeout(() => { if (el.isConnected) { protectedImages.delete(el); enqueue(el); } }, 1500 * (count + 1));
+  }
   let scanning = false;
   const safety = document.createElement('style');
   safety.textContent = `
@@ -52,32 +70,37 @@
           const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
         });
       }
-      const size = Math.ceil(Math.max(el.clientWidth, el.clientHeight, 512) * Math.min(devicePixelRatio, 2));
-      const result = await bridge.postMessage({ kind: 'image', source: input, size });
+      const size = Math.ceil(Math.max(el.clientWidth, el.clientHeight, 256) * Math.min(devicePixelRatio, 2));
+      stages.posted++;
+      let result;
+      try { result = await within(bridge.postMessage({ kind: 'image', source: input, size }), 45000); stages.replied++; }
+      catch (error) { stages.refused++; hide(el); if (protectedImages.get(el) === state) retryLater(el); return; }
       if (!el.isConnected || sourceOf(el) !== source || protectedImages.get(el) !== state) return;
-      const check = new Image(); check.src = result.image; await check.decode();
+      const check = new Image(); check.src = result.image; await within(check.decode(), 5000);
       if (sourceOf(el) !== source) return;
       state.output = result.image;
       el.closest('picture')?.querySelectorAll('source').forEach(s => s.removeAttribute('srcset'));
       el.removeAttribute('srcset');
       el.removeAttribute('sizes');
       el.src = state.output;
-      await el.decode();
+      // Only processed pixels are in the element now, so a slow decode is no reason to keep it hidden.
+      try { await within(el.decode(), 3000); } catch (_) { /* show the processed image anyway */ }
       if (el.src !== state.output) return;
+      stages.shown++;
       el.style.setProperty('visibility', 'visible', 'important');
       // Animation only changes the processed image's opacity. The original never fades through.
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120 });
-    } catch (_) { hide(el); }
+    } catch (_) { stages.failed++; hide(el); }
     finally { state.busy = false; }
   }
   function pump() {
-    if (working >= 2) return;
+    if (working >= 3) return;
     for (const el of pending) {
       if (!el.isConnected) { pending.delete(el); continue; }
       if (!visible(el)) continue;
       pending.delete(el); working++;
       processImage(el).finally(() => { working--; pump(); });
-      if (working >= 2) break;
+      if (working >= 3) break;
     }
   }
 
@@ -194,7 +217,7 @@
             scan(el.shadowRoot);
           }
         }
-        if (working === 0 && visible(el)) background(el);
+        if (visible(el)) { if (working === 0) background(el); else backgroundPending.add(el); }
       }
       if (index < elements.length) setTimeout(batch, 20);
     }
@@ -218,6 +241,10 @@
   addEventListener('resize', () => { pump(); positionVideos(); });
   setInterval(() => {
     mount(); pump(); positionVideos();
+    if (working < 3) {
+      let n = 0;
+      for (const el of backgroundPending) { backgroundPending.delete(el); if (el.isConnected) background(el); if (++n >= 12) break; }
+    }
     const now = performance.now();
     for (const [video, state] of videos) {
       if (!video.paused && now - state.last > 300) state.picture.style.opacity = '0';

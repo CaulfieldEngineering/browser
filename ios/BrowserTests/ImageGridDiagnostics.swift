@@ -36,6 +36,12 @@ final class ImageGridDiagnostics: XCTestCase {
             web.load(URLRequest(url: URL(string: address)!))
             try await Task.sleep(nanoseconds: 25_000_000_000)
             let report = (try? await web.evaluateJavaScript(Self.dump)) as? String ?? "no report"
+            let stages: String = await withCheckedContinuation { done in
+                web.__evaluateJavaScript("globalThis.__browserBlurStages ? __browserBlurStages() : 'none'", inFrame: nil, in: BlurBridge.world) { value, error in
+                    done.resume(returning: (value as? String) ?? "error \(String(describing: error))")
+                }
+            }
+            print("GRID_STAGES \(stages)")
             print("GRID_DIAG \(address) hidden=\(web.isHidden)\n\(report)\nGRID_BRIDGE \(BlurBridge.testLog.count) replies:\n" + BlurBridge.testLog.prefix(40).joined(separator: "\n"))
         }
     }

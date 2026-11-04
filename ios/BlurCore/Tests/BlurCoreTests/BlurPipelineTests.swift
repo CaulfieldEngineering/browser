@@ -42,10 +42,26 @@ final class BlurPipelineTests: XCTestCase {
         XCTAssertLessThan(pixel(result.bodyMask, 124, 204)[0], 5)
         XCTAssertFalse(result.usedFallback)
     }
-    func testStrongSolidOutline() throws {
-        let result = try PersonBlurPipeline(detector: Detector(result: detection())).process(fixture())
-        let edge = pixel(result.image, 62, 100)
-        XCTAssertLessThan(Int(edge[0]) + Int(edge[1]) + Int(edge[2]), 110)
+    /// The body is erased into the scene: a red body on a plain grey scene comes back grey, with no outline, no
+    /// dark border and no hard step where the mask ends.
+    func testBodyErasedIntoSceneWithNoOutlineOrHardEdge() throws {
+        let grey = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: extent)
+        let red = CIImage(color: CIColor(red: 0.85, green: 0.35, blue: 0.3)).cropped(to: CGRect(x: 64, y: 16, width: 128, height: 224))
+        let input = CIContext().createCGImage(red.composited(over: grey), from: extent)!
+        let background = pixel(input, 12, 92)
+        let result = try PersonBlurPipeline(detector: Detector(result: detection())).process(input)
+        for (x, y) in [(124, 92), (80, 60), (180, 140), (124, 30)] {
+            let body = pixel(result.image, x, y)
+            for c in 0..<3 { XCTAssertLessThan(abs(Int(body[c]) - Int(background[c])), 14, "no body colour at \(x),\(y): \(body)") }
+        }
+        var previous = pixel(result.image, 30, 92)
+        for x in 31..<100 {
+            let next = pixel(result.image, x, 92)
+            for c in 0..<3 { XCTAssertLessThan(abs(Int(next[c]) - Int(previous[c])), 12, "no hard edge at x=\(x)") }
+            XCTAssertGreaterThan(Int(next[0]) + Int(next[1]) + Int(next[2]), 300, "no dark outline at x=\(x)")
+            previous = next
+        }
+        XCTAssertEqual(pixel(input, 124, 204), pixel(result.image, 124, 204), "the face is kept exactly")
     }
     func testUnknownPersonAndDetectorFailureFailClosed() throws {
         let input = fixture()
@@ -102,9 +118,22 @@ final class BlurPipelineTests: XCTestCase {
         XCTAssertLessThan(pixel(result.bodyMask, 225, 385)[0], 5, "Face must stay clear")
         XCTAssertEqual(pixel(result.image, 225, 385), pixel(input, 225, 385))
         XCTAssertNotEqual(pixel(result.image, 170, 140), pixel(input, 170, 140))
+        // Body changed a lot, face nearly unchanged, measured over patches.
+        func patch(_ a: CGImage, _ b: CGImage, _ x0: Int, _ y0: Int) -> Double {
+            var total = 0
+            for y in stride(from: y0 - 12, through: y0 + 12, by: 4) { for x in stride(from: x0 - 12, through: x0 + 12, by: 4) {
+                let p = pixel(a, x, y), q = pixel(b, x, y)
+                total += (0..<3).reduce(0) { $0 + abs(Int(p[$1]) - Int(q[$1])) }
+            } }
+            return Double(total) / (49 * 3)
+        }
+        let bodyChange = patch(input, result.image, 170, 140), faceChange = patch(input, result.image, 225, 385)
+        print("BLUR_VISION_PORTRAIT_CHANGE body=\(bodyChange) face=\(faceChange)")
+        XCTAssertGreaterThan(bodyChange, 25, "the suit is erased, not tinted")
+        XCTAssertLessThan(faceChange, 3, "the face stays as it was")
         if let path = ProcessInfo.processInfo.environment["BLUR_TEST_OUTPUT"] {
             try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-            for (name, image) in [("portrait-filtered", result.image), ("portrait-mask", result.bodyMask)] {
+            for (name, image) in [("portrait-original", input), ("portrait-filtered", result.image), ("portrait-mask", result.bodyMask)] {
                 let url = URL(fileURLWithPath: path).appendingPathComponent(name + ".png")
                 let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
                 CGImageDestinationAddImage(destination, image, nil)

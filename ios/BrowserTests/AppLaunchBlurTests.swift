@@ -158,6 +158,35 @@ final class AppLaunchBlurTests: XCTestCase {
     }
 
     /// The local boundary timer turns the filter on and off at the window's exact edges, without a poll.
+    /// A page of thumbnails, like an image search, with CSS background tiles mixed in: every thumbnail must come
+    /// back processed and visible. Before 2026-11-03 the bridge refused work beyond three at a time ("Busy") and the
+    /// script hid a refused thumbnail for good, so most of a grid stayed as empty cards.
+    func testThumbnailGridAllComeBackMasked() async throws {
+        BlurSchedule.shared.replaceForTesting([BlurWindows.Window(from: Date().addingTimeInterval(-60), until: Date().addingTimeInterval(3600))])
+        let web = try await appWebView()
+        var tiles = ""
+        for i in 0..<24 {
+            let color = UIColor(hue: CGFloat(i) / 24, saturation: 0.7, brightness: 0.8, alpha: 1)
+            tiles += "<img class='t' width='90' height='90' src='\(pngDataURL(color))'>"
+        }
+        for i in 0..<6 {
+            let color = UIColor(hue: CGFloat(i) / 6, saturation: 0.4, brightness: 0.6, alpha: 1)
+            tiles += "<div class='b' style=\"background-image:url('\(pngDataURL(color))')\"></div>"
+        }
+        web.loadHTMLString("<html><head><meta name='viewport' content='width=device-width'><style>body{margin:0;display:flex;flex-wrap:wrap;gap:4px}.b{width:90px;height:90px;background-size:cover}</style></head><body>\(tiles)</body></html>", baseURL: nil)
+        try await eventually(within: 20, "the page is revealed") { !web.isHidden }
+        let started = Date()
+        try await eventually(within: 90, "every thumbnail is processed and visible") {
+            let shown = try await self.js(web, "[...document.querySelectorAll('img.t')].filter(i => getComputedStyle(i).visibility === 'visible' && i.src.startsWith('data:image/jpeg')).length") as? Int
+            return shown == 24
+        }
+        print("BLUR_GRID_24_THUMBNAILS_S \(Date().timeIntervalSince(started))")
+        try await eventually(within: 30, "the background tiles get processed images") {
+            let done = try await self.js(web, "[...document.querySelectorAll('div.b')].filter(d => d.style.backgroundImage.includes('data:image/jpeg')).length") as? Int
+            return done == 6
+        }
+    }
+
     func testWindowBoundariesInTheApp() async throws {
         final class Count: @unchecked Sendable { var value = 0 }
         let changes = Count()
