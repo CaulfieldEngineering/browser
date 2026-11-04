@@ -547,7 +547,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     // MARK: - A tab's web view
 
     /// A tab's web view. A page that opens a window hands its own configuration (`given`), which must be used.
-    private func makeWebView(_ given: WKWebViewConfiguration? = nil) -> WKWebView {
+    func makeWebView(_ given: WKWebViewConfiguration? = nil) -> WKWebView { // internal for the simulator tests
         let config = given ?? WKWebViewConfiguration()
         config.websiteDataStore = .default() // never a private (non-persistent) store
         config.allowsInlineMediaPlayback = true

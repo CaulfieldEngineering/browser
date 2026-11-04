@@ -57,8 +57,22 @@ final class BlurSchedule {
         }
     }
 
+    #if DEBUG
+    /// Simulator tests only (not compiled into the Release build Joe installs): replace the schedule and stop
+    /// polling, so the live blur.json cannot race a test.
+    func replaceForTesting(_ windows: [BlurWindows.Window]) {
+        frozen = true
+        heldWindows = []
+        document = BlurWindows(windows: windows)
+        evaluate()
+    }
+    private var frozen = false
+    #else
+    private let frozen = false
+    #endif
+
     private func refresh() {
-        guard !fetching else { return }
+        guard !fetching, !frozen else { return }
         fetching = true
         // Cache-busting prevents a CDN's older empty document from delaying a newly requested window.
         let url = URL(string: "https://caulfieldengineering.github.io/browser-install/blur.json?t=\(Int(Date().timeIntervalSince1970))")!
@@ -69,6 +83,7 @@ final class BlurSchedule {
                 guard let self else { return }
                 self.fetching = false
                 defer { self.evaluate() }
+                guard !self.frozen else { return }
                 guard let response = response as? HTTPURLResponse, response.statusCode == 200,
                       let data, let next = try? BlurWindows(data: data) else { return }
                 // Even a stale but valid response cannot shorten a window already in effect.

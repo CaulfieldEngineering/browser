@@ -32,8 +32,10 @@ enum BlurProtection {
         guard BlurSchedule.shared.active else { web.isHidden = false; return }
         // Main-frame readiness is sufficient because every subframe gets its own document-start script,
         // and original network images are blocked independently of script execution in every frame.
-        web.evaluateJavaScript("globalThis.__browserBlurReady === true", in: nil, in: BlurBridge.world) { [weak web] result in
-            if case .success(let value) = result, (value as? Bool) == true, rule != nil { web?.isHidden = false }
+        // The Objective-C entry point, not the Swift overlay's Result version: the overlay links
+        // /usr/lib/swift/libswiftWebKit.dylib, which iOS 18 no longer ships, and the app crashed at launch (dyld).
+        web.__evaluateJavaScript("globalThis.__browserBlurReady === true", inFrame: nil, in: BlurBridge.world) { [weak web] value, error in
+            if error == nil, (value as? Bool) == true, rule != nil { web?.isHidden = false }
         }
     }
 }

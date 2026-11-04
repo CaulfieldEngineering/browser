@@ -44,6 +44,9 @@ targets:
     platform: iOS
     sources:
       - path: BrowserTests
+      # The same public-domain NASA portrait the BlurCore tests use (licence in that folder).
+      - path: BlurCore/Tests/BlurCoreTests/Fixtures/astronaut.png
+        buildPhase: resources
     dependencies:
       - target: Browser
     settings:
