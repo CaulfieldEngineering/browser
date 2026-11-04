@@ -8,6 +8,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Video and sound keep playing when the app is left or the screen is off, and a playing video can go into
         // picture in picture (Joe, 2026-10-29: "PIP player would be nice. Keep YouTube or videos playing when I close
         // away from the app?"). With UIBackgroundModes audio in Info.plist.
+        // History and the feed to the mini PC (History/): send what waited, and say while the browser is in use.
+        Feed.shared.start()
+        Heartbeat.shared.start()
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         return true
     }

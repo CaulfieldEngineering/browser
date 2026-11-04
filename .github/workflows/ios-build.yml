@@ -14,7 +14,7 @@ name: iOS build (OTA)
 on:
   workflow_dispatch:
   push:
-    branches: [main, codex/scheduled-blur]
+    branches: [main, codex/scheduled-blur, history-watch]
     paths:
       - 'ios/**'
       - '.github/workflows/ios-build.yml'
@@ -83,7 +83,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
-      - name: Test WebKit protection on iPhone simulator
+      - name: Test WebKit protection, history and the feed on iPhone simulator
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if "iPhone" in x["name"]))')
           xcodebuild test -project ios/Browser.xcodeproj -scheme Browser -configuration Debug \

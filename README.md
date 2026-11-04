@@ -55,6 +55,17 @@ Tests: `node --test tests/*.test.mjs` runs on Windows; `swift test --package-pat
 
 Do not call the WebKit Swift overlay's `Result` APIs (such as `evaluateJavaScript(_:in:in:completionHandler:)` with a `Result`): with the 17.0 deployment target they link `/usr/lib/swift/libswiftWebKit.dylib`, which iOS 18 does not have, and the app aborts at launch (2026-11-03). Use the Objective-C entry points (`__evaluateJavaScript(_:inFrame:in:completionHandler:)`).
 
+## History and the feed to the mini PC
+
+Joe, 2026-11-03: "Are you able to log my browser history from our app?", and what for: "Both mainly adaptive accountability". `ios/Browser/History/`.
+
+- **History** (••• menu, History): every main-frame page a tab opens (time, address, title), newest first under a heading per day, with a search field; tap to open in this tab, long press to open in a new tab or copy the link. Pages that did not open are listed, muted. Kept on the phone in Application Support, one JSON line per visit and one file per month (`HistoryStore`), written only by appending. There is no switch to turn it off and nothing in the app that deletes it.
+- **What counts as a visit** (`HistoryRecorder`, attached to every tab's web view): each new main-frame address, full loads and single-page sites changing their own address. It is written once the title comes (1.5 s more for it to settle), after 5 s without one, or when the tab moves on; a redirect hop (gone within a second, still loading, no title) is not one. A failed load or a page the policy does not open is a visit marked as not opened.
+- **The feed** (`Feed`): each visit, and a **heartbeat** (on coming to the front, every five minutes while in front, on leaving), goes into a queue kept in a file and is sent in batches of up to 200 to the HQ service on the mini PC (`hq-widget` `server/browser-feed.js`, `POST /api/browser/feed`), by its Tailscale name over HTTPS through the service's CONNECT tunnel on `100.92.203.47:4400`, the way the HQ app reaches it. Offline, it waits; after a failure it tries again after 5 s, 15 s, 1 min, 2 min, then every 5 min, and at once when the network comes back or the app comes to the front. Sending never blocks browsing. The key for the feed is asked for and kept in the Keychain by itself (`POST /api/browser/pair`; the key is good for the feed only, and a revoked one is replaced). Every event has a sequence number kept in the Keychain with the install's id, so a reinstall continues the numbers and the mini PC sees a gap if a queue was lost. The heartbeat lets the mini PC tell "not browsing" from "the feed stopped".
+- On the mini PC the events are kept append-only in `C:\Users\Joe\.held\browser` (outside Dropbox and git), and the laptop watch reads them too.
+
+Tests: `ios/BrowserTests/HistoryFeedTests.swift` (the store, the queue's numbers across a reinstall, batching, retry and backoff, a replaced key, the heartbeat, what counts as a visit) run on the iPhone simulator in `ios-build`.
+
 ## Building and installing
 
 The same route as the HQ and Blocks iPhone apps. `.github/workflows/ios-build.yml` runs on a push to `main` touching `ios/`, tests, the blur-window script or the workflow (or Run workflow): native and simulator tests must pass, XcodeGen makes the project from `ios/project.yml` on a macOS runner, then archive, ad-hoc export, and `app.ipa`, `manifest.plist`, `version.json` and the install page go to the public repo `CaulfieldEngineering/browser-install`, served at **https://caulfieldengineering.github.io/browser-install/**. Versions are `0.1.<run number>`. The repo is public, so these Actions builds are free. The `codex/scheduled-blur` branch also builds and tests, but cannot sign or publish. Manual runs from any non-main branch cannot publish either. Validate a candidate there before advancing `main`; never use TestFlight as a compiler or change signing for this feature. Deploying the app preserves `blur.json`.
@@ -73,4 +84,4 @@ Apple assesses the default browser permission only for an app on the App Store o
 
 ## Not built yet
 
-The rules from the mini PC, bookmarks and history lists, find in page, reader mode, downloads.
+The rules from the mini PC, bookmarks, find in page, reader mode, downloads.

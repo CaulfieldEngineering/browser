@@ -44,6 +44,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private let blocked = BlockedView()
     private let empty = UILabel()
     private let tabsView = TabsView()
+    private let historyView = HistoryView()
     private var watches: [NSKeyValueObservation] = []
     private var blurObserver: NSObjectProtocol?
 
@@ -295,6 +296,17 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             self?.newTab(focus: true)
         }
         tabsView.onDone = { [weak self] in self?.hideTabs() }
+
+        historyView.isHidden = true
+        historyView.onDone = { [weak self] in self?.hideHistory() }
+        historyView.onOpen = { [weak self] url in
+            self?.hideHistory()
+            self?.webView.load(URLRequest(url: url))
+        }
+        historyView.onOpenInNewTab = { [weak self] url in
+            self?.hideHistory()
+            self?.open(external: url)
+        }
     }
 
     private func layout() {
@@ -310,7 +322,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         #endif
         tools.distribution = .fillEqually
 
-        for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, tabsView, moreDot] as [UIView] {
+        for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, tabsView, historyView, moreDot] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         view.addSubview(card)
@@ -324,6 +336,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         view.addSubview(updateButton)
         view.addSubview(moreDot)
         view.addSubview(tabsView)
+        view.addSubview(historyView)
 
         NSLayoutConstraint.activate([
             topBar.topAnchor.constraint(equalTo: view.topAnchor),
@@ -378,6 +391,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             tabsView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             tabsView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabsView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            historyView.topAnchor.constraint(equalTo: view.topAnchor),
+            historyView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            historyView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            historyView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
     }
 
@@ -394,6 +412,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let closeTab = UIAction(title: "Close Tab", image: UIImage(systemName: "xmark.square"), attributes: .destructive) { [weak self] _ in
             if let tab = self?.current { self?.close(tab) }
         }
+        let history = UIAction(title: "History", image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in self?.showHistory() }
         let share = UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in
             self?.sharePage()
         }
@@ -404,6 +423,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         return [
             UIMenu(options: .displayInline, children: [forward, reload]),
             UIMenu(options: .displayInline, children: [newTab, closeTab]),
+            UIMenu(options: .displayInline, children: [history]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: about),
         ]
@@ -542,6 +562,20 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         UIView.animate(withDuration: 0.2, animations: { self.tabsView.alpha = 0 }, completion: { _ in self.tabsView.isHidden = true })
     }
 
+    // MARK: - History (History/)
+
+    private func showHistory() {
+        field.resignFirstResponder()
+        historyView.reload()
+        historyView.alpha = 0
+        historyView.isHidden = false
+        UIView.animate(withDuration: 0.2) { self.historyView.alpha = 1 }
+    }
+
+    private func hideHistory() {
+        UIView.animate(withDuration: 0.2, animations: { self.historyView.alpha = 0 }, completion: { _ in self.historyView.isHidden = true })
+    }
+
     private func tab(for web: WKWebView) -> Tab? { tabs.first { $0.webView === web } }
 
     // MARK: - A tab's web view
@@ -561,6 +595,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         config.preferences.isFraudulentWebsiteWarningEnabled = true
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         let web = WKWebView(frame: .zero, configuration: config)
+        HistoryRecorder.shared.attach(web) // every page it opens goes in History and the feed
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
@@ -723,7 +758,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             if let url = navigationAction.request.url { UIApplication.shared.open(url) }
         case let .block(title, reason):
             decisionHandler(.cancel)
-            if isMainFrame || navigationAction.targetFrame == nil { showBlocked(title, reason, navigationAction.request.url, in: webView) }
+            if isMainFrame || navigationAction.targetFrame == nil {
+                HistoryRecorder.shared.failed(webView, url: navigationAction.request.url)
+                showBlocked(title, reason, navigationAction.request.url, in: webView)
+            }
         }
     }
 
@@ -733,7 +771,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             decisionHandler(.allow)
         case let .block(title, reason):
             decisionHandler(.cancel)
-            if navigationResponse.isForMainFrame { showBlocked(title, reason, navigationResponse.response.url, in: webView) }
+            if navigationResponse.isForMainFrame {
+                HistoryRecorder.shared.failed(webView, url: navigationResponse.response.url)
+                showBlocked(title, reason, navigationResponse.response.url, in: webView)
+            }
         }
     }
 
@@ -752,6 +793,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         BlurProtection.reveal(webView)
+        HistoryRecorder.shared.finished(webView)
         webView.scrollView.refreshControl?.endRefreshing()
         updateBar()
     }
@@ -761,6 +803,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let e = error as NSError
         if e.code == NSURLErrorCancelled || e.code == 102 /* frame load interrupted, a cancelled navigation */ { return updateBar() }
         let url = (e.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
+        HistoryRecorder.shared.failed(webView, url: url)
         showBlocked(BlockedInfo(title: "This page did not open", reason: e.localizedDescription, address: url?.host ?? "", calm: true), in: webView)
         updateBar()
     }
