@@ -1,5 +1,7 @@
 import XCTest
 import CoreImage
+import ImageIO
+import UniformTypeIdentifiers
 @testable import BlurCore
 
 final class BlurPipelineTests: XCTestCase {
@@ -87,5 +89,30 @@ final class BlurPipelineTests: XCTestCase {
         print("BLUR_RENDER_256PX_MS " + times.map { String(format: "%.2f", $0) }.joined(separator: ","))
         // A hang/regression guard, not a claim about Vision speed or iPhone 13 Pro performance.
         XCTAssertLessThan(times.max()!, 10_000)
+    }
+
+    func testRealVisionPublicDomainPortrait() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "astronaut", withExtension: "png", subdirectory: "Fixtures"))
+        let input = try PersonBlurPipeline.decode(Data(contentsOf: url))
+        let pipeline = PersonBlurPipeline()
+        let result = try pipeline.process(input)
+        print("BLUR_VISION_PORTRAIT_MS \(result.milliseconds) fallback=\(result.usedFallback)")
+        XCTAssertFalse(result.usedFallback, "A real Vision mask, not blanket fallback, is required for this fixture")
+        XCTAssertGreaterThan(pixel(result.bodyMask, 170, 140)[0], 220, "Suit/body must be covered")
+        XCTAssertLessThan(pixel(result.bodyMask, 225, 385)[0], 5, "Face must stay clear")
+        XCTAssertEqual(pixel(result.image, 225, 385), pixel(input, 225, 385))
+        XCTAssertNotEqual(pixel(result.image, 170, 140), pixel(input, 170, 140))
+        if let path = ProcessInfo.processInfo.environment["BLUR_TEST_OUTPUT"] {
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+            for (name, image) in [("portrait-filtered", result.image), ("portrait-mask", result.bodyMask)] {
+                let url = URL(fileURLWithPath: path).appendingPathComponent(name + ".png")
+                let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+                CGImageDestinationAddImage(destination, image, nil)
+                XCTAssertTrue(CGImageDestinationFinalize(destination))
+            }
+        }
+        let moving = try pipeline.process(input, moving: true)
+        print("BLUR_VISION_FRAME_MS \(moving.milliseconds) fallback=\(moving.usedFallback)")
+        XCTAssertGreaterThan(pixel(moving.bodyMask, 170, 140)[0], 220)
     }
 }

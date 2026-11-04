@@ -3,3 +3,12 @@ shapes and deterministic patterns by this project. Copyright 2026 Caulfield
 Engineering. Dedicated to the public domain under CC0 1.0:
 https://creativecommons.org/publicdomain/zero/1.0/
 They contain no photographs, personal data, or explicit material.
+
+astronaut.png is the NASA portrait of astronaut Eileen Collins, distributed by
+scikit-image. Fully clothed, public-domain NASA photograph, no known copyright
+restrictions. This is a test fixture, not an endorsement.
+Source (pinned version):
+https://raw.githubusercontent.com/scikit-image/scikit-image/v0.24.0/skimage/data/astronaut.png
+Provenance and public-domain statement:
+https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut
+Original NASA Great Images record: https://flic.kr/p/r9qvLn

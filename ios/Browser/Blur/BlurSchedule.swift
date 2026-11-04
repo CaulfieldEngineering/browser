@@ -73,9 +73,9 @@ final class BlurSchedule {
                       let data, let next = try? BlurWindows(data: data) else { return }
                 // Even a stale but valid response cannot shorten a window already in effect.
                 let now = Date()
-                self.heldWindows += self.document.windows.filter { $0.from <= now && now < $0.until }
+                self.heldWindows = Array(Set(self.heldWindows + self.document.windows.filter { $0.from <= now && now < $0.until }))
                 self.document = next
-                let retained = next.windows + self.heldWindows
+                let retained = Array(Set(next.windows + self.heldWindows))
                 let formatter = ISO8601DateFormatter()
                 let stored = ["windows": retained.map { ["from": formatter.string(from: $0.from), "until": formatter.string(from: $0.until)] }]
                 if let cached = try? JSONSerialization.data(withJSONObject: stored) { UserDefaults.standard.set(cached, forKey: Self.key) }

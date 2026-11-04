@@ -14,6 +14,7 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
         return cache
     }()
     private var inFlight = 0
+    private static var totalInFlight = 0
 
     static func install(on config: WKWebViewConfiguration, active: Bool) {
         let controller = WKUserContentController()
@@ -29,7 +30,7 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
         guard BlurSchedule.shared.active, let body = message.body as? [String: Any], let kind = body["kind"] as? String else { replyHandler(nil, "Inactive"); return }
         if kind == "ready" { replyHandler(true, nil); return }
-        guard inFlight < 3 else { replyHandler(nil, "Busy"); return }
+        guard inFlight < 3, Self.totalInFlight < 4 else { replyHandler(nil, "Busy"); return }
         let moving = kind == "frame"
         let dimension = moving ? 768 : max(256, min(1536, (body["size"] as? Int) ?? 1024))
         let source = body["source"] as? String ?? ""
@@ -39,9 +40,10 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
             replyHandler(["image": "data:image/jpeg;base64," + (hit as Data).base64EncodedString()], nil); return
         }
         inFlight += 1
+        Self.totalInFlight += 1
         let complete: (Data?) -> Void = { [weak self] data in
             guard let data else {
-                DispatchQueue.main.async { self?.inFlight -= 1; replyHandler(nil, "Unreadable media") }; return
+                DispatchQueue.main.async { self?.inFlight -= 1; Self.totalInFlight -= 1; replyHandler(nil, "Unreadable media") }; return
             }
             Self.worker.async {
                 let processed: Data? = autoreleasepool {
@@ -52,6 +54,7 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
                 if !moving, source.hasPrefix("http"), let processed { Self.cache.setObject(processed as NSData, forKey: key, cost: processed.count) }
                 DispatchQueue.main.async {
                     self?.inFlight -= 1
+                    Self.totalInFlight -= 1
                     guard BlurSchedule.shared.active, let processed else { replyHandler(nil, "Processing failed"); return }
                     replyHandler(["image": "data:image/jpeg;base64," + processed.base64EncodedString()], nil)
                 }

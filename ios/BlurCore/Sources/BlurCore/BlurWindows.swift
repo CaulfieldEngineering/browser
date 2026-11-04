@@ -2,7 +2,7 @@ import Foundation
 
 /// The only input to activation. All comparisons use absolute instants, including DST changes.
 public struct BlurWindows: Equatable {
-    public struct Window: Equatable {
+    public struct Window: Hashable {
         public let from: Date
         public let until: Date
         public init(from: Date, until: Date) { self.from = from; self.until = until }

@@ -42,7 +42,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Test native masking and schedule
+        env:
+          BLUR_TEST_OUTPUT: ${{ runner.temp }}/blur-results
         run: swift test --package-path ios/BlurCore
+
+      - name: Keep the visual mask checks
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: blur-visual-checks
+          path: ${{ runner.temp }}/blur-results
+          retention-days: 3
 
       - name: Test schedule publishing script and content script syntax
         run: |
