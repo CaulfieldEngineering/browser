@@ -13,17 +13,12 @@ settings:
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
-packages:
-  BlurCore:
-    path: BlurCore
 targets:
   Browser:
     type: application
     platform: iOS
     sources:
       - path: Browser
-    dependencies:
-      - package: BlurCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.browser
@@ -44,9 +39,6 @@ targets:
     platform: iOS
     sources:
       - path: BrowserTests
-      # The same public-domain NASA portrait the BlurCore tests use (licence in that folder).
-      - path: BlurCore/Tests/BlurCoreTests/Fixtures/astronaut.png
-        buildPhase: resources
     dependencies:
       - target: Browser
     settings:
