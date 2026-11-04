@@ -130,7 +130,8 @@ final class AppLaunchBlurTests: XCTestCase {
         try await eventually(within: 30, "the photo is replaced by the processed output") {
             (try await self.js(web, "getComputedStyle(document.querySelector('#photo')).visibility") as? String) == "visible"
         }
-        let shown = try XCTUnwrap(try await js(web, "document.querySelector('#photo').src") as? String)
+        let shownValue = try await js(web, "document.querySelector('#photo').src") as? String
+        let shown = try XCTUnwrap(shownValue)
         XCTAssertTrue(shown.hasPrefix("data:image/jpeg;base64,"), "the processed JPEG, not the original")
         XCTAssertNotEqual(shown, original)
         let processed = try XCTUnwrap(Data(base64Encoded: String(shown.dropFirst("data:image/jpeg;base64,".count))))

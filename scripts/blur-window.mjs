@@ -72,7 +72,7 @@ async function main() {
     const response = await fetch(endpoint, {
       method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
-        message: `Schedule browser blur until ${until}\n\nCo-Authored-By: OpenAI Codex <noreply@openai.com>`,
+        message: `Schedule browser blur until ${until}\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`,
         content: Buffer.from(JSON.stringify(next, null, 2) + '\n').toString('base64'),
         branch: 'main', ...(file ? { sha: file.sha } : {})
       })
