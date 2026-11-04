@@ -27,7 +27,22 @@ final class BlurBridge: NSObject, WKScriptMessageHandlerWithReply {
         }
     }
 
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
+    #if DEBUG
+    /// Simulator tests only: what the bridge answered, in order.
+    static var testLog: [String] = []
+    #endif
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler original: @escaping (Any?, String?) -> Void) {
+        #if DEBUG
+        let started = Date()
+        let label = ((message.body as? [String: Any])?["source"] as? String).map { String($0.prefix(90)) } ?? "?"
+        let replyHandler: (Any?, String?) -> Void = { value, error in
+            Self.testLog.append("\(error ?? "ok") \(Int(Date().timeIntervalSince(started) * 1000))ms \(label)")
+            original(value, error)
+        }
+        #else
+        let replyHandler = original
+        #endif
         guard BlurSchedule.shared.active, let body = message.body as? [String: Any], let kind = body["kind"] as? String else { replyHandler(nil, "Inactive"); return }
         if kind == "ready" { replyHandler(true, nil); return }
         guard inFlight < 3, Self.totalInFlight < 4 else { replyHandler(nil, "Busy"); return }
