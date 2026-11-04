@@ -22,11 +22,11 @@ final class MediaProtectionTests: XCTestCase {
         return "data:image/png;base64," + image.pngData()!.base64EncodedString()
     }
     private func eventually(_ check: @escaping () async throws -> Bool) async throws {
-        for _ in 0..<100 {
+        for _ in 0..<200 {
             if try await check() { return }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        XCTFail("WebKit condition did not become true within five seconds")
+        XCTFail("WebKit condition did not become true within ten seconds")
     }
 
     func testImagesStayHiddenUntilProcessedAndHideAgainOnSourceChange() async throws {
@@ -67,9 +67,13 @@ final class MediaProtectionTests: XCTestCase {
     func testBridgeOnlyExistsInIsolatedWorld() async throws {
         let config = WKWebViewConfiguration()
         BlurBridge.install(on: config, active: true)
-        let web = WKWebView(frame: .zero, configuration: config)
+        // On screen and with a size: an off-screen, zero-sized web view can be throttled past the five-second wait.
+        let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 700), configuration: config)
+        let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first
+        window?.addSubview(web)
+        defer { web.removeFromSuperview() }
         web.loadHTMLString("<html><body>Test</body></html>", baseURL: nil)
-        try await eventually { !web.isLoading }
+        try await eventually { !web.isLoading && web.url != nil }
         let accessible = try await web.evaluateJavaScript("!!(globalThis.webkit?.messageHandlers?.mediaBlur)") as? Bool
         XCTAssertEqual(accessible, false)
     }
