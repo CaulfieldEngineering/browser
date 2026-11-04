@@ -611,6 +611,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
         web.scrollView.refreshControl = refresh
         if filtering { BlurProtection.attach(to: web) }
+        SearchBlock.attach(to: web)
         return web
     }
 
@@ -620,7 +621,14 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in self?.updateBar() },
             webView.observe(\.canGoBack, options: [.new]) { [weak self] _, _ in self?.updateBar() },
             webView.observe(\.canGoForward, options: [.new]) { [weak self] _, _ in self?.updateBar() },
-            webView.observe(\.url, options: [.new]) { [weak self] _, _ in self?.updateBar() },
+            webView.observe(\.url, options: [.new]) { [weak self] web, _ in
+                // A search page that switches to its image tab without navigating (pushState) is stopped here.
+                if let url = web.url, SearchBlock.isMediaSearch(url) {
+                    web.stopLoading()
+                    self?.showBlocked(SearchBlock.title, SearchBlock.reason, url, in: web)
+                }
+                self?.updateBar()
+            },
             webView.observe(\.title, options: [.new]) { [weak self] web, _ in self?.tab(for: web)?.title = web.title ?? "" },
         ]
     }

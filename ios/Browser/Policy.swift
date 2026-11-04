@@ -48,6 +48,8 @@ enum Policy {
         if blockedExtensions.contains(url.pathExtension.lowercased()) {
             return .block(title: "This file installs something", reason: "Profiles and apps are not downloaded here.")
         }
+        // Image and video search, always (SearchBlock.swift).
+        if SearchBlock.isMediaSearch(url) { return .block(title: SearchBlock.title, reason: SearchBlock.reason) }
         return .allow
     }
 
