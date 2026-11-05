@@ -143,8 +143,7 @@ final class InstagramFilterTests: XCTestCase {
     func testFilterCountsByReason() {
         let stats = FilterStats()
         for n in ["hidden-sexy", "hidden-sexy", "hidden-text", "hidden-unjudged-loading", "unjudged-unreadable", "restored", "judged-clean"] { stats.count(n) }
-        let lines = stats.summary().joined(separator: "
-")
+        let lines = stats.summary().joined(separator: "\n")
         XCTAssertTrue(lines.contains("picture"), lines)
         XCTAssertTrue(lines.contains("caption"), lines)
         XCTAssertTrue(lines.contains("Not judged: unreadable"), lines)
