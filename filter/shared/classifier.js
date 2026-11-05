@@ -54,6 +54,7 @@
   // The laptop extension: its offscreen document answers {igc: 'classify', data} from the service worker.
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+      if (msg && msg.igc === 'ping') { reply({ ready: true }); return false; }
       if (!msg || msg.igc !== 'classify') return false;
       classify(msg.data).then((scores) => reply({ scores })).catch((e) => reply({ error: String(e && e.message || e) }));
       return true;
