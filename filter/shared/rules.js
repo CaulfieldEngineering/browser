@@ -40,13 +40,29 @@
   // purpose: a false removal costs a post he did not need; a miss is what this is for.
   const IMAGE = { explicit: 0.3, sexy: 0.45, combined: 0.6 };
 
+  // Revealing clothing (Joe, 2026-11-05: "Can we try upping the filtering on instagram? Like, shorter tank-tops, bikinis,
+  // gymwear etc."). Its own category beside the suggestive one, gender-neutral (no gender model; agreed to skip it for
+  // now). The image side is the zero-shot judge (clip.js): scores.Revealing, the share of the revealing prompts; a
+  // picture is hidden from 0.6 (on a check of public-domain photos, revealing ones scored 0.86 to 0.99 and everyday
+  // ones, people at the gym in loose clothes included, 0.27 or less). The text side: these words and tags. Ordinary gear
+  // and clothing words (shorts, t-shirt, gym, workout) are not on it.
+  const REVEALING = 0.6;
+  const REVEALING_WORDS = [
+    'swimwear', 'swimsuit', 'swimsuits', 'bathingsuit', 'bikinibody', 'bikiniseason', 'gymwear', 'gymgirl', 'gymgirls',
+    'fitgirl', 'fitgirls', 'fitnessgirl', 'fitnessgirls', 'fitnessmodel', 'fitness model', 'fitspo', 'sportsbra',
+    'sports bra', 'croptop', 'crop top', 'yogapants', 'yoga pants', 'gymoutfit', 'gym outfit', 'bodygoals', 'beachbody',
+  ];
+  const REVEALING_RE = new RegExp('(^|[^\p{L}\p{N}_])#?(' + REVEALING_WORDS.map((w) => w.replace(/ /g, '\s?')).join('|') + ')(?=$|[^\p{L}\p{N}_])', 'iu');
+
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
+    { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
     {
       id: 'suggestive-image', kind: 'image',
       test: (s) => !!s && ((s.Porn || 0) + (s.Hentai || 0) >= IMAGE.explicit || (s.Sexy || 0) >= IMAGE.sexy ||
         (s.Porn || 0) + (s.Hentai || 0) + (s.Sexy || 0) >= IMAGE.combined),
     },
+    { id: 'revealing-image', kind: 'image', test: (s) => !!s && (s.Revealing || 0) >= REVEALING },
   ];
 
   g.IGFilterRules = {
@@ -58,6 +74,7 @@
       return null;
     },
     thresholds: IMAGE,
+    revealing: REVEALING,
     /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
      *  device (why a post was hidden); it decides nothing and changes no line. */
     explain(s) {
@@ -66,6 +83,7 @@
       if (ex >= IMAGE.explicit) return 'explicit';
       if ((s.Sexy || 0) >= IMAGE.sexy) return 'sexy';
       if (ex + (s.Sexy || 0) >= IMAGE.combined) return 'combined';
+      if ((s.Revealing || 0) >= REVEALING) return 'revealing';
       return null;
     },
   };

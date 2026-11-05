@@ -3,12 +3,12 @@
 (function () {
   'use strict';
   let model = null, loading = null;
-  const load = () => loading || (loading = nsfwjs.load('MobileNetV2').then((m) => {
+  const load = () => loading || (loading = Promise.all([nsfwjs.load('MobileNetV2'), window.IGClip.load()]).then(([m]) => {
     model = m;
     info.loadMs = Math.round(performance.now() - t0);
     try { info.backend = (window._tfengine && window._tfengine.backendName) || ''; } catch {}
     return m;
-  }));
+  }).catch((e) => { loading = null; throw e; })); // a failed load is tried again on the next picture
 
   function image(dataUrl) {
     return new Promise((resolve, reject) => {
@@ -50,11 +50,14 @@
     }
     const scores = {};
     for (const o of out) scores[o.className] = Math.round(o.probability * 10000) / 10000;
+    // The revealing-clothing judge (clip.js) on the same picture. If it cannot run, the picture is not judged (the
+    // page then holds it as "still checking"): the category never quietly switches off.
+    scores.Revealing = await window.IGClip.revealing(img);
     info.n++; info.totalMs += performance.now() - started;
     return scores;
   }
 
-  window.IGClassifier = { classify, load, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
+  window.IGClassifier = { classify, load, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0, clip: window.IGClip.info() }) };
 
   // The iPhone app: native calls igcClassify(id, dataUrl) and hears back on the "igc" message handler.
   window.igcClassify = (id, dataUrl) => {

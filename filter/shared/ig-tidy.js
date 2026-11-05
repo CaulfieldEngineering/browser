@@ -31,13 +31,31 @@
   const run = () => { t = 0; tidy(document.body); };
   new MutationObserver(() => { if (!t) t = setTimeout(run, 150); }).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', run, { once: true });
+  // No Explore (Joe, 2026-11-05: "let's get rid of the explore page"). On /explore and everything under it (the search
+  // tab's grid, tag and place grids, search results' recommended posts) every post and reel tile is gone, so only the
+  // search box and the accounts it finds are left. On the phone the search tab itself is /explore/, so its link stays;
+  // on a wide screen (the laptop), where search has its own panel, the Explore link goes too.
+  const exploreCss = 'html[data-igt-explore] a[href*="/p/"],html[data-igt-explore] a[href*="/reel/"],html[data-igt-explore] a[href*="/reels/"],html[data-igt-explore] a[href*="/tv/"]{display:none !important}' +
+    '@media (min-width: 768px){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
+  const markExplore = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    if (!document.getElementById('igt-style')) { const st = document.createElement('style'); st.id = 'igt-style'; st.textContent = exploreCss; (document.head || root).appendChild(st); }
+    if (/^\/explore(\/|$)/.test(location.pathname)) root.setAttribute('data-igt-explore', ''); else root.removeAttribute('data-igt-explore');
+  };
+  markExplore();
+  document.addEventListener('DOMContentLoaded', markExplore, { once: true });
+  setInterval(markExplore, 250);
+
   // A newly opened page starts at the top, as in the native app (Joe, 2026-11-05: "opening certain pages scrolls way
   // down instead of starting at the top"; a post's comments opened at the last comments). Instagram changes pages without
   // loading (pushState), so the old scroll position, the filter's collapsing of hidden posts, or a comment box focused by
   // the page can leave a new page part way down. For 1.5 s after a new address (not Back or Forward, which keep
   // Instagram's own restored position), the page is put back at the top as it builds, until Joe touches or scrolls it
   // himself; a text box the page focused without his tap is let go so the keyboard does not pull the page down.
-  let lastHref = location.href, popAt = 0, userAt = 0, settleUntil = 0;
+  // Back or Forward is told apart two ways: the popstate event, and history's length (a new page by pushState adds an
+  // entry; Back and Forward do not), so a missed event cannot send Joe to the top of the feed.
+  let lastHref = location.href, lastLen = history.length, popAt = 0, userAt = 0, settleUntil = 0;
   addEventListener('popstate', () => { popAt = Date.now(); }, true);
   for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
   const atTop = () => {
@@ -48,9 +66,10 @@
   };
   setInterval(() => {
     if (location.href === lastHref) return;
-    const was = lastHref; lastHref = location.href;
+    const was = lastHref, grew = history.length > lastLen;
+    lastHref = location.href; lastLen = history.length;
     const samePage = was.split('#')[0] === location.href.split('#')[0];
-    if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
+    if (samePage || !grew || Date.now() - popAt < 400) return; // a hash change, Back / Forward, or a replaced address
     settleUntil = Date.now() + 1500;
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
   }, 50);

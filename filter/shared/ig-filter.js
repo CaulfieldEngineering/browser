@@ -127,7 +127,7 @@
     if (textSeen.get(unit) === t.length) return false;
     textSeen.set(unit, t.length);
     const hit = RULES.first('text', t, unit);
-    if (hit) { hide(unit, 'text', 'text'); return true; }
+    if (hit) { hide(unit, 'text', hit === 'revealing-text' ? 'revealing-text' : 'text'); return true; }
     const u = RULES.first('unit', unit, { path: location.pathname });
     if (u) { hide(unit, 'text', u); return true; }
     return false;
@@ -138,7 +138,8 @@
   async function ask(fn) {
     let r = null;
     try { r = await fn(); } catch (e) { r = { _error: 'bridge' }; }
-    if (r && !r._error && typeof r === 'object' && 'Neutral' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
+    // Judged only when both judges answered (nsfwjs and the revealing-clothing model); otherwise "still checking".
+    if (r && !r._error && typeof r === 'object' && 'Neutral' in r && 'Revealing' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
     state.failed++;
     return { flagged: null, why: 'unjudged-' + ((r && r._error) || 'none') };
   }

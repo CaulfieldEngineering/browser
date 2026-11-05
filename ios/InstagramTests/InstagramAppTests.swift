@@ -103,7 +103,7 @@ final class InstagramAppTests: XCTestCase {
         const comments = () => { m.innerHTML = '<div id="caption" style="height:120px">caption</div>' + Array.from({ length: 80 }, (_, i) => '<div style="height:60px">comment ' + i + '</div>').join('') + '<textarea id="add"></textarea>'; };
         feed();
         window.openComments = () => { history.pushState({}, '', '/p/P10/comments/'); comments(); document.getElementById('add').focus(); scrollTo(0, 99999); };
-        addEventListener('popstate', () => { feed(); scrollTo(0, 1200); });
+        addEventListener('popstate', () => { window.popped = true; feed(); scrollTo(0, 1200); });
         </script>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
@@ -116,6 +116,8 @@ final class InstagramAppTests: XCTestCase {
         XCTAssertNotEqual(focused, "add", "the comment box the page focused is let go")
         _ = try? await web.evaluateJavaScript("history.back(); true")
         try await Task.sleep(nanoseconds: 1_500_000_000)
+        let popped = try await web.evaluateJavaScript("window.popped === true") as? Bool
+        XCTAssertEqual(popped, true, "Back was a history step inside the page (not a reload)")
         let back = try await web.evaluateJavaScript("scrollY") as? Double
         XCTAssertEqual(back, 1200, "Back returns to the same place in the feed")
     }

@@ -11,7 +11,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["rules", "bridge-ios", "ig-filter", "ig-tidy", "classifier"] {
+        for name in ["rules", "bridge-ios", "ig-filter", "ig-tidy", "classifier", "clip"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))
@@ -36,8 +36,9 @@ final class InstagramFilterTests: XCTestCase {
         let data = try XCTUnwrap(InstagramFilter.dataURL(image))
         let answer: Classifier.Answer = await withCheckedContinuation { done in Classifier.shared.classify(data) { done.resume(returning: $0) } }
         guard case let .scores(s) = answer else { return XCTFail("the classifier answered \(answer)") }
-        XCTAssertEqual(Set(s.keys), ["Drawing", "Hentai", "Neutral", "Porn", "Sexy"])
+        XCTAssertEqual(Set(s.keys), ["Drawing", "Hentai", "Neutral", "Porn", "Sexy", "Revealing"], "both judges answered")
         XCTAssertLessThan(s["Sexy"] ?? 1, 0.45)
+        XCTAssertLessThan(s["Revealing"] ?? 1, 0.6, "a plain picture is not revealing clothing")
     }
 
     /// In the app's own web view, on an instagram.com page: a post whose caption is suggestive is removed, a plain one
