@@ -271,7 +271,7 @@ final class Feed {
         guard !sending, !queue.events.isEmpty else { return }
         guard let key = secrets.string("key") else {
             sending = true
-            transport.pair(name: "Browser (iPhone)") { [weak self] key in
+            transport.pair(name: "\(Flavor.name) (iPhone)") { [weak self] key in
                 guard let self else { return }
                 self.work.async {
                     self.sending = false
@@ -289,7 +289,7 @@ final class Feed {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let events = (try? JSONSerialization.jsonObject(with: encoder.encode(batch))) ?? []
-        var body: [String: Any] = ["install": queue.install, "version": Self.version, "build": Self.build,
+        var body: [String: Any] = ["install": queue.install, "app": Flavor.feedApp, "version": Self.version, "build": Self.build,
                                    "pending": queue.events.count, "events": events]
         if let oldest = queue.events.first?.at { body["oldestPending"] = ISO8601DateFormatter().string(from: oldest) }
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }

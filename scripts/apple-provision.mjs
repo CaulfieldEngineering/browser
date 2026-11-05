@@ -12,7 +12,15 @@ const KEY_ID = 'KFXSM9CH9R';
 const ISSUER = 'db8a43da-8566-4d1a-93ee-8b09463088b6';
 const P8 = 'C:/Users/Joe/.apple/AuthKey_KFXSM9CH9R.p8';
 const BLOCKS = 'C:/Users/Joe/.apple/blocks'; // the shared certificate (dist.p12) and its id
-const APPS = [{ bundle: 'com.caulfieldengineering.browser', name: 'Browser', profileName: 'Browser AdHoc', file: 'Browser_AdHoc.mobileprovision' }];
+// The Instagram app (2026-11-05, Joe: "a separate branch of the app where Instagram can be its own icon and interface on
+// my phone") is the same code built as its own app (ios/project.yml target Instagram), so it has its own App ID and
+// profile. Names on the command line do only those apps (node scripts/apple-provision.mjs Instagram), so making one
+// app's profile never remakes the other's.
+const ALL = [
+  { bundle: 'com.caulfieldengineering.browser', name: 'Browser', profileName: 'Browser AdHoc', file: 'Browser_AdHoc.mobileprovision' },
+  { bundle: 'com.caulfieldengineering.instagram', name: 'Instagram', profileName: 'Instagram AdHoc', file: 'Instagram_AdHoc.mobileprovision' },
+];
+const APPS = process.argv.length > 2 ? ALL.filter((a) => process.argv.slice(2).includes(a.name)) : ALL;
 const OUT = 'C:/Users/Joe/.apple/browser';
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -41,7 +49,8 @@ const cert = await api('GET', `certificates/${certificateId}`);
 console.log('certificate', cert.id, cert.attributes.name, 'expires', cert.attributes.expirationDate);
 
 const devices = (await api('GET', 'devices?filter[platform]=IOS&filter[status]=ENABLED&limit=200')).map((d) => ({ type: 'devices', id: d.id }));
-const ids = { certificateId: cert.id, team };
+const idsFile = path.join(OUT, 'ids.json');
+const ids = { ...(fs.existsSync(idsFile) ? JSON.parse(fs.readFileSync(idsFile, 'utf8')) : {}), certificateId: cert.id, team };
 for (const { bundle: BUNDLE, name, profileName: PROFILE_NAME, file } of APPS) {
 // 2. The App ID (reused if it is there).
 let bundle = (await api('GET', `bundleIds?filter[identifier]=${BUNDLE}`)).find((b) => b.attributes.identifier === BUNDLE);
@@ -66,5 +75,5 @@ fs.writeFileSync(path.join(OUT, file), Buffer.from(profile.attributes.profileCon
 console.log('profile', profile.id, profile.attributes.name, profile.attributes.profileState, 'expires', profile.attributes.expirationDate, 'devices', devices.length);
 ids[BUNDLE] = { bundleId: bundle.id, profileId: profile.id };
 }
-fs.writeFileSync(path.join(OUT, 'ids.json'), JSON.stringify(ids, null, 2));
+fs.writeFileSync(idsFile, JSON.stringify(ids, null, 2));
 console.log('files in', OUT, fs.readdirSync(OUT).join(', '));

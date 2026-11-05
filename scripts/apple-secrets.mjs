@@ -36,6 +36,8 @@ const secrets = {
   IOS_DIST_CERT_P12_BASE64: () => b64file(`${BLOCKS}/dist.p12`),
   IOS_DIST_CERT_PASSWORD: () => fs.readFileSync(`${BLOCKS}/p12-password.txt`, 'utf8').trim(),
   IOS_ADHOC_PROFILE_BASE64: () => b64file(`${OWN}/Browser_AdHoc.mobileprovision`),
+  // The Instagram app built from the same code (target Instagram), its own ad-hoc profile.
+  IOS_ADHOC_PROFILE_INSTAGRAM_BASE64: () => b64file(`${OWN}/Instagram_AdHoc.mobileprovision`),
   IOS_KEYCHAIN_PASSWORD: () => crypto.randomBytes(16).toString('hex'),
   IOS_TEAM_ID: () => 'D56QY8C7WL',
   INSTALL_DEPLOY_KEY: () => fs.readFileSync(`${OWN}/install_key`, 'utf8'),
