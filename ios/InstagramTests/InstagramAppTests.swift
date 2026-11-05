@@ -92,6 +92,34 @@ final class InstagramAppTests: XCTestCase {
         vc.view.endEditing(true)
     }
 
+    /// A newly opened page starts at the top; Back keeps the place in the feed (Joe, 2026-11-05: "opening certain pages
+    /// scrolls way down instead of starting at the top"). Instagram changes pages by pushState, as this fixture does.
+    func testANewPageStartsAtTheTopAndBackKeepsThePlace() async throws {
+        let (vc, _) = try app()
+        let web = try page(in: vc)
+        let html = """
+        <main id="m"></main><script>
+        const feed = () => { m.innerHTML = Array.from({ length: 60 }, (_, i) => '<article style="height:300px">post ' + i + '</article>').join(''); };
+        const comments = () => { m.innerHTML = '<div id="caption" style="height:120px">caption</div>' + Array.from({ length: 80 }, (_, i) => '<div style="height:60px">comment ' + i + '</div>').join('') + '<textarea id="add"></textarea>'; };
+        feed();
+        window.openComments = () => { history.pushState({}, '', '/p/P10/comments/'); comments(); document.getElementById('add').focus(); scrollTo(0, 99999); };
+        addEventListener('popstate', () => { feed(); scrollTo(0, 1200); });
+        </script>
+        """
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        let y = try await web.evaluateJavaScript("scrollY") as? Double
+        XCTAssertEqual(y, 0, "the comments page starts at the top")
+        let focused = try await web.evaluateJavaScript("document.activeElement && document.activeElement.id") as? String
+        XCTAssertNotEqual(focused, "add", "the comment box the page focused is let go")
+        _ = try? await web.evaluateJavaScript("history.back(); true")
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        let back = try await web.evaluateJavaScript("scrollY") as? Double
+        XCTAssertEqual(back, 1200, "Back returns to the same place in the feed")
+    }
+
     func testCSSColoursAreRead() {
         XCTAssertEqual(rgb(BrowserViewController.colour(css: "rgb(12, 16, 20)")), [12, 16, 20])
         XCTAssertEqual(rgb(BrowserViewController.colour(css: "rgba(250, 250, 250, 1)")), [250, 250, 250])

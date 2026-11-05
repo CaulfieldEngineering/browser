@@ -39,6 +39,14 @@ const pages = {
   '/reels/C9/': `<main><div class="x78zum5"><div class="xh8yej3" id="viewer"><div><video id="rv" poster="${CDN}/flag-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator/">creator</a> caption</div></div>
    <div class="xh8yej3" id="viewer2"><div><video id="rv2" poster="${CDN}/plain-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator2/">creator2</a> fine</div></div></div></main>`,
   '/stories/someone/': `<main><div id="ring"><img id="ringimg" src="${CDN}/flag-ring.jpg" style="width:56px;height:56px"></div><section id="story"><img id="storyimg" src="${CDN}/flag-story.jpg" style="width:360px;height:640px"></section></main>`,
+  '/spa/': `<main id="m"></main><script>
+    // Like Instagram: one page, new "pages" by pushState, the old scroll left behind, the comment box focused by the page.
+    const feed = () => { m.innerHTML = Array.from({ length: 60 }, (_, i) => '<article style="height:300px">post ' + i + ' <a href="/p/P' + i + '/comments/" class="open">comments</a></article>').join(''); };
+    const comments = () => { m.innerHTML = '<div id="caption" style="height:120px">the caption</div>' + Array.from({ length: 80 }, (_, i) => '<div style="height:60px">comment ' + i + '</div>').join('') + '<textarea id="add" placeholder="Add a comment"></textarea>'; };
+    feed();
+    window.openComments = () => { history.pushState({ p: 'c' }, '', '/p/P10/comments/'); comments(); document.getElementById('add').focus(); scrollTo(0, 99999); };
+    addEventListener('popstate', () => { feed(); scrollTo(0, 1200); });
+  </script>`,
 };
 
 const fakeBridge = `globalThis.__igFilterRetry = [150, 300, 450];
@@ -138,6 +146,23 @@ try {
   await go('/stories/someone/');
   check('stories: a small story ring is not held', await visible('#ringimg'));
   check('stories: a flagged story picture is hidden', ['image'].includes(await hiddenAs('#storyimg')));
+
+  // ---- a newly opened page starts at the top; Back keeps the place in the feed ----
+  await go('/spa/', 300);
+  await page.evaluate(() => scrollTo(0, 1200));
+  await page.evaluate(() => window.openComments());
+  await page.waitForTimeout(1800);
+  check('a new page (comments) starts at the top, its caption in view', await page.evaluate(() => scrollY === 0 && document.getElementById('caption').getBoundingClientRect().top >= 0), String(await page.evaluate(() => scrollY)));
+  check('the comment box the page focused is let go (no keyboard pulling the page down)', await page.evaluate(() => document.activeElement !== document.getElementById('add')));
+  await page.evaluate(() => history.back());
+  await page.waitForTimeout(1200);
+  check('Back returns to the same place in the feed', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
+  await page.evaluate(() => window.openComments());
+  await page.waitForTimeout(100);
+  await page.dispatchEvent('main', 'touchstart');
+  await page.evaluate(() => scrollTo(0, 800));
+  await page.waitForTimeout(1700);
+  check('once Joe scrolls a new page himself, it stays where he put it', await page.evaluate(() => scrollY) === 800, String(await page.evaluate(() => scrollY)));
 
   // ---- the real classifier ----
   const p2 = await browser.newPage();
