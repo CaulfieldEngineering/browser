@@ -208,6 +208,14 @@
     if (!document.getElementById('igf-style')) addStyle();
   });
   mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster'] });
-  const start = () => { addStyle(); scan(document.documentElement); state.ready = true; };
+  // The first pass also judges the text already on the page (posts parsed before the observer saw them).
+  const start = () => {
+    addStyle();
+    scan(document.documentElement);
+    for (const u of document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]')) checkText(u);
+    state.ready = true;
+  };
+  // Instagram builds its pages late; a second look catches text the observer batched away.
+  setTimeout(() => { for (const u of document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]')) checkText(u); }, 1500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 })();

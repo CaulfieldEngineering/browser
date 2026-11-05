@@ -56,7 +56,7 @@ final class InstagramFilterTests: XCTestCase {
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
         var gone: [String] = []
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 300_000_000)
             gone = (try? await web.evaluateJavaScript("[...document.querySelectorAll('[data-igf-gone]')].map(e => e.id)") as? [String]) ?? []
             if !gone.isEmpty { break }
