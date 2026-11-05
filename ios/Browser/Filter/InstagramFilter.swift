@@ -132,7 +132,16 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         DispatchQueue.main.async {
             guard self.view() != nil else { return done(nil) }
             self.attachToWindow()
-            if !self.ready { self.queued.append((dataURL, done)); return }
+            if !self.ready {
+                // Waiting for the model. A classifier that never loads answers "not judged" after 40 s (the picture is
+                // then treated as flagged), so nothing waits for ever.
+                let ticket = UUID().uuidString
+                self.queued.append((ticket + "|" + dataURL, done))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 40) {
+                    if let i = self.queued.firstIndex(where: { $0.0.hasPrefix(ticket + "|") }) { self.queued.remove(at: i).1(nil) }
+                }
+                return
+            }
             self.send(dataURL, done)
         }
     }
@@ -157,7 +166,10 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             ready = ok
             let waiting = queued
             queued.removeAll()
-            for (d, cb) in waiting { ok ? send(d, cb) : cb(nil) }
+            for (d, cb) in waiting {
+                let data = d.firstIndex(of: "|").map { String(d[d.index(after: $0)...]) } ?? d // the ticket off
+                ok ? send(data, cb) : cb(nil)
+            }
             return
         }
         guard let id = body["id"] as? Int, let cb = pending.removeValue(forKey: id) else { return }
