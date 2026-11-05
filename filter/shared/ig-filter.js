@@ -1,14 +1,21 @@
 // The Instagram filter, in the page (Joe, 2026-11-05; locked memory entry 21). Runs at document start on instagram.com
 // in the iPhone Browser, in the Instagram app built from it, and in the laptop extension. The rules are in rules.js;
 // the image classifier is reached through IGFilterBridge, which each place provides:
-//   IGFilterBridge.classifyUrl(url)   -> Promise<scores|null>   an image on Instagram's CDN, fetched and judged on the device
-//   IGFilterBridge.classifyData(data) -> Promise<scores|null>   a data: URL (a video frame drawn here)
-//   IGFilterBridge.classifyRect(rect) -> Promise<scores|null>   what is on screen in that rect (a playing video), optional
+//   IGFilterBridge.classifyUrl(url)   -> Promise<scores | {_error} | null>   an image on Instagram's CDN, judged on the device
+//   IGFilterBridge.classifyData(data) -> Promise<scores | {_error} | null>   a data: URL (a video frame drawn here)
+//   IGFilterBridge.classifyRect(rect) -> Promise<scores | {_error} | null>   what is on screen there (a playing video), optional
+//   IGFilterBridge.stat(name)         -> count one event on the device (why a post was hidden), optional
+//   IGFilterBridge.warm()             -> start loading the model now, optional
 //
-// What it does: a post or Reel that a rule flags is removed outright (display: none, video paused). There is no
-// reveal, no blur, no setting and no switch. Images from Instagram's CDN are held invisible until judged, so a flagged
-// one never shows; an image that cannot be judged (twice) is treated as flagged. Videos are judged by their poster, a
-// drawn frame, and then every two seconds while they play. Feed, Reels, messages, profiles and posting stay as they are.
+// Surfaces: the feed (<article>), post pages, profile grids (posts, reels, tagged), Explore and search grids, the reel
+// viewer, stories, messages; pictures as <img> or as a CSS background on the tile; avatars and story rings only when
+// they are shown large (120 px or more).
+// What it does: a post or Reel that a rule flags is hidden, with a quiet placeholder that names the account and why
+// ("Hidden: suggestive picture"). There is no reveal, no blur, no setting and no switch; the placeholder cannot be
+// tapped. Pictures from Instagram's CDN are held invisible until judged. One that could not be judged yet (the model
+// still loading, the picture not readable) is hidden as "still checking" and tried again at 5, 20 and 60 seconds: shown
+// once it is judged clean, hidden for good if flagged or if it still cannot be judged. Videos are judged by their
+// poster, a drawn frame, then every two seconds while they play. Feed, Reels, messages, profiles and posting stay.
 (function () {
   'use strict';
   const g = globalThis;
@@ -21,11 +28,23 @@
   const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
   const SMALL = 120;           // rendered px: avatars, icons and story rings are not judged
   const FRAME_EVERY = 2000;    // ms between frame checks while a video plays
+  const RETRY = g.__igFilterRetry || [5000, 20000, 60000]; // tests shorten it; nothing on the page can reach it
   const state = { removed: 0, judged: 0, failed: 0, ready: false };
   g.__igFilter = state;
+  const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
+  try { BRIDGE.warm && BRIDGE.warm(); } catch {}
 
-  // ---- styles: held media is invisible; removed posts are gone ------------------------------------------------------
-  const css = '[data-igf-hold]{visibility:hidden !important}[data-igf-gone]{display:none !important}';
+  // ---- styles: held media is invisible; a hidden post shows only its placeholder, and nothing in it answers a tap -----
+  const css = [
+    '[data-igf-hold]{visibility:hidden !important}',
+    '[data-igf-gone]{pointer-events:none !important}',
+    '[data-igf-gone]>:not(.igf-ph){display:none !important}',
+    'img[data-igf-gone],video[data-igf-gone]{display:none !important}',
+    '.igf-ph{display:flex !important;align-items:center;justify-content:center;box-sizing:border-box;min-height:52px;height:100%;',
+    'padding:12px 16px;font:13px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#8e8e8e;text-align:center;',
+    'border-top:1px solid rgba(128,128,128,.18);border-bottom:1px solid rgba(128,128,128,.18);pointer-events:none;user-select:none}',
+    'a[data-igf-gone] .igf-ph{font-size:11px;border:0;background:rgba(128,128,128,.08)}',
+  ].join('');
   const addStyle = () => {
     const parent = document.head || document.documentElement;
     if (!parent || document.getElementById('igf-style')) return; // at document start there may be no <html> yet
@@ -49,7 +68,10 @@
     const tile = el.closest('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]');
     if (tile) return tile;
     let u = el;
-    while (u.parentElement && u.parentElement !== document.body && u.parentElement.querySelectorAll('video, img').length <= 2) u = u.parentElement;
+    // Up to the largest box that holds only this one piece (at most one video and one picture), so hiding one reel or
+    // story never takes its neighbours with it.
+    const one = (p) => p.querySelectorAll('video').length <= 1 && p.querySelectorAll('img, [style*="background-image"]').length <= 1;
+    while (u.parentElement && u.parentElement !== document.body && one(u.parentElement)) u = u.parentElement;
     return u;
   }
 
@@ -59,15 +81,61 @@
     return t.slice(0, 6000);
   }
 
-  // ---- removing -----------------------------------------------------------------------------------------------------
-  function remove(unit, why) {
-    if (!unit || unit.hasAttribute('data-igf-gone')) return;
-    unit.setAttribute('data-igf-gone', why);
-    for (const v of unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
-    if (unit.tagName === 'VIDEO') { try { unit.muted = true; unit.pause(); } catch {} }
-    state.removed++;
+  // The account a post is from: the first profile link in its header (or in the post), as Instagram writes it.
+  function accountOf(unit) {
+    if (!unit.querySelectorAll) return '';
+    for (const a of unit.querySelectorAll('header a[href^="/"], a[href^="/"][role="link"], a[href^="/"]')) {
+      const m = (a.getAttribute('href') || '').match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
+      if (m && !/^(p|reel|reels|explore|direct|stories|accounts|tv)$/.test(m[1])) return m[1];
+    }
+    return '';
   }
-  const gone = (el) => !!el.closest('[data-igf-gone]');
+
+  // ---- hiding ---------------------------------------------------------------------------------------------------------
+  const LABEL = {
+    checking: 'Hidden: still checking',
+    unjudged: 'Hidden: could not be checked',
+    image: 'Hidden: suggestive picture',
+    video: 'Hidden: suggestive video',
+    text: 'Hidden: caption',
+  };
+  function placeholder(unit, kind) {
+    const who = accountOf(unit);
+    const text = (who ? who + ' · ' : '') + LABEL[kind];
+    if (unit.tagName === 'IMG' || unit.tagName === 'VIDEO') {
+      let ph = unit.previousElementSibling;
+      if (!ph || !ph.classList || !ph.classList.contains('igf-ph')) { ph = document.createElement('div'); ph.className = 'igf-ph'; unit.before(ph); }
+      ph.textContent = LABEL[kind];
+      return;
+    }
+    let ph = [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
+    if (!ph) { ph = document.createElement('div'); ph.className = 'igf-ph'; unit.prepend(ph); }
+    ph.textContent = text;
+  }
+  const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
+  /** Hides a post. kind: 'text', 'image', 'video' (for good) or 'checking' (to be tried again). */
+  function hide(unit, kind, why) {
+    if (!unit) return;
+    const was = kindOf(unit);
+    if (was && was !== 'checking') return;      // already hidden for good
+    if (was === 'checking' && kind === 'checking') return;
+    unit.setAttribute('data-igf-gone', kind);
+    unit.setAttribute('data-igf-why', why || kind);
+    for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
+    placeholder(unit, kind);
+    if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); }
+    else { stat('checking-' + (why || 'unjudged')); retry(unit); }
+  }
+  // Shown again only when every held picture in it has now been judged clean (no tap, no control: the verdict).
+  function restore(unit) {
+    if (kindOf(unit) !== 'checking') return;
+    unit.removeAttribute('data-igf-gone');
+    unit.removeAttribute('data-igf-why');
+    const ph = unit.tagName === 'IMG' || unit.tagName === 'VIDEO' ? unit.previousElementSibling : [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
+    if (ph && ph.classList && ph.classList.contains('igf-ph')) ph.remove();
+    stat('restored');
+  }
+  const gone = (el) => { const u = el.closest && el.closest('[data-igf-gone]'); return !!u && kindOf(u) !== 'checking'; };
 
   // ---- text ---------------------------------------------------------------------------------------------------------
   const textSeen = new WeakMap();
@@ -77,49 +145,87 @@
     if (textSeen.get(unit) === t.length) return false;
     textSeen.set(unit, t.length);
     const hit = RULES.first('text', t, unit);
-    if (hit) { remove(unit, hit); return true; }
+    if (hit) { hide(unit, 'text', 'text'); return true; }
     const u = RULES.first('unit', unit, { path: location.pathname });
-    if (u) { remove(unit, u); return true; }
+    if (u) { hide(unit, 'text', u); return true; }
     return false;
   }
 
   // ---- images -------------------------------------------------------------------------------------------------------
-  const verdicts = new Map(); // url -> Promise<boolean flagged>
+  // A verdict: { flagged, why } with why 'clean', 'explicit' | 'sexy' | 'combined', or 'unjudged-<reason>'.
+  async function ask(fn) {
+    let r = null;
+    try { r = await fn(); } catch (e) { r = { _error: 'bridge' }; }
+    if (r && !r._error && typeof r === 'object' && 'Neutral' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
+    state.failed++;
+    return { flagged: null, why: 'unjudged-' + ((r && r._error) || 'none') };
+  }
+  const verdicts = new Map(); // url key -> Promise<verdict>, judged ones only
+  const keyOf = (url) => url.split('?')[0] + '?' + (url.split('?')[1] || '').replace(/(^|&)(_nc_\w+|oh|oe|ccb|edm|ig_cache_key)=[^&]*/g, '');
   function judgeUrl(url) {
-    const key = url.split('?')[0] + '?' + (url.split('?')[1] || '').replace(/(^|&)(_nc_\w+|oh|oe|ccb|edm|ig_cache_key)=[^&]*/g, '');
+    const key = keyOf(url);
     if (verdicts.has(key)) return verdicts.get(key);
-    const p = (async () => {
-      for (let i = 0; i < 2; i++) {
-        let s = null;
-        try { s = await BRIDGE.classifyUrl(url); } catch {}
-        if (s) { state.judged++; return !!RULES.first('image', s); }
-      }
-      state.failed++;
-      return true; // could not be judged: treated as flagged
-    })();
+    const p = ask(() => BRIDGE.classifyUrl(url)).then((v) => { if (v.flagged === null) verdicts.delete(key); else stat(v.flagged ? 'judged-flagged' : 'judged-clean'); return v; });
     verdicts.set(key, p);
     if (verdicts.size > 4000) verdicts.delete(verdicts.keys().next().value);
     return p;
   }
 
-  const imgDone = new WeakMap(); // img -> the src judged
+  const held = new WeakMap(); // unit -> Set of imgs held in it
+  function holdIn(unit, img) { let s = held.get(unit); if (!s) held.set(unit, (s = new Set())); s.add(img); }
+  // The picture an element shows: an <img>'s current source, or a CSS background (Instagram's reel and grid tiles are
+  // often a <div> with an inline background-image, not an <img>).
+  function srcOf(el) {
+    if (el.tagName === 'IMG') return el.currentSrc || el.src || '';
+    const bg = (el.style && el.style.backgroundImage) || '';
+    const m = bg.match(/url\(\s*(['"]?)(.*?)\1\s*\)/);
+    return m ? m[2] : '';
+  }
+  const imgDone = new WeakMap(); // element -> the src judged
   function handleImg(img) {
-    const src = img.currentSrc || img.src;
+    const src = srcOf(img);
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
     imgDone.set(img, src);
     const unit = unitOf(img);
     if (gone(unit)) return;
     if (checkText(unit)) return;
     img.setAttribute('data-igf-hold', '');
+    holdIn(unit, img);
     const go = async () => {
       const r = img.getBoundingClientRect();
-      if (img.complete && r.width > 0 && r.width < SMALL && r.height < SMALL) { img.removeAttribute('data-igf-hold'); return; }
-      const flagged = await judgeUrl(src);
-      if ((img.currentSrc || img.src) !== src) return; // changed meanwhile; the new src is judged on its own
-      if (flagged) remove(unitOf(img), 'suggestive-image');
-      else img.removeAttribute('data-igf-hold');
+      if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < SMALL && r.height < SMALL) { img.removeAttribute('data-igf-hold'); return; }
+      const v = await judgeUrl(src);
+      if (srcOf(img) !== src) return; // changed meanwhile; the new src is judged on its own
+      const u = unitOf(img);
+      if (v.flagged) hide(u, 'image', v.why);
+      else if (v.flagged === false) img.removeAttribute('data-igf-hold');
+      else hide(u, 'checking', v.why);
     };
-    if (img.complete) go(); else img.addEventListener('load', go, { once: true }), img.addEventListener('error', go, { once: true });
+    if (img.tagName !== 'IMG') { requestAnimationFrame(go); return; } // a background: judged once laid out
+    if (img.complete) go(); else { img.addEventListener('load', go, { once: true }); img.addEventListener('error', go, { once: true }); }
+  }
+
+  // "Still checking": every held picture in the post is tried again; all clean shows it, one flagged hides it for good,
+  // and after the last try it stays hidden as "could not be checked".
+  const retries = new WeakMap();
+  function retry(unit) {
+    const n = retries.get(unit) || 0;
+    if (n >= RETRY.length) { unit.setAttribute('data-igf-gone', 'unjudged'); placeholder(unit, 'unjudged'); state.removed++; stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
+    retries.set(unit, n + 1);
+    setTimeout(async () => {
+      if (kindOf(unit) !== 'checking') return;
+      if (!unit.isConnected) return;
+      const imgs = [...(held.get(unit) || [])].filter((i) => i.isConnected && i.hasAttribute('data-igf-hold'));
+      let allClean = imgs.length > 0, last = 'unjudged-none';
+      for (const img of imgs) {
+        const v = await judgeUrl(srcOf(img));
+        if (v.flagged) { hide(unit, 'image', v.why); return; }
+        if (v.flagged === null) { allClean = false; last = v.why; }
+      }
+      if (allClean) { for (const img of imgs) img.removeAttribute('data-igf-hold'); restore(unit); return; }
+      unit.setAttribute('data-igf-why', last);
+      retry(unit);
+    }, RETRY[n]);
   }
 
   // ---- videos -------------------------------------------------------------------------------------------------------
@@ -137,16 +243,14 @@
   }
   async function judgeFrame(v, first) {
     const data = frameData(v);
-    let s = null;
-    if (data) { try { s = await BRIDGE.classifyData(data); } catch {} }
+    let verdict = null;
+    if (data) verdict = await ask(() => BRIDGE.classifyData(data));
     else if (!first && BRIDGE.classifyRect && !v.hasAttribute('data-igf-hold')) {
       const r = v.getBoundingClientRect();
-      if (r.width > 40 && r.height > 40 && r.bottom > 0 && r.top < innerHeight) {
-        try { s = await BRIDGE.classifyRect({ x: r.left, y: r.top, width: r.width, height: r.height }); } catch {}
-      }
+      if (r.width > 40 && r.height > 40 && r.bottom > 0 && r.top < innerHeight) verdict = await ask(() => BRIDGE.classifyRect({ x: r.left, y: r.top, width: r.width, height: r.height }));
     }
-    if (s) { state.judged++; if (RULES.first('image', s)) { remove(unitOf(v), 'suggestive-video'); return 'flagged'; } return 'ok'; }
-    return data ? 'error' : 'none';
+    if (verdict && verdict.flagged) { hide(unitOf(v), 'video', verdict.why); return 'flagged'; }
+    return verdict && verdict.flagged === false ? 'ok' : 'none';
   }
   function handleVideo(v) {
     if (vidState.has(v)) return;
@@ -160,7 +264,7 @@
     const release = () => { if (!gone(v)) { v.removeAttribute('data-igf-hold'); } };
     (async () => {
       const poster = v.getAttribute('poster');
-      if (poster && isMediaUrl(poster) && (await judgeUrl(poster))) { remove(unitOf(v), 'suggestive-video'); return; }
+      if (poster && isMediaUrl(poster)) { const pv = await judgeUrl(poster); if (pv.flagged) { hide(unitOf(v), 'video', pv.why); return; } }
       // A first frame, drawn here while the video is still invisible (works when the frame is not cross-origin).
       const until = Date.now() + 4000;
       while (Date.now() < until && v.readyState < 2) await new Promise((r) => setTimeout(r, 150));
@@ -187,35 +291,43 @@
     if (!root || root.nodeType !== 1) return;
     if (root.tagName === 'IMG') handleImg(root);
     else if (root.tagName === 'VIDEO') handleVideo(root);
-    for (const img of root.querySelectorAll ? root.querySelectorAll('img') : []) handleImg(img);
-    for (const v of root.querySelectorAll ? root.querySelectorAll('video') : []) handleVideo(v);
+    else if (root.style && root.style.backgroundImage) handleImg(root);
+    if (!root.querySelectorAll) return;
+    for (const img of root.querySelectorAll('img, [style*="background-image"]')) handleImg(img);
+    for (const v of root.querySelectorAll('video')) handleVideo(v);
   }
   const textQueue = new Set();
   let textTimer = 0;
   function queueText(node) {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
-    if (!el) return;
+    if (!el || (el.classList && el.classList.contains('igf-ph'))) return;
     const unit = el.closest('article') || el.closest('a[href*="/p/"], a[href*="/reel/"]');
     if (unit) textQueue.add(unit);
     if (!textTimer) textTimer = setTimeout(() => { textTimer = 0; for (const u of textQueue) checkText(u); textQueue.clear(); }, 120);
   }
   const mo = new MutationObserver((list) => {
     for (const m of list) {
-      if (m.type === 'attributes') { if (m.target.tagName === 'IMG') handleImg(m.target); else if (m.target.tagName === 'VIDEO') handleVideo(m.target); continue; }
+      if (m.type === 'attributes') {
+        const t = m.target;
+        if (t.tagName === 'IMG' || (m.attributeName === 'style' && t.style && t.style.backgroundImage)) handleImg(t);
+        else if (t.tagName === 'VIDEO') handleVideo(t);
+        continue;
+      }
       for (const n of m.addedNodes) { if (n.nodeType === 1) { scan(n); queueText(n); } else if (n.nodeType === 3) queueText(n); }
       if (m.type === 'characterData') queueText(m.target);
     }
     if (!document.getElementById('igf-style')) addStyle();
   });
-  mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster'] });
+  mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster', 'style'] });
   // The first pass also judges the text already on the page (posts parsed before the observer saw them).
+  const allUnits = () => document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]');
   const start = () => {
     addStyle();
     scan(document.documentElement);
-    for (const u of document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]')) checkText(u);
+    for (const u of allUnits()) checkText(u);
     state.ready = true;
   };
   // Instagram builds its pages late; a second look catches text the observer batched away.
-  setTimeout(() => { for (const u of document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]')) checkText(u); }, 1500);
+  setTimeout(() => { for (const u of allUnits()) checkText(u); }, 1500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 })();

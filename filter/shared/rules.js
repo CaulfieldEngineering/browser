@@ -58,5 +58,15 @@
       return null;
     },
     thresholds: IMAGE,
+    /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
+     *  device (why a post was hidden); it decides nothing and changes no line. */
+    explain(s) {
+      if (!s) return null;
+      const ex = (s.Porn || 0) + (s.Hentai || 0);
+      if (ex >= IMAGE.explicit) return 'explicit';
+      if ((s.Sexy || 0) >= IMAGE.sexy) return 'sexy';
+      if (ex + (s.Sexy || 0) >= IMAGE.combined) return 'combined';
+      return null;
+    },
   };
 })();

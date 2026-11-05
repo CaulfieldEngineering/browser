@@ -3,7 +3,12 @@
 (function () {
   'use strict';
   let model = null, loading = null;
-  const load = () => loading || (loading = nsfwjs.load('MobileNetV2').then((m) => (model = m)));
+  const load = () => loading || (loading = nsfwjs.load('MobileNetV2').then((m) => {
+    model = m;
+    info.loadMs = Math.round(performance.now() - t0);
+    try { info.backend = (window._tfengine && window._tfengine.backendName) || ''; } catch {}
+    return m;
+  }));
 
   function image(dataUrl) {
     return new Promise((resolve, reject) => {
@@ -14,7 +19,18 @@
     });
   }
 
-  async function classify(dataUrl) {
+  // One picture at a time: the model is one engine, and a feed asks for dozens at once. A queue keeps each answer's
+  // time to its own work, so a busy feed does not make the native side give up on pictures still waiting.
+  let chain = Promise.resolve();
+  const info = { backend: '', loadMs: 0, n: 0, totalMs: 0 };
+  const t0 = performance.now();
+  function classify(dataUrl) {
+    const run = chain.then(() => classifyNow(dataUrl));
+    chain = run.catch(() => {});
+    return run;
+  }
+  async function classifyNow(dataUrl) {
+    const started = performance.now();
     if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) throw new Error('not an image');
     await load();
     const img = await image(dataUrl);
@@ -34,20 +50,21 @@
     }
     const scores = {};
     for (const o of out) scores[o.className] = Math.round(o.probability * 10000) / 10000;
+    info.n++; info.totalMs += performance.now() - started;
     return scores;
   }
 
-  window.IGClassifier = { classify, load };
+  window.IGClassifier = { classify, load, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
 
   // The iPhone app: native calls igcClassify(id, dataUrl) and hears back on the "igc" message handler.
   window.igcClassify = (id, dataUrl) => {
     classify(dataUrl)
-      .then((scores) => window.webkit.messageHandlers.igc.postMessage({ id, scores }))
+      .then((scores) => window.webkit.messageHandlers.igc.postMessage({ id, scores, info: window.IGClassifier.info() }))
       .catch((e) => window.webkit.messageHandlers.igc.postMessage({ id, error: String(e && e.message || e) }));
     return true;
   };
   if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.igc) {
-    load().then(() => window.webkit.messageHandlers.igc.postMessage({ ready: true }))
+    load().then(() => window.webkit.messageHandlers.igc.postMessage({ ready: true, info: window.IGClassifier.info() }))
       .catch((e) => window.webkit.messageHandlers.igc.postMessage({ ready: false, error: String(e) }));
   }
 

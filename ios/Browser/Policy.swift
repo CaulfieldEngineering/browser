@@ -12,6 +12,8 @@ enum Decision: Equatable {
     case openOutside
     /// Not loaded; a calm page says why.
     case block(title: String, reason: String)
+    /// Not loaded, and nothing shown: the page stays as it is (the Instagram app's links to the native app).
+    case ignore
 }
 
 enum Policy {
@@ -32,6 +34,9 @@ enum Policy {
 
     static func decide(request: URLRequest, isMainFrame: Bool) -> Decision {
         guard let url = request.url, let scheme = url.scheme?.lowercased() else { return .allow }
+        // The Instagram app (Flavor.swift): a link that would open the native Instagram app or its App Store page does
+        // nothing (Joe, 2026-11-05: "yes hide those"). The native app stays hidden; this app stays on the web.
+        if Flavor.isInstagram, isNativeAppLink(url) { return .ignore }
         if outsideSchemes.contains(scheme) { return .openOutside }
         if isOwnInstall(url) { return .openOutside }
         if scheme == "itms-services" {
@@ -56,6 +61,14 @@ enum Policy {
             return .block(title: "This app opens Instagram only", reason: "Links to other sites do not open here.")
         }
         return .allow
+    }
+
+    /// The native Instagram app (or Threads, Facebook) by its scheme, an App Store link, or an app-install redirect.
+    static func isNativeAppLink(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased() ?? ""
+        if ["instagram", "instagram-stories", "barcelona", "fb", "fb-messenger", "itms-apps", "itms-appss", "itms", "itmss", "intent"].contains(scheme) { return true }
+        guard scheme == "http" || scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host == "apps.apple.com" || host == "itunes.apple.com" || host.hasSuffix(".app.link") || host.hasSuffix(".onelink.me")
     }
 
     /// Our own install pages, and nothing else, may install: Joe opens browser-install in the Browser and taps Install

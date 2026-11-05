@@ -21,7 +21,7 @@ enum Look {
     static let line = UIColor(white: 1, alpha: 0.07)
 }
 
-final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITextFieldDelegate {
+final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UITextFieldDelegate, UIGestureRecognizerDelegate {
     /// The open tab's web view, in the page card. Every tab's web view has this controller as its delegates.
     private var webView: WKWebView!
     private var tabs: [Tab] = []
@@ -85,7 +85,60 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         if Flavor.isInstagram {
             field.isEnabled = false
             if !(current.url.map(Flavor.isInstagramHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
+            // Full window (Joe, 2026-11-05: "Make it expand to the entire window size (remove that lower gap)"): no bars
+            // of ours; Instagram's page fills the screen and WebKit keeps it clear of the notch and the home
+            // indicator (the page does not ask for viewport-fit=cover), filling those strips with the page's colour.
+            // Our menu (accounts, history, the filter's counts, updates) is a two-finger tap anywhere.
+            topBar.isHidden = true
+            bottomBar.isHidden = true
+            let twoFingers = UITapGestureRecognizer(target: self, action: #selector(showInstagramMenu))
+            twoFingers.numberOfTouchesRequired = 2
+            twoFingers.cancelsTouchesInView = false
+            twoFingers.delegate = self
+            card.addGestureRecognizer(twoFingers)
         }
+    }
+
+    // MARK: - The Instagram app's menu and accounts (Flavor.swift, Accounts.swift)
+
+    /// The Instagram app's menu, on a two-finger tap: accounts, reload, history, the filter's counts, updates.
+    @objc func showInstagramMenu() {
+        guard presentedViewController == nil else { return }
+        let sheet = UIAlertController(title: Accounts.current.name, message: "Instagram \(Self.myVersion)", preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: "Accounts", style: .default) { [weak self] _ in self?.showAccounts() })
+        sheet.addAction(UIAlertAction(title: "Reload", style: .default) { [weak self] _ in self?.webView.reload() })
+        sheet.addAction(UIAlertAction(title: "History", style: .default) { [weak self] _ in self?.showHistory() })
+        sheet.addAction(UIAlertAction(title: "Filter today", style: .default) { [weak self] _ in self?.showFilterCounts() })
+        if let newer = newerVersion { sheet.addAction(UIAlertAction(title: "Update to \(newer)", style: .default) { [weak self] _ in self?.installUpdate() }) }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = view
+        present(sheet, animated: true)
+    }
+
+    func showAccounts() {
+        let list = AccountsViewController()
+        list.onPick = { [weak self] account in self?.switchAccount(to: account) }
+        let nav = UINavigationController(rootViewController: list)
+        nav.overrideUserInterfaceStyle = .dark
+        if let sheet = nav.sheetPresentationController { sheet.detents = [.medium(), .large()]; sheet.prefersGrabberVisible = true }
+        present(nav, animated: true)
+    }
+
+    /// Opens another account: a fresh page with that account's own data store, at Instagram's home.
+    func switchAccount(to account: IGAccount) {
+        Accounts.select(account.id)
+        guard let tab = current else { return }
+        tab.webView?.stopLoading()
+        tab.webView = nil
+        tab.url = Flavor.home
+        select(tab)
+    }
+
+    /// The filter's counts for today, as plain lines (FilterStats; on the phone only).
+    private func showFilterCounts() {
+        let a = UIAlertController(title: "Filter today", message: FilterStats.shared.summary().joined(separator: "\n"), preferredStyle: .alert)
+        a.addAction(UIAlertAction(title: "OK", style: .default))
+        present(a, animated: true)
     }
 
     override func didReceiveMemoryWarning() {
@@ -205,8 +258,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeCard() {
-        card.backgroundColor = Look.bg
-        card.layer.cornerRadius = 18
+        card.backgroundColor = Flavor.isInstagram ? .black : Look.bg
+        card.layer.cornerRadius = Flavor.isInstagram ? 0 : 18
         card.layer.cornerCurve = .continuous
         card.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         card.clipsToBounds = true
@@ -365,10 +418,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             progress.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
             progress.heightAnchor.constraint(equalToConstant: 2),
 
-            card.topAnchor.constraint(equalTo: topBar.bottomAnchor),
+            card.topAnchor.constraint(equalTo: Flavor.isInstagram ? view.topAnchor : topBar.bottomAnchor),
             card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            card.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+            card.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.bottomAnchor : bottomBar.topAnchor),
 
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -380,7 +433,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             tools.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            updateButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -14),
+            updateButton.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.bottomAnchor : card.bottomAnchor, constant: Flavor.isInstagram ? -64 : -14),
 
             empty.centerYAnchor.constraint(equalTo: card.centerYAnchor),
             empty.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 32),
@@ -417,6 +470,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             if let tab = self?.current { self?.close(tab) }
         }
         let history = UIAction(title: "History", image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in self?.showHistory() }
+        let filter = UIAction(title: "Instagram filter today", image: UIImage(systemName: "line.3.horizontal.decrease.circle")) { [weak self] _ in self?.showFilterCounts() }
         let share = UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in
             self?.sharePage()
         }
@@ -436,11 +490,14 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         return [
             UIMenu(options: .displayInline, children: [forward, reload]),
             UIMenu(options: .displayInline, children: [newTab, closeTab]),
-            UIMenu(options: .displayInline, children: [history]),
+            UIMenu(options: .displayInline, children: [history, filter]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: about),
         ]
     }
+
+    // The two-finger tap works alongside the page's own touches.
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
     // MARK: - Tabs
 
@@ -576,7 +633,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// A tab's web view. A page that opens a window hands its own configuration (`given`), which must be used.
     func makeWebView(_ given: WKWebViewConfiguration? = nil) -> WKWebView { // internal for the simulator tests
         let config = given ?? WKWebViewConfiguration()
-        config.websiteDataStore = .default() // never a private (non-persistent) store
+        // Never a private (non-persistent) store. The Instagram app: the open account's own store (Accounts.swift).
+        if given == nil { config.websiteDataStore = Flavor.isInstagram ? Accounts.store(for: Accounts.current) : .default() }
         config.allowsInlineMediaPlayback = true
         // Picture in picture (Joe, 2026-10-29: "PIP player would be nice"): WebKit's own, from a video's controls or
         // on leaving the app while a video plays, as in Safari.
@@ -590,9 +648,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         web.allowsBackForwardNavigationGestures = true
         web.allowsLinkPreview = true
         web.isOpaque = false
-        web.backgroundColor = Look.bg
-        web.underPageBackgroundColor = Look.bg
-        web.scrollView.backgroundColor = Look.bg
+        // The Instagram app: black, as Instagram's dark page is, so the strips by the notch and home indicator match it.
+        let pageColor = Flavor.isInstagram ? UIColor.black : Look.bg
+        web.backgroundColor = pageColor
+        web.underPageBackgroundColor = pageColor
+        web.scrollView.backgroundColor = pageColor
         web.scrollView.keyboardDismissMode = .interactive
 
         let refresh = UIRefreshControl()
@@ -754,6 +814,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         case .openOutside:
             decisionHandler(.cancel)
             if let url = navigationAction.request.url { UIApplication.shared.open(url) }
+        case .ignore:
+            decisionHandler(.cancel)
         case let .block(title, reason):
             decisionHandler(.cancel)
             if isMainFrame || navigationAction.targetFrame == nil {
@@ -765,7 +827,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         switch Policy.decide(response: navigationResponse.response, isMainFrame: navigationResponse.isForMainFrame, canShow: navigationResponse.canShowMIMEType) {
-        case .allow, .openOutside:
+        case .allow, .openOutside, .ignore:
             decisionHandler(.allow)
         case let .block(title, reason):
             decisionHandler(.cancel)
@@ -796,6 +858,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         HistoryRecorder.shared.finished(webView)
+        if Flavor.isInstagram {
+            let id = Accounts.current.id
+            webView.evaluateJavaScript(Accounts.usernameScript) { name, _ in Accounts.learnName(name as? String ?? "", for: id) }
+        }
         webView.scrollView.refreshControl?.endRefreshing()
         updateBar()
     }
