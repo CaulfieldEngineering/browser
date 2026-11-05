@@ -55,7 +55,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// HQ, Joe's own chat app, in Chrome's place for its assistant. Only this one app.
     private static let askHQURL = URL(string: "hq://chat")!
 
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    override var preferredStatusBarStyle: UIStatusBarStyle { Flavor.isInstagram && !topIsDark ? .darkContent : .lightContent }
 
     override func loadView() {
         view = UIView()
@@ -85,18 +85,92 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         if Flavor.isInstagram {
             field.isEnabled = false
             if !(current.url.map(Flavor.isInstagramHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
-            // Full window (Joe, 2026-11-05: "Make it expand to the entire window size (remove that lower gap)"): no bars
-            // of ours; Instagram's page fills the screen and WebKit keeps it clear of the notch and the home
-            // indicator (the page does not ask for viewport-fit=cover), filling those strips with the page's colour.
+            // Full window (Joe, 2026-11-05: "Make it expand to the entire window size (remove that lower gap)", then, on
+            // 0.1.38: "Bleed up top and still a small gap at the bottom"): no bars of ours. The page sits inside the
+            // safe area, so Instagram's header is below the status bar and its tab bar's icons above the home
+            // indicator; the strip above and the strip below are painted in the colour of Instagram's own header and
+            // tab bar, read from the page (matchStrips), so each reads as one bar running to the edge, dark or light.
             // Our menu (accounts, history, the filter's counts, updates) is a two-finger tap anywhere.
             topBar.isHidden = true
             bottomBar.isHidden = true
+            view.insertSubview(topStrip, at: 0)
+            view.insertSubview(bottomStrip, at: 0)
+            for strip in [topStrip, bottomStrip] { strip.translatesAutoresizingMaskIntoConstraints = false; strip.backgroundColor = Self.igDefault(for: traitCollection) }
+            NSLayoutConstraint.activate([
+                topStrip.topAnchor.constraint(equalTo: view.topAnchor),
+                topStrip.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+                topStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                topStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                bottomStrip.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+                bottomStrip.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                bottomStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                bottomStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            ])
+            stripTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in self?.matchStrips() }
             let twoFingers = UITapGestureRecognizer(target: self, action: #selector(showInstagramMenu))
             twoFingers.numberOfTouchesRequired = 2
             twoFingers.cancelsTouchesInView = false
             twoFingers.delegate = self
             card.addGestureRecognizer(twoFingers)
         }
+    }
+
+    // MARK: - The Instagram app's frame: the strips by the status bar and the home indicator
+
+    /// Painted in Instagram's header colour (top) and tab bar colour (bottom), read from the page.
+    let topStrip = UIView(), bottomStrip = UIView()
+    private var stripTimer: Timer?
+    private var topIsDark = true
+
+    /// Instagram's own colours before the page says: its dark header (about #0C1014) or white.
+    static func igDefault(for traits: UITraitCollection) -> UIColor {
+        traits.userInterfaceStyle == .light ? .white : UIColor(red: 12 / 255.0, green: 16 / 255.0, blue: 20 / 255.0, alpha: 1)
+    }
+
+    /// The colour behind the top and the bottom of the page: the first element with a background at each edge.
+    static let edgeColours = """
+    (() => { const pick = (y) => { let e = document.elementFromPoint(innerWidth / 2, y);
+        while (e) { const c = getComputedStyle(e).backgroundColor; if (c && !/^(transparent|rgba\\(0, 0, 0, 0\\))$/.test(c)) return c; e = e.parentElement; }
+        return getComputedStyle(document.documentElement).backgroundColor || getComputedStyle(document.body).backgroundColor; };
+      return [pick(1), pick(innerHeight - 2)]; })()
+    """
+
+    /// "rgb(12, 16, 20)" or "rgba(...)" as a colour; nil for anything else or a transparent one.
+    static func colour(css: String) -> UIColor? {
+        let n = css.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted).compactMap(Double.init)
+        guard css.hasPrefix("rgb"), n.count >= 3, (n.count < 4 || n[3] > 0.5) else { return nil }
+        return UIColor(red: n[0] / 255, green: n[1] / 255, blue: n[2] / 255, alpha: 1)
+    }
+
+    /// Reads Instagram's header and tab bar colours and paints the strips (and the status bar text to match).
+    func matchStrips(_ done: (() -> Void)? = nil) {
+        guard Flavor.isInstagram, let web = webView, web.url != nil else { done?(); return }
+        web.evaluateJavaScript(Self.edgeColours) { [weak self] result, _ in
+            guard let self, let pair = result as? [String], pair.count == 2 else { done?(); return }
+            if let top = Self.colour(css: pair[0]) { self.topStrip.backgroundColor = top; self.setTopDark(Self.isDark(top)) }
+            if let bottom = Self.colour(css: pair[1]) { self.bottomStrip.backgroundColor = bottom; web.underPageBackgroundColor = bottom }
+            done?()
+        }
+    }
+
+    static func isDark(_ c: UIColor) -> Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        c.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return 0.299 * r + 0.587 * g + 0.114 * b < 0.5
+    }
+
+    private func setTopDark(_ dark: Bool) {
+        guard dark != topIsDark else { return }
+        topIsDark = dark
+        setNeedsStatusBarAppearanceUpdate()
+    }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        guard Flavor.isInstagram, previous?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
+        for strip in [topStrip, bottomStrip] { strip.backgroundColor = Self.igDefault(for: traitCollection) }
+        setTopDark(traitCollection.userInterfaceStyle != .light)
+        matchStrips()
     }
 
     // MARK: - The Instagram app's menu and accounts (Flavor.swift, Accounts.swift)
@@ -258,7 +332,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeCard() {
-        card.backgroundColor = Flavor.isInstagram ? .black : Look.bg
+        card.backgroundColor = Flavor.isInstagram ? .clear : Look.bg
         card.layer.cornerRadius = Flavor.isInstagram ? 0 : 18
         card.layer.cornerCurve = .continuous
         card.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
@@ -418,10 +492,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             progress.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
             progress.heightAnchor.constraint(equalToConstant: 2),
 
-            card.topAnchor.constraint(equalTo: Flavor.isInstagram ? view.topAnchor : topBar.bottomAnchor),
+            card.topAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.topAnchor : topBar.bottomAnchor),
             card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            card.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.bottomAnchor : bottomBar.topAnchor),
+            card.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.bottomAnchor : bottomBar.topAnchor),
 
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -648,11 +722,12 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         web.allowsBackForwardNavigationGestures = true
         web.allowsLinkPreview = true
         web.isOpaque = false
-        // The Instagram app: black, as Instagram's dark page is, so the strips by the notch and home indicator match it.
-        let pageColor = Flavor.isInstagram ? UIColor.black : Look.bg
-        web.backgroundColor = pageColor
-        web.underPageBackgroundColor = pageColor
-        web.scrollView.backgroundColor = pageColor
+        // The Instagram app: Instagram's own page colour (WebKit's default), dark or light; the Browser: ours.
+        if !Flavor.isInstagram {
+            web.backgroundColor = Look.bg
+            web.underPageBackgroundColor = Look.bg
+            web.scrollView.backgroundColor = Look.bg
+        }
         web.scrollView.keyboardDismissMode = .interactive
 
         let refresh = UIRefreshControl()
@@ -859,6 +934,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         HistoryRecorder.shared.finished(webView)
         if Flavor.isInstagram {
+            matchStrips()
             let id = Accounts.current.id
             webView.evaluateJavaScript(Accounts.usernameScript) { name, _ in Accounts.learnName(name as? String ?? "", for: id) }
         }

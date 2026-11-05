@@ -86,6 +86,12 @@ jobs:
             -destination "platform=iOS Simulator,id=$DEVICE" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
+      # The Instagram app's frame and links (ios/InstagramTests), on an iPhone 13 Pro if the runner has one.
+      - name: Test the Instagram app on iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for g in json.load(sys.stdin)["devices"].values() for x in g if "iPhone" in x["name"]]; pick=[x for x in d if x["name"]=="iPhone 13 Pro"] or [x for x in d if "Pro" in x["name"] and "Max" not in x["name"]] or d; print(pick[0]["udid"])')
+          xcodebuild test -project ios/Browser.xcodeproj -scheme Instagram -configuration Debug             -destination "platform=iOS Simulator,id=$DEVICE"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
       - name: Import signing certificate and provisioning profile
         if: steps.signing.outputs.signed == 'true'
         env:
