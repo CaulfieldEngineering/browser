@@ -133,11 +133,12 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             guard self.view() != nil else { return done(nil) }
             self.attachToWindow()
             if !self.ready {
-                // Waiting for the model. A classifier that never loads answers "not judged" after 40 s (the picture is
-                // then treated as flagged), so nothing waits for ever.
+                // Waiting for the model (pictures stay held, invisible, meanwhile). Loading takes seconds on a phone
+                // and up to a minute on a CPU-only simulator; a classifier that never loads answers "not judged" after
+                // 120 s (the picture is then treated as flagged), so nothing waits for ever.
                 let ticket = UUID().uuidString
                 self.queued.append((ticket + "|" + dataURL, done))
-                DispatchQueue.main.asyncAfter(deadline: .now() + 40) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 120) {
                     if let i = self.queued.firstIndex(where: { $0.0.hasPrefix(ticket + "|") }) { self.queued.remove(at: i).1(nil) }
                 }
                 return
