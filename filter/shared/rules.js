@@ -17,13 +17,14 @@
 
   // Words and tags that mark a post as suggestive. Whole words, any case; # optional. Kept to the clearly sexual and
   // the "thirst" vocabulary, so fitness, fashion and business posts mostly pass on text and are judged by the image.
+  // Words with an everyday meaning in Joe's own trades (wire strippers, "sheer volume") are left to the image rule.
   const WORDS = [
     'nsfw', 'nude', 'nudes', 'naked', 'topless', 'braless', 'nipple', 'nipples', 'lingerie', 'boudoir', 'thong', 'thongs',
     'bikini', 'bikinis', 'bikinimodel', 'microbikini', 'swimsuitmodel', 'lingeriemodel', 'onlyfans', 'fansly', 'onlyfansgirl',
     'sexy', 'sexygirl', 'sexygirls', 'hotgirl', 'hotgirls', 'thirsttrap', 'thirsttraps', 'booty', 'bootyshake', 'twerk',
     'twerking', 'cleavage', 'curvygirl', 'thicc', 'baddie', 'baddies', 'seductive', 'sensual', 'erotic', 'erotica',
-    'spicycontent', 'spicy18', 'adultcontent', 'xxx', 'porn', 'pornstar', 'camgirl', 'escort', 'stripper', 'feet pics',
-    'feetpics', 'bodysuit', 'catsuit', 'sheer', 'seethrough', 'underboob', 'sideboob', 'upskirt', 'wetshirt', 'pawg',
+    'spicycontent', 'spicy18', 'adultcontent', 'xxx', 'porn', 'pornstar', 'camgirl', 'feet pics',
+    'feetpics', 'bodysuit', 'catsuit', 'seethrough', 'underboob', 'sideboob', 'upskirt', 'wetshirt', 'pawg',
   ];
   const PHRASES = [
     /link in (my )?bio.{0,40}(18\+|🔞|spicy|exclusive|uncensored|private)/i,
