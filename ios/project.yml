@@ -19,6 +19,11 @@ targets:
     platform: iOS
     sources:
       - path: Browser
+      # The Instagram filter's page side and classifier, shared with the laptop extension (filter/shared), as the
+      # folder "shared" in the app (InstagramFilter.swift).
+      - path: ../filter/shared
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.browser
@@ -34,6 +39,38 @@ targets:
           CODE_SIGN_IDENTITY: Apple Distribution
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
           PROVISIONING_PROFILE_SPECIFIER: Browser AdHoc
+  # The Instagram app (Flavor.swift; Joe, 2026-11-05): the Browser's code with INSTAGRAM_APP set, opening instagram.com
+  # only, with its own name, icon, App ID and ad-hoc profile "Instagram AdHoc" (scripts/apple-provision.mjs Instagram).
+  Instagram:
+    type: application
+    platform: iOS
+    sources:
+      - path: Browser
+        excludes:
+          - Info.plist
+          - Assets.xcassets
+      - path: Instagram
+        excludes:
+          - Info.plist
+      - path: ../filter/shared
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.instagram
+        PRODUCT_NAME: Instagram
+        INFOPLIST_FILE: Instagram/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: D56QY8C7WL
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) INSTAGRAM_APP"
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: Instagram AdHoc
   BrowserTests:
     type: bundle.unit-test
     platform: iOS
@@ -57,3 +94,9 @@ schemes:
       config: Debug
       targets:
         - BrowserTests
+  Instagram:
+    build:
+      targets:
+        Instagram: all
+    archive:
+      config: Release

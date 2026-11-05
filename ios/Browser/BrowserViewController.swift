@@ -51,7 +51,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// always let's build in an updater or link into the app"). It asks iOS to install from the install page's manifest.
     private let updateButton = UIButton(type: .system)
     private var newerVersion: String?
-    private static let installPage = "https://caulfieldengineering.github.io/browser-install/"
+    private static let installPage = Flavor.installPage
     /// HQ, Joe's own chat app, in Chrome's place for its assistant. Only this one app.
     private static let askHQURL = URL(string: "hq://chat")!
 
@@ -81,6 +81,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let restored = TabStore.load()
         tabs = restored.tabs
         select(tabs[restored.current])
+        // The Instagram app: one page, always Instagram; the address is not typed (Flavor.swift).
+        if Flavor.isInstagram {
+            field.isEnabled = false
+            if !(current.url.map(Flavor.isInstagramHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
+        }
     }
 
     override func didReceiveMemoryWarning() {
@@ -258,7 +263,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeOverlays() {
-        empty.text = "Search or type an address above.\n\nBrowser \(Self.myVersion)"
+        empty.text = Flavor.isInstagram ? "Instagram \(Self.myVersion)" : "Search or type an address above.\n\nBrowser \(Self.myVersion)"
         empty.textColor = Look.faint
         empty.font = .systemFont(ofSize: 15)
         empty.textAlignment = .center
@@ -313,6 +318,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         // nothing. The App Store and TestFlight build leaves it out (Joe: "should we remove "Ask HQ" before submitting").
         #if APPSTORE
         let tools = UIStackView(arrangedSubviews: [newTabButton, allTabs])
+        #elseif INSTAGRAM_APP
+        // The Instagram app: Instagram's own bar does the work; no toolbar of ours under it.
+        let tools = UIStackView(arrangedSubviews: [])
         #else
         let tools = UIStackView(arrangedSubviews: [askHQ, newTabButton, allTabs])
         #endif
@@ -365,10 +373,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            tools.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 4),
+            tools.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: Flavor.isInstagram ? 0 : 4),
             tools.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
             tools.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            tools.heightAnchor.constraint(equalToConstant: 52),
+            tools.heightAnchor.constraint(equalToConstant: Flavor.isInstagram ? 0 : 52),
             tools.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -412,9 +420,18 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let share = UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in
             self?.sharePage()
         }
-        var about: [UIMenuElement] = [UIAction(title: "Browser \(Self.myVersion)", attributes: .disabled) { _ in }]
+        var about: [UIMenuElement] = [UIAction(title: "\(Flavor.name) \(Self.myVersion)", attributes: .disabled) { _ in }]
         if let newer = newerVersion {
             about.append(UIAction(title: "Update to \(newer)", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.installUpdate() })
+        }
+        // The Instagram app is one page: no tabs in its menu.
+        if Flavor.isInstagram {
+            return [
+                UIMenu(options: .displayInline, children: [forward, reload]),
+                UIMenu(options: .displayInline, children: [history]),
+                UIMenu(options: .displayInline, children: [share]),
+                UIMenu(options: .displayInline, children: about),
+            ]
         }
         return [
             UIMenu(options: .displayInline, children: [forward, reload]),
@@ -583,6 +600,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
         web.scrollView.refreshControl = refresh
         SearchBlock.attach(to: web)
+        InstagramFilter.attach(to: web) // suggestive posts and Reels on instagram.com are removed (Filter/)
         return web
     }
 
@@ -719,9 +737,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         switch Policy.decide(request: navigationAction.request, isMainFrame: isMainFrame) {
         case .allow:
             // A link with no frame of its own that did not get a new tab (below) opens in a new tab here.
+            // In the Instagram app it opens in its one page.
             if navigationAction.targetFrame == nil {
                 decisionHandler(.cancel)
-                newTab()
+                if !Flavor.isInstagram { newTab() }
                 self.webView.load(navigationAction.request)
                 return
             }
@@ -760,6 +779,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     // Links and scripts that open a new window open in a new tab. WebKit loads the request into the web view returned
     // here, through the same delegates, so Policy sees it as it sees every navigation.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // The Instagram app keeps one page: a new window's link loads there, through Policy as always.
+        if Flavor.isInstagram {
+            webView.load(navigationAction.request)
+            return nil
+        }
         let made = makeWebView(configuration)
         newTab(webView: made)
         return made
