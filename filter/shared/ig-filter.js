@@ -10,11 +10,13 @@
 // Surfaces: the feed (<article>), post pages, profile grids (posts, reels, tagged), Explore and search grids, the reel
 // viewer, stories, messages; pictures as <img> or as a CSS background on the tile; avatars and story rings only when
 // they are shown large (120 px or more).
-// What it does: a post or Reel that a rule flags is hidden, with a quiet placeholder that names the account and why
-// ("Hidden: suggestive picture"). There is no reveal, no blur, no setting and no switch; the placeholder cannot be
-// tapped. Pictures from Instagram's CDN are held invisible until judged. One that could not be judged yet (the model
-// still loading, the picture not readable) is hidden as "still checking" and tried again at 5, 20 and 60 seconds: shown
-// once it is judged clean, hidden for good if flagged or if it still cannot be judged. Videos are judged by their
+// What it does: a post or Reel that a rule flags is hidden without a word (Joe, 2026-11-05: "i'd prefer not to label the
+// pictures. Keep it more discrete"): in the feed and the reel viewer it collapses as if it were not there; in a grid the
+// tile stays as a plain blank tile in the page's own colour, so the grid does not reflow. There is no reveal, no blur, no
+// setting and no switch; a blank tile cannot be tapped. Pictures from Instagram's CDN are held invisible until judged.
+// One that could not be judged yet (the model still loading, the picture not readable) is hidden the same way and tried
+// again at 5, 20 and 60 seconds: it fills in quietly once judged clean, and stays hidden if flagged or never judged.
+// The reason is counted on the device (IGFilterBridge.stat), never shown on the page. Videos are judged by their
 // poster, a drawn frame, then every two seconds while they play. Feed, Reels, messages, profiles and posting stay.
 (function () {
   'use strict';
@@ -34,16 +36,13 @@
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
   try { BRIDGE.warm && BRIDGE.warm(); } catch {}
 
-  // ---- styles: held media is invisible; a hidden post shows only its placeholder, and nothing in it answers a tap -----
+  // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
-    '[data-igf-gone]{pointer-events:none !important}',
-    '[data-igf-gone]>:not(.igf-ph){display:none !important}',
-    'img[data-igf-gone],video[data-igf-gone]{display:none !important}',
-    '.igf-ph{display:flex !important;align-items:center;justify-content:center;box-sizing:border-box;min-height:52px;height:100%;',
-    'padding:12px 16px;font:13px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#8e8e8e;text-align:center;',
-    'border-top:1px solid rgba(128,128,128,.18);border-bottom:1px solid rgba(128,128,128,.18);pointer-events:none;user-select:none}',
-    'a[data-igf-gone] .igf-ph{font-size:11px;border:0;background:rgba(128,128,128,.08)}',
+    '[data-igf-gone]:not([data-igf-tile]){display:none !important}',
+    '[data-igf-tile]{pointer-events:none !important}',
+    '[data-igf-tile]>:not(.igf-ph){display:none !important}',
+    '.igf-ph{display:block !important;width:100%;background:transparent;pointer-events:none}',
   ].join('');
   const addStyle = () => {
     const parent = document.head || document.documentElement;
@@ -81,36 +80,18 @@
     return t.slice(0, 6000);
   }
 
-  // The account a post is from: the first profile link in its header (or in the post), as Instagram writes it.
-  function accountOf(unit) {
-    if (!unit.querySelectorAll) return '';
-    for (const a of unit.querySelectorAll('header a[href^="/"], a[href^="/"][role="link"], a[href^="/"]')) {
-      const m = (a.getAttribute('href') || '').match(/^\/([A-Za-z0-9._]{1,30})\/?$/);
-      if (m && !/^(p|reel|reels|explore|direct|stories|accounts|tv)$/.test(m[1])) return m[1];
-    }
-    return '';
-  }
-
   // ---- hiding ---------------------------------------------------------------------------------------------------------
-  const LABEL = {
-    checking: 'Hidden: still checking',
-    unjudged: 'Hidden: could not be checked',
-    image: 'Hidden: suggestive picture',
-    video: 'Hidden: suggestive video',
-    text: 'Hidden: caption',
-  };
-  function placeholder(unit, kind) {
-    const who = accountOf(unit);
-    const text = (who ? who + ' · ' : '') + LABEL[kind];
-    if (unit.tagName === 'IMG' || unit.tagName === 'VIDEO') {
-      let ph = unit.previousElementSibling;
-      if (!ph || !ph.classList || !ph.classList.contains('igf-ph')) { ph = document.createElement('div'); ph.className = 'igf-ph'; unit.before(ph); }
-      ph.textContent = LABEL[kind];
-      return;
-    }
-    let ph = [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
-    if (!ph) { ph = document.createElement('div'); ph.className = 'igf-ph'; unit.prepend(ph); }
-    ph.textContent = text;
+  // A grid tile (a link to a post or reel on a profile, Explore or search) keeps its place as a blank of the same size;
+  // anything else collapses. No text, no icon.
+  const isTile = (unit) => unit.tagName === 'A' && /\/(p|reel|reels|tv)\//.test(unit.getAttribute('href') || '') && !unit.closest('article');
+  function placeholder(unit) {
+    if (!isTile(unit) || [...unit.children].some((c) => c.classList && c.classList.contains('igf-ph'))) return;
+    const r = unit.getBoundingClientRect();
+    unit.setAttribute('data-igf-tile', '');
+    const ph = document.createElement('div');
+    ph.className = 'igf-ph';
+    if (r.height > 0) ph.style.height = Math.round(r.height) + 'px'; else ph.style.aspectRatio = '1';
+    unit.prepend(ph);
   }
   const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
   /** Hides a post. kind: 'text', 'image', 'video' (for good) or 'checking' (to be tried again). */
@@ -122,7 +103,7 @@
     unit.setAttribute('data-igf-gone', kind);
     unit.setAttribute('data-igf-why', why || kind);
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
-    placeholder(unit, kind);
+    placeholder(unit);
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
   }
@@ -131,8 +112,9 @@
     if (kindOf(unit) !== 'checking') return;
     unit.removeAttribute('data-igf-gone');
     unit.removeAttribute('data-igf-why');
-    const ph = unit.tagName === 'IMG' || unit.tagName === 'VIDEO' ? unit.previousElementSibling : [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
-    if (ph && ph.classList && ph.classList.contains('igf-ph')) ph.remove();
+    unit.removeAttribute('data-igf-tile');
+    const ph = [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
+    if (ph) ph.remove();
     stat('restored');
   }
   const gone = (el) => { const u = el.closest && el.closest('[data-igf-gone]'); return !!u && kindOf(u) !== 'checking'; };
@@ -210,7 +192,7 @@
   const retries = new WeakMap();
   function retry(unit) {
     const n = retries.get(unit) || 0;
-    if (n >= RETRY.length) { unit.setAttribute('data-igf-gone', 'unjudged'); placeholder(unit, 'unjudged'); state.removed++; stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
+    if (n >= RETRY.length) { unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
     retries.set(unit, n + 1);
     setTimeout(async () => {
       if (kindOf(unit) !== 'checking') return;

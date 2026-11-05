@@ -62,8 +62,10 @@ final class InstagramFilterTests: XCTestCase {
             if !gone.isEmpty { break }
         }
         XCTAssertEqual(gone, ["hot"])
-        let label = try? await web.evaluateJavaScript("document.querySelector('#hot .igf-ph')?.textContent || ''") as? String
-        XCTAssertEqual(label, "Hidden: caption", "a hidden post shows why, and nothing to reveal it")
+        // Discreet (Joe, 2026-11-05: "i'd prefer not to label the pictures"): the post collapses, with no words on the page.
+        let shown = try? await web.evaluateJavaScript("getComputedStyle(document.getElementById('hot')).display + '|' + document.body.innerText") as? String
+        XCTAssertEqual(shown?.components(separatedBy: "|").first, "none", "a hidden post collapses")
+        XCTAssertFalse(shown?.contains("Hidden") ?? true, "nothing on the page says why")
         let seen = try? await web.evaluateJavaScript("typeof window.IGFilterRules + typeof window.__igFilter") as? String
         XCTAssertEqual(seen, "undefinedundefined", "the page cannot see the filter")
     }

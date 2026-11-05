@@ -77,7 +77,6 @@ try {
   const go = async (p, wait = 900) => { await page.goto('https://www.instagram.com' + p); await page.waitForTimeout(wait); };
   // hidden: the post is marked and shows only its placeholder; shown: not marked and its media visible
   const hiddenAs = (sel) => page.$eval(sel, (e) => { const u = e.closest('[data-igf-gone]') || (e.previousElementSibling && e.previousElementSibling.classList.contains('igf-ph') && e.hasAttribute('data-igf-gone') ? e : null); return u ? u.getAttribute('data-igf-gone') : ''; });
-  const label = (sel) => page.$eval(sel, (e) => { const u = e.closest('[data-igf-gone]'); const ph = u && ([...u.children].find((c) => c.classList.contains('igf-ph')) || (u.previousElementSibling && u.previousElementSibling.classList.contains('igf-ph') ? u.previousElementSibling : null)); return ph ? ph.textContent : ''; });
   const visible = (sel) => page.$eval(sel, (e) => getComputedStyle(e).visibility === 'visible' && getComputedStyle(e).display !== 'none' && !e.closest('[data-igf-gone]'));
 
   // ---- the feed ----
@@ -85,14 +84,14 @@ try {
   check('feed: a plain post stays and its picture shows', await visible('#okimg'));
   check('feed: a small avatar is not held', await visible('#avatar'));
   check('feed: a flagged picture hides its post', (await hiddenAs('#img')) === 'image');
-  check('feed: the placeholder names the account and the reason', (await label('#img')) === 'someone \u00b7 Hidden: suggestive picture', JSON.stringify(await label('#img')));
-  check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && (await label('#txt')).endsWith('Hidden: caption'));
-  check('feed: a picture not judged yet shows "still checking"', (await hiddenAs('#fail')) === 'checking' && (await label('#fail')).endsWith('Hidden: still checking'));
+  check('feed: a hidden post collapses entirely, with no words', await page.$eval('#img', (e) => getComputedStyle(e).display === 'none' && !e.querySelector('.igf-ph')));
+  check('feed: nothing on the page says why (no labels)', !/Hidden|suggestive|caption/i.test(await page.evaluate(() => document.body.innerText)));
+  check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && await page.$eval('#txt', (e) => getComputedStyle(e).display === 'none'));
+  check('feed: a picture not judged yet is hidden while it is checked', (await hiddenAs('#fail')) === 'checking' && await page.$eval('#fail', (e) => getComputedStyle(e).display === 'none'));
   await page.waitForTimeout(1500);
-  check('feed: still not judged after the last try: "could not be checked"', (await hiddenAs('#fail')) === 'unjudged' && (await label('#fail')).endsWith('Hidden: could not be checked'));
+  check('feed: still not judged after the last try: stays hidden', (await hiddenAs('#fail')) === 'unjudged');
   check('feed: judged clean on a later try: shown again', await visible('#late img'));
-  check('feed: the placeholder does not answer taps (no reveal)', await page.$eval('#img', (e) => getComputedStyle(e).pointerEvents === 'none'));
-  check('feed: no reveal control on the page', (await page.$$eval('[data-igf-gone] button, .igf-ph button, .igf-ph a', (l) => l.length)) === 0);
+  check('feed: no reveal control on the page', (await page.$$eval('.igf-ph *', (l) => l.length)) === 0);
   const stats = await page.evaluate(() => globalThis.IGFilterBridge.stats);
   check('feed: counts by reason (on the device)', stats['hidden-sexy'] >= 1 && stats['hidden-text'] >= 1 && stats['hidden-unjudged-unreadable'] >= 1 && stats['restored'] >= 1, JSON.stringify(stats));
   await page.evaluate(() => { const a = document.createElement('article'); a.id = 'late2'; a.innerHTML = `<header><a href="/z/">z</a></header><img src="https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-new.jpg" width="400" height="400"><div>x</div>`; document.querySelector('main').appendChild(a); });
@@ -116,7 +115,9 @@ try {
   await go('/someprofile/reels/');
   check('reels tab: a plain background tile shows', await page.$eval('#r1 [style*="background-image"]', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')));
   check('reels tab: a flagged background tile is hidden', (await hiddenAs('#r2 [style*="background-image"]')) === 'image');
-  check('reels tab: the hidden tile shows "Hidden" and not its view count', await page.$eval('#r2', (e) => getComputedStyle(e.querySelector('.x6s0dn4')).display === 'none' && /Hidden/.test(e.textContent)));
+  check('reels tab: the hidden tile stays a blank of the same size: no picture, no count, no words', await page.$eval('#r2', (e) => { const ph = e.querySelector('.igf-ph'); return !!ph && ph.getBoundingClientRect().height >= 290 && getComputedStyle(e.querySelector('.x6s0dn4')).display === 'none' && e.innerText.trim() === ''; }));
+  check('reels tab: a blank tile does not answer taps (no reveal)', await page.$eval('#r2', (e) => getComputedStyle(e).pointerEvents === 'none'));
+  check('reels tab: the grid does not reflow (the plain tile is still where it was)', await page.$eval('#r1', (e) => e.getBoundingClientRect().height >= 290));
   // A tile whose background is set after it is on the page.
   await page.evaluate(() => { const d = document.querySelector('#r1 [style*="background-image"]'); d.style.backgroundImage = 'url("https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-r1b.jpg")'; });
   await page.waitForTimeout(400);
@@ -128,7 +129,7 @@ try {
   await go('/explore/');
   check('explore: a flagged reel tile (background) is hidden', (await hiddenAs('#e1 [style*="background-image"]')) === 'image');
   check('explore: a plain post tile shows', await visible('#e2 img'));
-  check('explore: a tile not judged is hidden as still checking', ['checking', 'unjudged'].includes(await hiddenAs('#e3 [style*="background-image"]')));
+  check('explore: a tile not judged is a plain blank while it is checked', ['checking', 'unjudged'].includes(await hiddenAs('#e3 [style*="background-image"]')) && await page.$eval('#e3', (e) => !!e.querySelector('.igf-ph') && e.innerText.trim() === ''));
   // ---- the reel viewer ----
   await go('/reels/C9/', 1200);
   check('reel viewer: a reel whose poster is flagged is hidden', (await hiddenAs('#rv')) === 'video' || (await hiddenAs('#rv')) === 'image', await hiddenAs('#rv'));
