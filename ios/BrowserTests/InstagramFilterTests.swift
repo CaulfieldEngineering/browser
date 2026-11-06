@@ -157,6 +157,7 @@ final class InstagramFilterTests: XCTestCase {
         browser.view.addSubview(web)
         defer { web.removeFromSuperview() }
         let html = """
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <main><input id="q" placeholder="Search"><div role="progressbar" id="spin"></div></main>
         <div id="bar" style="position:fixed;bottom:0;left:0;right:0;display:flex">
         <div style="flex:1"><a id="home" href="/?variant=following"><svg width="24" height="24" aria-label="Home"></svg></a></div>
@@ -174,6 +175,55 @@ final class InstagramFilterTests: XCTestCase {
             if state.contains("reels:gone") && state.contains("spin:gone") { break }
         }
         XCTAssertEqual(state, "home:shown search:shown reels:gone msgs:shown me:shown spin:gone")
+    }
+
+    /// Accounts by name: a matching row goes entirely, an ordinary one stays (Joe, 2026-11-05: "In like profile names or bios").
+    func testAccountsByNameInTheApp() async throws {
+        let browser = try browser()
+        let web = browser.makeWebView()
+        web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        browser.view.addSubview(web)
+        defer { web.removeFromSuperview() }
+        let html = """
+        <meta name="viewport" content="width=device-width, initial-scale=1"><meta charset="utf-8">
+        <main><input id="q" value="amy"><div><a id="ok" href="/amy.pedals/"><span>amy.pedals</span><span>Amy | Fuzz boxes</span></a></div>
+        <div><a id="bad" href="/amy_x/"><span>amy_x</span><span>Amy | OnlyFans</span></a></div></main>
+        """
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/search/")!)
+        let js = "['ok','bad'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
+        var state = ""
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+            if state.contains("bad:gone") { break }
+        }
+        XCTAssertEqual(state, "ok:shown bad:gone")
+    }
+
+    /// Hidden by hand: after the menu's circle-slash, a tap hides that post; the record is kept and its id remembered.
+    func testHideAPictureByHandInTheApp() async throws {
+        let browser = try browser()
+        let web = browser.makeWebView()
+        web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        browser.view.addSubview(web)
+        defer { web.removeFromSuperview() }
+        let html = """
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></a><div>pedals</div></article></main>
+        """
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        browser.startHidePick()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        _ = try? await web.evaluateJavaScript("(() => { const r = document.getElementById('pic').getBoundingClientRect(); document.getElementById('pic').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 20 })); return true; })()")
+        var gone = false
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            gone = (try? await web.evaluateJavaScript("getComputedStyle(document.getElementById('post')).display === 'none'") as? Bool) ?? false
+            if gone && HiddenByHand.shared.ids.contains("instagram:BYHAND9") { break }
+        }
+        XCTAssertTrue(gone, "the post is hidden")
+        XCTAssertTrue(HiddenByHand.shared.ids.contains("instagram:BYHAND9"), "its id is remembered on the phone")
     }
 
     /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).

@@ -73,7 +73,7 @@
   const exploreCss = [tile('/p/'), tile('/reel/'), tile('/reels/'), tile('/tv/')].join(',') + '{display:none !important}' +
     // the search page while it waits: no endless spinner under the search box
     'html[data-igt-explore] [role="progressbar"]:not([data-igt-nav] *),html[data-igt-explore] svg[aria-label^="Loading"],html[data-igt-explore] [data-visualcompletion="loading-state"]{display:none !important}' +
-    '@media (min-width: 768px){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
+    '@media (min-width: 768px) and (hover: hover){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
   const markExplore = () => {
     const root = document.documentElement;
     if (!root) return;
