@@ -107,7 +107,11 @@ final class InstagramAppTests: XCTestCase {
         </script>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        // The feed as its own history entry, as on Instagram (WebKit reloads a loadHTMLString page on Back, so the
+        // first entry cannot be the feed); then the settling for that new page passes before Joe "scrolls".
+        _ = try? await web.evaluateJavaScript("history.pushState({}, '', '/'); true")
+        try await Task.sleep(nanoseconds: 2_000_000_000)
         _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
         try await Task.sleep(nanoseconds: 2_000_000_000)
         let y = try await web.evaluateJavaScript("scrollY") as? Double
