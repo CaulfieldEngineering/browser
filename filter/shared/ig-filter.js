@@ -506,9 +506,15 @@
     keep(header);
   }
   if (SITE === 'instagram') {
-    const accounts = () => { try { checkAccountRows(); checkProfile(); } catch {} };
+    let accRuns = 0, accTimer = 0;
+    const accounts = () => {
+      accTimer = 0;
+      try { checkAccountRows(); checkProfile(); accRuns++; } catch (e) { accRuns = -1; }
+      if (document.documentElement) document.documentElement.setAttribute('data-igf-acc', String(accRuns)); // for the tests
+    };
     setInterval(accounts, 700);
     document.addEventListener('DOMContentLoaded', accounts, { once: true });
+    new MutationObserver(() => { if (!accTimer) accTimer = setTimeout(accounts, 150); }).observe(document, { childList: true, subtree: true });
   }
 
   // ---- watching the page --------------------------------------------------------------------------------------------

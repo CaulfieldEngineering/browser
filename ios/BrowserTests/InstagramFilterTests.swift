@@ -197,7 +197,8 @@ final class InstagramFilterTests: XCTestCase {
             state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
             if state.contains("bad:gone") { break }
         }
-        XCTAssertEqual(state, "ok:shown bad:gone")
+        let runs = try? await web.evaluateJavaScript("document.documentElement.getAttribute('data-igf-acc') || 'never ran'") as? String
+        XCTAssertEqual(state, "ok:shown bad:gone", "account checks: \(runs ?? "?")")
     }
 
     /// Hidden by hand: after the menu's circle-slash, a tap hides that post; the record is kept and its id remembered.
@@ -209,7 +210,7 @@ final class InstagramFilterTests: XCTestCase {
         defer { web.removeFromSuperview() }
         let html = """
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></a><div>pedals</div></article></main>
+        <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="></a><div>pedals</div></article></main>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
         try await Task.sleep(nanoseconds: 1_500_000_000)
