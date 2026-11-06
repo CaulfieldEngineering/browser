@@ -215,8 +215,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     /// The next picture or video tapped on the page is hidden and remembered (ig-filter.js, "hidden by hand"). The page
     /// gives no sign beyond a thin outline on the tapped picture for a moment; nothing is said afterwards.
-    func startHidePick() {
-        webView?.evaluateJavaScript("document.dispatchEvent(new CustomEvent('igf-pick')); true", completionHandler: nil)
+    func startHidePick(in web: WKWebView? = nil) {
+        (web ?? webView)?.evaluateJavaScript("document.dispatchEvent(new CustomEvent('igf-pick')); true", completionHandler: nil)
     }
 
     /// The filter's counts for today, as plain lines (FilterStats; on the phone only).

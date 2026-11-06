@@ -213,7 +213,7 @@ final class InstagramFilterTests: XCTestCase {
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
         try await Task.sleep(nanoseconds: 1_500_000_000)
-        browser.startHidePick()
+        browser.startHidePick(in: web) // this test's page (the app's own tab is another web view)
         try await Task.sleep(nanoseconds: 300_000_000)
         _ = try? await web.evaluateJavaScript("(() => { const r = document.getElementById('pic').getBoundingClientRect(); document.getElementById('pic').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 20 })); return true; })()")
         var gone = false
