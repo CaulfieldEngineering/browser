@@ -127,6 +127,19 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(state, "q:shown acct:shown tag:shown accounts:shown top:gone reels:gone sugg:gone v:gone")
     }
 
+    /// Instagram's home feed is the Following feed (Joe, 2026-11-05: "every time I open it I see the same exact post").
+    func testTheHomeFeedIsTheFollowingFeed() {
+        let f = { (s: String) in Flavor.followingFeed(for: URL(string: s)!)?.absoluteString }
+        XCTAssertEqual(f("https://www.instagram.com/"), "https://www.instagram.com/?variant=following")
+        XCTAssertEqual(f("https://www.instagram.com"), "https://www.instagram.com/?variant=following")
+        XCTAssertEqual(f("https://instagram.com/?hl=en"), "https://instagram.com/?hl=en&variant=following")
+        XCTAssertNil(f("https://www.instagram.com/?variant=favorites"), "a variant is left as it is")
+        XCTAssertNil(f("https://www.instagram.com/?variant=following"))
+        XCTAssertNil(f("https://www.instagram.com/p/abc/"), "a post is left as it is")
+        XCTAssertNil(f("https://www.instagram.com/pedalshop/"))
+        XCTAssertNil(f("https://example.com/"), "another site is left as it is")
+    }
+
     /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).
     func testNativeAppLinksAreRecognised() {
         for s in ["instagram://media?id=1", "itms-apps://apps.apple.com/app/id389801252", "https://apps.apple.com/us/app/instagram/id389801252", "https://instagram.app.link/abc", "fb://profile"] {

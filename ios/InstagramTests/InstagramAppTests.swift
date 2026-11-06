@@ -139,9 +139,10 @@ final class InstagramAppTests: XCTestCase {
         XCTAssertNil(BrowserViewController.colour(css: "transparent"))
     }
 
-    /// The Instagram app opens Instagram only and ignores links to the native app.
+    /// The Instagram app opens Instagram only and ignores links to the native app; it starts on the Following feed.
     func testLinksStayOnTheWeb() {
         XCTAssertTrue(Flavor.isInstagram)
+        XCTAssertEqual(Flavor.home.absoluteString, "https://www.instagram.com/?variant=following")
         XCTAssertEqual(Policy.decide(request: URLRequest(url: URL(string: "instagram://media?id=1")!), isMainFrame: true), .ignore)
         XCTAssertEqual(Policy.decide(request: URLRequest(url: URL(string: "https://apps.apple.com/app/id389801252")!), isMainFrame: true), .ignore)
         XCTAssertEqual(Policy.decide(request: URLRequest(url: URL(string: "https://www.instagram.com/p/abc/")!), isMainFrame: true), .allow)

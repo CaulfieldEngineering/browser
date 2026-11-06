@@ -19,8 +19,21 @@ enum Flavor {
     /// Where this app's builds are published (ios-build.yml): the Instagram app in a folder of the same install page.
     static let installPage = isInstagram ? "https://caulfieldengineering.github.io/browser-install/instagram/"
                                          : "https://caulfieldengineering.github.io/browser-install/"
-    /// Where the Instagram app starts, and where a new page goes.
-    static let home = URL(string: "https://www.instagram.com/")!
+    /// Where the Instagram app starts: the Following feed, the accounts Joe follows in time order (Joe, 2026-11-05: "I
+    /// follow like 1000 people but every time I open it I see the same exact post").
+    static let home = URL(string: "https://www.instagram.com/?variant=following")!
+
+    /// Instagram's home feed asked for without a variant ("/"), as the Following feed instead; nil for anything else
+    /// (a post, a profile, "/?variant=favorites", another site). Used for every main-frame load in both apps, so a
+    /// launch, a link from another app and a pull to refresh all land on Following.
+    static func followingFeed(for url: URL) -> URL? {
+        guard isInstagramHost(url), url.path.isEmpty || url.path == "/",
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        if parts.queryItems?.contains(where: { $0.name == "variant" }) == true { return nil }
+        parts.path = "/"
+        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "variant", value: "following")]
+        return parts.url
+    }
 
     static func isInstagramHost(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }

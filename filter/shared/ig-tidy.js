@@ -125,6 +125,29 @@
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
   }, 50);
   new MutationObserver(() => { if (Date.now() < settleUntil) atTop(); }).observe(document, { childList: true, subtree: true });
+  // The home feed is the Following feed: only the accounts Joe follows, newest first (Joe, 2026-11-05: "I follow like
+  // 1000 people but every time I open it I see the same exact post. Even when I refresh. And I feel like I see the same
+  // 10 accounts and its not even people I know"). "/" without a variant goes to "/?variant=following": on arriving,
+  // on a tap of the home tab or the logo, and when Instagram changes the address to "/" itself. An address that already
+  // names a variant (favorites, following) is left as it is, and so is Back. Its posts, and any suggested posts after
+  // them, go through the filter like every other post.
+  const FOLLOWING = '/?variant=following';
+  const wantsFeed = (href) => { try { const u = new URL(href, location.href); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && !u.searchParams.has('variant'); } catch { return false; } };
+  let feedPopAt = 0;
+  addEventListener('popstate', () => { feedPopAt = Date.now(); }, true);
+  if (wantsFeed(location.href)) location.replace(FOLLOWING);
+  document.addEventListener('click', (e) => {
+    const a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    if (wantsFeed(a.getAttribute('href'))) { e.preventDefault(); e.stopImmediatePropagation(); location.assign(FOLLOWING); }
+  }, true);
+  let feedHref = location.href;
+  setInterval(() => {
+    if (location.href === feedHref) return;
+    feedHref = location.href;
+    if (wantsFeed(feedHref) && Date.now() - feedPopAt > 400) location.replace(FOLLOWING);
+  }, 100);
+
   // Links to the app that are clicked anyway go nowhere.
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');

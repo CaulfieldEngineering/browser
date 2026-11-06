@@ -31,7 +31,7 @@ const pages = {
    <div id="tidy"><a id="openapp" href="https://apps.apple.com/app/instagram/id389801252">Open app</a><button id="openig">Open Instagram</button><a id="scheme" href="instagram://media?id=1">View</a>
      <div role="dialog" id="sheet"><span>See this post in the app</span><button id="notnow" onclick="this.closest('[role=dialog]').remove()">Not now</button></div></div>
    </main>`,
-  '/someprofile/': `<main><header><img id="bigavatar" src="${CDN}/flag-avatar.jpg" style="width:150px;height:150px" alt="someprofile's profile picture"></header>
+  '/someprofile/': `<main><nav><a id="home" href="/">Home</a><a id="favs" href="/?variant=favorites">Favorites</a></nav><header><img id="bigavatar" src="${CDN}/flag-avatar.jpg" style="width:150px;height:150px" alt="someprofile's profile picture"></header>
    <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>`,
   '/someprofile/reels/': `<main><div class="x1qjc9v5">${bgTile('r1', '/someprofile/reel/C1/', 'plain-r1.jpg')}${bgTile('r2', '/someprofile/reel/C2/', 'flag-r2.jpg')}</div></main>`,
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
@@ -140,6 +140,20 @@ try {
   check('prompts: an instagram:// link hidden', !(await visible('#scheme')));
   check('prompts: "See this post in the app" answered "Not now"', await page.evaluate(() => !document.getElementById('sheet')));
 
+  // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
+  await go('/', 700);
+  check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());
+  await go('/?variant=favorites', 700);
+  check('following: an address with a variant is left as it is', new URL(page.url()).search === '?variant=favorites', page.url());
+  await go('/someprofile/', 700);
+  check('following: a profile is left as it is', new URL(page.url()).pathname === '/someprofile/', page.url());
+  await page.click('#home');
+  await page.waitForTimeout(700);
+  check('following: the home tab goes to the Following feed', new URL(page.url()).search === '?variant=following', page.url());
+  await go('/someprofile/', 500);
+  await page.evaluate(() => { history.pushState({}, '', '/'); });
+  await page.waitForTimeout(700);
+  check('following: Instagram changing the address to "/" goes to Following', new URL(page.url()).search === '?variant=following', page.url());
   // ---- a profile's posts grid, and its large avatar ----
   await go('/someprofile/');
   check('profile grid: a plain tile shows', await visible('#p1 img'));

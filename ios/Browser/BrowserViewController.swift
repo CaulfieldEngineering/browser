@@ -869,6 +869,14 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        // Instagram's home feed is always the Following feed (Flavor.followingFeed), in both apps; Back and Forward
+        // keep what they had.
+        if isMainFrame, navigationAction.navigationType != .backForward, let url = navigationAction.request.url,
+           let following = Flavor.followingFeed(for: url) {
+            decisionHandler(.cancel)
+            webView.load(URLRequest(url: following))
+            return
+        }
         switch Policy.decide(request: navigationAction.request, isMainFrame: isMainFrame) {
         case .allow:
             // A link with no frame of its own that did not get a new tab (below) opens in a new tab here.
