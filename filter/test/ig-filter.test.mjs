@@ -292,8 +292,10 @@ try {
   check('reels: opened on a hidden reel, the viewer goes on to the next one that is not (two in a row skipped)', (await onScreenSlide()) === 'v4', await onScreenSlide());
   await go('/reels/V2/', 1500);
   check('reels: the last reel hidden, the viewer goes back to the one before', (await onScreenSlide()) === 'w1', await onScreenSlide());
-  await go('/reels/V3/', 200);
-  check('reels: a reel still being checked holds its place (not collapsed, not shown)', await page.evaluate(() => { const x = document.getElementById('x2'); return x.hasAttribute('data-igf-slide-hold') && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility === 'hidden'; }));
+  await go('/reels/V3/', 0);
+  // watched from the first moment: its first answer ("still loading") and the next look can be a few ms apart in WebKit
+  const held = await page.waitForFunction(() => { const x = document.getElementById('x2'); return !!x && x.hasAttribute('data-igf-slide-hold') && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility === 'hidden'; }, null, { timeout: 3000, polling: 10 }).then(() => true, () => false);
+  check('reels: a reel still being checked holds its place (not collapsed, not shown)', held);
   await page.waitForTimeout(900);
   check('reels: once it passes, it is shown where it was', await page.evaluate(() => { const x = document.getElementById('x2'); return !x.hasAttribute('data-igf-gone') && getComputedStyle(x).visibility === 'visible'; }) && (await onScreenSlide()) === 'x2', await onScreenSlide());
   await go('/stories/someone/111/', 900);
@@ -328,6 +330,8 @@ try {
   check('revealing: counted on its own lines', rstats['hidden-revealing'] >= 1 && rstats['hidden-revealing-text'] >= 1, JSON.stringify(rstats));
   check('explore link: hidden on a wide screen (the laptop)', !(await visible('#explorelink')));
   await page.setViewportSize({ width: 390, height: 844 });
+  // WebKit applies the media query a moment after the resize
+  await page.waitForFunction(() => { const e = document.getElementById('explorelink'); return e && getComputedStyle(e).display !== 'none'; }, null, { timeout: 2000 }).catch(() => {});
   check('explore link: kept on a phone, where it is the search tab', await visible('#explorelink'));
   await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the reel viewer ----

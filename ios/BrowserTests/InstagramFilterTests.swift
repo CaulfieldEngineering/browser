@@ -213,9 +213,15 @@ final class InstagramFilterTests: XCTestCase {
         <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="></a><div>pedals</div></article></main>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        browser.startHidePick(in: web) // this test's page (the app's own tab is another web view)
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // Picking starts once the filter on this page is listening (a slow simulator can take longer than a fixed wait).
+        var picking = false
+        for _ in 0..<40 where !picking {
+            try await Task.sleep(nanoseconds: 250_000_000)
+            browser.startHidePick(in: web) // this test's page (the app's own tab is another web view)
+            try await Task.sleep(nanoseconds: 100_000_000)
+            picking = (try? await web.evaluateJavaScript("document.documentElement.hasAttribute('data-igf-picking')") as? Bool) ?? false
+        }
+        XCTAssertTrue(picking, "the circle-slash starts picking")
         _ = try? await web.evaluateJavaScript("(() => { const r = document.getElementById('pic').getBoundingClientRect(); document.getElementById('pic').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 20 })); return true; })()")
         var gone = false
         for _ in 0..<20 {
