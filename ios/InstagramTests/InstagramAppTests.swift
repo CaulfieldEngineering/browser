@@ -101,6 +101,20 @@ final class InstagramAppTests: XCTestCase {
         vc.view.endEditing(true)
     }
 
+    /// Waits until the page says a condition holds (polled every 50 ms), up to a limit; true if it held.
+    private func until(_ web: WKWebView, _ js: String, seconds: Double = 8) async throws -> Bool {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if (try? await web.evaluateJavaScript("!!(\(js))") as? Bool) == true { return true }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
+    }
+    /// The scroll logic's settling for the page now on screen is over (ig-tidy.js data-igt-settle), after its address `path`.
+    private func settled(_ web: WKWebView, path: String) async throws -> Bool {
+        try await until(web, "(document.documentElement.getAttribute('data-igt-nav') || '').startsWith('\(path) ') && Date.now() > Number(document.documentElement.getAttribute('data-igt-settle') || 0) + 100")
+    }
+
     /// A newly opened page starts at the top; Back keeps the place in the feed (Joe, 2026-11-05: "opening certain pages
     /// scrolls way down instead of starting at the top"). Instagram changes pages by pushState, as this fixture does.
     func testANewPageStartsAtTheTopAndBackKeepsThePlace() async throws {
@@ -117,13 +131,16 @@ final class InstagramAppTests: XCTestCase {
         """
         try await idle(web)
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
-        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let loaded = try await until(web, "typeof openComments === 'function' && document.querySelectorAll('#m article').length === 60 && location.search === '?variant=following'")
+        XCTAssertTrue(loaded, "the test's page is on screen (not the app's own launch load)")
         // The feed as its own history entry, as on Instagram (WebKit reloads a loadHTMLString page on Back, so the
         // first entry cannot be the feed); then the settling for that new page passes before Joe "scrolls".
         _ = try? await web.evaluateJavaScript("history.pushState({}, '', '/?variant=following'); true")
-        try await Task.sleep(nanoseconds: 2_000_000_000)
+        let quiet = try await until(web, "Date.now() > Number(document.documentElement.getAttribute('data-igt-settle') || 0) + 100")
+        XCTAssertTrue(quiet, "no settling is under way before the scroll")
         _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
-        try await Task.sleep(nanoseconds: 2_000_000_000)
+        let commentsSettled = try await settled(web, path: "/p/P10/comments/")
+        XCTAssertTrue(commentsSettled, "the filter saw the comments page and finished settling it")
         let y = try await web.evaluateJavaScript("scrollY") as? Double
         let seen = try await web.evaluateJavaScript("[document.documentElement.getAttribute('data-igt-nav'), document.documentElement.getAttribute('data-igt-top'), history.length, location.pathname].join(' | ')") as? String
         XCTAssertEqual(y, 0, "the comments page starts at the top (the filter saw: \(seen ?? "nothing"))")
@@ -135,7 +152,9 @@ final class InstagramAppTests: XCTestCase {
         let blur = try await web.evaluateJavaScript("document.documentElement.getAttribute('data-igt-blur') || 'none'") as? String
         XCTAssertNotEqual(blur, "failed", "the field could be let go")
         _ = try? await web.evaluateJavaScript("history.replaceState({}, '', '/?variant=following'); dispatchEvent(new PopStateEvent('popstate')); true")
-        try await Task.sleep(nanoseconds: 1_500_000_000)
+        // the filter has seen the address go back (its marker names the feed again); then a moment for any putting-back
+        _ = try await until(web, "window.popped === true && (document.documentElement.getAttribute('data-igt-nav') || '').startsWith('/ ')")
+        _ = try await until(web, "false", seconds: 1.6) // longer than a settling window: a wrong put-back to the top would show
         let popped = try await web.evaluateJavaScript("window.popped === true") as? Bool
         XCTAssertEqual(popped, true, "Back was a history step inside the page (not a reload)")
         let back = try await web.evaluateJavaScript("scrollY") as? Double

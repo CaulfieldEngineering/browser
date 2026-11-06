@@ -160,6 +160,7 @@
     if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
     if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
     settleUntil = Date.now() + 1500;
+    if (root) root.setAttribute('data-igt-settle', String(settleUntil)); // when the putting-back ends (the app tests wait on it)
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
   }, 50);
   new MutationObserver(() => { if (Date.now() < settleUntil) atTop(); }).observe(document, { childList: true, subtree: true });
