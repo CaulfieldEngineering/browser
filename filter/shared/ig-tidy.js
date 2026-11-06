@@ -11,7 +11,41 @@
   const SHEET = /(open|see|continue|watch|get).{0,30}\b(in|on) the (instagram )?app|\bopen instagram|\buse the app|\bget the app/i;
   const APPLINK = /^(instagram|itms-apps?|itms-appss?):|apps\.apple\.com|itunes\.apple\.com|\/download\/?($|\?)|app\.link|onelink\.me/i;
 
-  const hide = (el) => { if (!el || el.hasAttribute('data-igt')) return; el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); globalThis.__igTidy.hidden++; };
+  // Instagram's own tab bar (the bottom bar on the phone, the side bar on a wide screen): found by its links (home,
+  // the search tab, messages), marked data-igt-nav, and never touched by anything below, so it is the same on every
+  // page (Joe, 2026-11-05, on the search page's bar losing tabs). The one change to it is deliberate: no Reels tab
+  // (Joe: "Also the reels button can go away"); the other tabs share its room. Reels in the feed, on profiles and in
+  // shared links stay.
+  function markNav() {
+    const msgs = [...document.querySelectorAll('a[href^="/direct"]')];
+    for (const m of msgs) {
+      let bar = m.closest('nav, [role="navigation"]');
+      if (!bar) for (let up = m.parentElement, i = 0; up && up !== document.body && i < 8; up = up.parentElement, i++) {
+        if (up.querySelector('a[href^="/explore"]') && up.querySelector('a[href="/"], a[href^="/?"]')) { bar = up; break; }
+      }
+      if (!bar || bar.hasAttribute('data-igt-nav')) continue;
+      bar.setAttribute('data-igt-nav', '');
+    }
+    for (const bar of document.querySelectorAll('[data-igt-nav]')) {
+      for (const reels of bar.querySelectorAll('a[href="/reels/"], a[href^="/reels/?"]')) {
+        // The tab's own slot: the reels link's ancestor that sits in the same row as the other tabs' slots.
+        let slot = reels;
+        while (slot.parentElement && slot.parentElement !== bar && slot.parentElement.querySelectorAll('a[href]').length <= 1) slot = slot.parentElement;
+        if (!slot.hasAttribute('data-igt-reels')) { slot.setAttribute('data-igt-reels', ''); slot.style.setProperty('display', 'none', 'important'); }
+      }
+    }
+  }
+  const inNav = (el) => !!(el && el.closest && el.closest('[data-igt-nav]')) || !!(el && el.querySelector && el.querySelector('[data-igt-nav]'));
+  // A prompt's own floating banner (a fixed or sticky strip, not the tab bar), so no close button or chevron is left.
+  function bannerOf(el) {
+    for (let up = el.parentElement, i = 0; up && up !== document.body && i < 5; up = up.parentElement, i++) {
+      if (inNav(up)) return el;
+      const cs = getComputedStyle(up);
+      if ((cs.position === 'fixed' || cs.position === 'sticky') && up.getBoundingClientRect().height <= 160) return up;
+    }
+    return el;
+  }
+  const hide = (el) => { if (!el || inNav(el)) return; el = bannerOf(el); if (el.hasAttribute('data-igt') || inNav(el)) return; el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); globalThis.__igTidy.hidden++; };
   function tidy(root) {
     if (!root || !root.querySelectorAll) return;
     for (const a of root.querySelectorAll('a[href]')) if (APPLINK.test(a.getAttribute('href') || '')) hide(a);
@@ -28,14 +62,17 @@
     }
   }
   let t = 0;
-  const run = () => { t = 0; tidy(document.body); };
+  const run = () => { t = 0; markNav(); tidy(document.body); };
   new MutationObserver(() => { if (!t) t = setTimeout(run, 150); }).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', run, { once: true });
   // No Explore (Joe, 2026-11-05: "let's get rid of the explore page"). On /explore and everything under it (the search
   // tab's grid, tag and place grids, search results' recommended posts) every post and reel tile is gone, so only the
   // search box and the accounts it finds are left. On the phone the search tab itself is /explore/, so its link stays;
   // on a wide screen (the laptop), where search has its own panel, the Explore link goes too.
-  const exploreCss = 'html[data-igt-explore] a[href*="/p/"],html[data-igt-explore] a[href*="/reel/"],html[data-igt-explore] a[href*="/reels/"],html[data-igt-explore] a[href*="/tv/"]{display:none !important}' +
+  const tile = (sel) => `html[data-igt-explore] a[href*="${sel}"]:not([data-igt-nav] a)`;
+  const exploreCss = [tile('/p/'), tile('/reel/'), tile('/reels/'), tile('/tv/')].join(',') + '{display:none !important}' +
+    // the search page while it waits: no endless spinner under the search box
+    'html[data-igt-explore] [role="progressbar"]:not([data-igt-nav] *),html[data-igt-explore] svg[aria-label^="Loading"],html[data-igt-explore] [data-visualcompletion="loading-state"]{display:none !important}' +
     '@media (min-width: 768px){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
   const markExplore = () => {
     const root = document.documentElement;
@@ -55,7 +92,7 @@
   const AVATAR = (globalThis.IGFilterConfig && globalThis.IGFilterConfig.searchAvatarPx) || 44;
   const SECTION = /^(suggested( for you)?|suggested accounts|trending|trending now|discover( people)?|explore|recommended( for you)?|popular|see all|more like this)$/i;
   const TABS = /^(top|reels|places|videos|for you)$/i;
-  const gone = (el) => { if (el && !el.hasAttribute('data-igt')) { el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); } };
+  const gone = (el) => { if (el && !inNav(el) && !el.hasAttribute('data-igt')) { el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); } };
   // The box a section heading heads: the smallest one around it that also holds that section's links, and never one
   // with the search field or another section's heading in it (so the real results are never taken with it).
   function sectionOf(head) {
@@ -71,6 +108,7 @@
     return best;
   }
   function plainSearch() {
+    markNav();
     if (!/^\/explore(\/|$)/.test(location.pathname) || !document.body) return;
     for (const v of document.querySelectorAll('video')) gone(v.closest('a') || v);
     for (const img of document.querySelectorAll('img, [style*="background-image"]')) {

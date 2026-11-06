@@ -148,6 +148,34 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertNil(Flavor.rewrite(URL(string: "https://example.com/")!))
     }
 
+    /// The tab bar on the search page keeps its tabs: Home, Search, Messages, Profile, and no Reels tab (Joe,
+    /// 2026-11-05: "Something funny with the bottom bar when I open search", "Also the reels button can go away").
+    func testTheTabBarKeepsItsTabsOnTheSearchPage() async throws {
+        let browser = try browser()
+        let web = browser.makeWebView()
+        web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        browser.view.addSubview(web)
+        defer { web.removeFromSuperview() }
+        let html = """
+        <main><input id="q" placeholder="Search"><div role="progressbar" id="spin"></div></main>
+        <div id="bar" style="position:fixed;bottom:0;left:0;right:0;display:flex">
+        <div style="flex:1"><a id="home" href="/?variant=following"><svg width="24" height="24" aria-label="Home"></svg></a></div>
+        <div style="flex:1"><a id="search" href="/explore/"><svg width="24" height="24" aria-label="Search"></svg><span>Explore</span></a></div>
+        <div style="flex:1"><a id="reels" href="/reels/"><svg width="24" height="24"></svg><span>Reels</span></a></div>
+        <div style="flex:1"><a id="msgs" href="/direct/inbox/"><svg width="24" height="24"></svg></a></div>
+        <div style="flex:1"><a id="me" href="/joe/"><svg width="24" height="24"></svg></a></div></div>
+        """
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/")!)
+        let js = "['home','search','reels','msgs','me','spin'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
+        var state = ""
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+            if state.contains("reels:gone") && state.contains("spin:gone") { break }
+        }
+        XCTAssertEqual(state, "home:shown search:shown reels:gone msgs:shown me:shown spin:gone")
+    }
+
     /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).
     func testNativeAppLinksAreRecognised() {
         for s in ["instagram://media?id=1", "itms-apps://apps.apple.com/app/id389801252", "https://apps.apple.com/us/app/instagram/id389801252", "https://instagram.app.link/abc", "fb://profile"] {

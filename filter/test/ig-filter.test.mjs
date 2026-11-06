@@ -20,6 +20,16 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const CDN = 'https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15';
 const tile = (id, href, file) => `<div class="_aabd"><a id="${id}" href="${href}" role="link"><div class="_aagu"><div class="_aagv"><img src="${CDN}/${file}" class="x5yr21d" style="width:200px;height:200px" alt=""></div></div></a></div>`;
 const bgTile = (id, href, file) => `<div class="x1qjc9v5"><a id="${id}" href="${href}" role="link"><div class="x1lliihq" style="width:200px;height:300px"><div class="x1i10hfl" style="background-image: url(&quot;${CDN}/${file}&quot;); width:200px; height:300px; background-size:cover"></div></div><div class="x6s0dn4">12.3K</div></a></div>`;
+// Instagram's bottom tab bar on the phone: five slots, the search tab labelled "Explore", the profile tab an avatar.
+const NAV = `<div class="x1n2onr6" id="tabbar" style="position:fixed;left:0;right:0;bottom:0;height:50px;display:flex">
+  <div class="slot" style="flex:1"><a id="tHome" href="/?variant=following" role="link"><svg width="24" height="24" aria-label="Home"></svg></a></div>
+  <div class="slot" style="flex:1"><a id="tSearch" href="/explore/" role="link"><svg width="24" height="24" aria-label="Search"></svg><span>Explore</span></a></div>
+  <div class="slot" style="flex:1"><a id="tReels" href="/reels/" role="link"><svg width="24" height="24" aria-label="Reels"></svg><span>Reels</span></a></div>
+  <div class="slot" style="flex:1"><a id="tMsg" href="/direct/inbox/" role="link"><svg width="24" height="24" aria-label="Messages"></svg></a></div>
+  <div class="slot" style="flex:1"><a id="tProfile" href="/joe/" role="link"><img src="${CDN}/plain-me.jpg" style="width:24px;height:24px" alt="joe's profile picture"></a></div>
+</div>`;
+// The "use the app" strip Instagram floats above the bar, with its own close control.
+const BANNER = `<div id="appbanner" style="position:fixed;right:0;bottom:50px;height:36px;display:flex"><a href="https://apps.apple.com/app/instagram/id389801252">Use the app</a><button id="bannerx" aria-label="Close"><svg width="12" height="12" viewBox="0 0 10 10"><path d="M1 1l8 8"/></svg></button></div>`;
 const pages = {
   '/': `<main role="main">
    <article id="ok"><header><a href="/pedalshop/"><img id="avatar" src="${CDN}/avatar.jpg" width="32" height="32" alt="pedalshop's profile picture"></a><a href="/pedalshop/">pedalshop</a></header>
@@ -30,12 +40,12 @@ const pages = {
    <article id="late"><header><a href="/y/">y</a></header><img src="${CDN}/late.jpg" width="400" height="400"><div>Hi</div></article>
    <div id="tidy"><a id="openapp" href="https://apps.apple.com/app/instagram/id389801252">Open app</a><button id="openig">Open Instagram</button><a id="scheme" href="instagram://media?id=1">View</a>
      <div role="dialog" id="sheet"><span>See this post in the app</span><button id="notnow" onclick="this.closest('[role=dialog]').remove()">Not now</button></div></div>
-   </main>`,
+   </main>${NAV}${BANNER}`,
   '/someprofile/': `<main><nav><a id="home" href="/">Home</a><a id="favs" href="/?variant=favorites">Favorites</a></nav><header><img id="bigavatar" src="${CDN}/flag-avatar.jpg" style="width:150px;height:150px" alt="someprofile's profile picture"></header>
-   <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>`,
+   <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>${NAV}${BANNER}`,
   '/someprofile/reels/': `<main><div class="x1qjc9v5">${bgTile('r1', '/someprofile/reel/C1/', 'plain-r1.jpg')}${bgTile('r2', '/someprofile/reel/C2/', 'flag-r2.jpg')}</div></main>`,
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
-  '/explore/': `<main><input id="search" placeholder="Search"><div id="grid">${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</div></main>`,
+  '/explore/': `<main><input id="search" placeholder="Search"><div id="spin" role="progressbar" style="width:32px;height:32px"></div><div id="grid">${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</div></main>${NAV}${BANNER}`,
   '/explore/search/': `<main><input id="search" value="pedal"><a id="acct" href="/pedalshop/">pedalshop</a>${tile('s1', '/p/S1/', 'plain-s1.jpg')}</main>`,
   '/explore/search/keyword/': `<main>
     <div role="search"><input id="q" value="pedal" placeholder="Search"></div>
@@ -51,7 +61,7 @@ const pages = {
     <div id="bigrow"><a href="/pedalshop2/"><img id="bigimg" src="${CDN}/plain-big.jpg" style="width:90px;height:90px">pedalshop2</a></div>
     ${tile('kw1', '/p/KW1/', 'plain-kw1.jpg')}
     <video id="kwv" src="${CDN}/v.mp4" style="width:200px;height:300px"></video>
-  </main>`,
+  </main>${NAV}`,
   '/spa/': `<main id="m"></main><script>
     // Like Instagram: one page, new "pages" by pushState, the old scroll left behind, the comment box focused by the page.
     const feed = () => { m.innerHTML = Array.from({ length: 60 }, (_, i) => '<article style="height:300px">post ' + i + ' <a href="/p/P' + i + '/comments/" class="open">comments</a></article>').join(''); };
@@ -67,7 +77,7 @@ const pages = {
    <article id="rv4"><header><a href="/d/">d</a></header><img src="${CDN}/nsfwonly-rv4.jpg" width="400" height="400"><div>x</div></article>
    <nav><a id="explorelink" href="/explore/">Explore</a></nav></main>`,
   '/reels/C9/': `<main><div class="x78zum5"><div class="xh8yej3" id="viewer"><div><video id="rv" poster="${CDN}/flag-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator/">creator</a> caption</div></div>
-   <div class="xh8yej3" id="viewer2"><div><video id="rv2" poster="${CDN}/plain-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator2/">creator2</a> fine</div></div></div></main>`,
+   <div class="xh8yej3" id="viewer2"><div><video id="rv2" poster="${CDN}/plain-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator2/">creator2</a> fine</div></div></div></main>${NAV}`,
   '/stories/someone/': `<main><div id="ring"><img id="ringimg" src="${CDN}/flag-ring.jpg" style="width:56px;height:56px"></div><section id="story"><img id="storyimg" src="${CDN}/flag-story.jpg" style="width:360px;height:640px"></section></main>`,
 };
 
@@ -179,6 +189,25 @@ try {
   check('explore: the search box stays', await visible('#search'));
   await go('/explore/search/');
   check('search results: accounts listed, no recommended posts', (await visible('#acct')) && await page.$eval('#s1', (e) => getComputedStyle(e).display === 'none'));
+  // ---- the tab bar: the same four tabs on every page (Home, Search, Messages, Profile; no Reels tab) ----
+  const tabsOn = async (p) => {
+    await go(p, 1200);
+    return page.evaluate(() => ['tHome', 'tSearch', 'tReels', 'tMsg', 'tProfile'].filter((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).join(','));
+  };
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const p of ['/', '/someprofile/', '/explore/', '/explore/search/keyword/', '/reels/C9/']) {
+    const t = await tabsOn(p);
+    check(`tab bar on ${p}: Home, Search, Messages, Profile`, t === 'tHome,tSearch,tMsg,tProfile', t);
+  }
+  await go('/someprofile/', 1200);
+  const widths = await page.evaluate(() => [...document.querySelectorAll('#tabbar .slot')].filter((x) => getComputedStyle(x).display !== 'none').map((x) => Math.round(x.getBoundingClientRect().width)));
+  check('tab bar: the four tabs share the row equally (the Reels slot is gone, not left blank)', widths.length === 4 && Math.max(...widths) - Math.min(...widths) <= 1 && widths.reduce((x, y) => x + y, 0) >= 385, JSON.stringify(widths));
+  check('tab bar: the profile avatar in it is still there', await page.evaluate(() => getComputedStyle(document.querySelector('#tProfile img')).display !== 'none'));
+  await go('/explore/', 1200);
+  check('search, empty: no spinner left under the search box', await page.evaluate(() => getComputedStyle(document.getElementById('spin')).display === 'none'));
+  check('search, empty: the search box stays', await page.evaluate(() => getComputedStyle(document.getElementById('search')).display !== 'none'));
+  check('the "use the app" strip is gone with its close control, nothing left above the bar', await page.evaluate(() => getComputedStyle(document.getElementById('appbanner')).display === 'none'));
+  await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the search page, plain ("get rid of all of the junk and images that come along with the Instagram search page") ----
   await go('/explore/search/keyword/', 1200);
   const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return true; }, id);
