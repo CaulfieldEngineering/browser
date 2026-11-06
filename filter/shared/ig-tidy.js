@@ -53,8 +53,8 @@
   // the page can leave a new page part way down. For 1.5 s after a new address (not Back or Forward, which keep
   // Instagram's own restored position), the page is put back at the top as it builds, until Joe touches or scrolls it
   // himself; a text box the page focused without his tap is let go so the keyboard does not pull the page down.
-  // Back or Forward is told apart two ways: the popstate event, and history's length (a new page by pushState adds an
-  // entry; Back and Forward do not), so a missed event cannot send Joe to the top of the feed.
+  // Back or Forward is told apart by the popstate event, which every Back and Forward fires. (Not by history's length:
+  // WebKit does not grow it for an entry pushed without a fresh tap, so a new page can look like Back by that measure.)
   let lastHref = location.href, lastLen = history.length, popAt = 0, userAt = 0, settleUntil = 0;
   addEventListener('popstate', () => { popAt = Date.now(); }, true);
   for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
@@ -76,7 +76,7 @@
     const samePage = was.split('#')[0] === location.href.split('#')[0];
     const root = document.documentElement;
     if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
-    if (samePage || !grew || Date.now() - popAt < 400) return; // a hash change, Back / Forward, or a replaced address
+    if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
     settleUntil = Date.now() + 1500;
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
   }, 50);
