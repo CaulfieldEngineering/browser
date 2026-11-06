@@ -10,6 +10,17 @@ final class InstagramFilterTests: XCTestCase {
             .flatMap { $0.windows }.compactMap { $0.rootViewController as? BrowserViewController }.first)
     }
 
+    /// Waits until the page says a condition holds (polled every 50 ms), up to a limit; true if it held. A cold
+    /// simulator (the first test of a run, the classifier warming its model) can take many seconds to show a page.
+    private func until(_ web: WKWebView, _ js: String, seconds: Double = 30) async throws -> Bool {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if (try? await web.evaluateJavaScript("!!(\(js))") as? Bool) == true { return true }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
+    }
+
     func testTheFilterFilesAreInTheApp() {
         for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy", "classifier", "clip"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
@@ -56,6 +67,8 @@ final class InstagramFilterTests: XCTestCase {
         </main></body></html>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
+        let pageShown = try await until(web, "document.readyState !== 'loading' && location.href === 'https://www.instagram.com/?variant=following'")
+        XCTAssertTrue(pageShown, "the test's page is on screen")
         var gone: [String] = []
         for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -79,6 +92,8 @@ final class InstagramFilterTests: XCTestCase {
         browser.view.addSubview(web)
         defer { web.removeFromSuperview() }
         web.loadHTMLString("<article id='a'>#lingerie</article>", baseURL: URL(string: "https://example.com/")!)
+        let pageShown = try await until(web, "document.readyState !== 'loading' && location.href === 'https://example.com/'")
+        XCTAssertTrue(pageShown, "the test's page is on screen")
         try await Task.sleep(nanoseconds: 2_000_000_000)
         let n = try? await web.evaluateJavaScript("document.querySelectorAll('[data-igf-gone]').length") as? Int
         XCTAssertEqual(n, 0)
@@ -92,6 +107,8 @@ final class InstagramFilterTests: XCTestCase {
         browser.view.addSubview(web)
         defer { web.removeFromSuperview() }
         web.loadHTMLString("<main><a id='a' href='https://apps.apple.com/app/instagram/id389801252'>Open app</a><button id='b'>Open Instagram</button><article id='c'>pedals</article></main>", baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
+        let pageShown = try await until(web, "document.readyState !== 'loading' && location.href === 'https://www.instagram.com/?variant=following'")
+        XCTAssertTrue(pageShown, "the test's page is on screen")
         var hidden: [String] = []
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -117,6 +134,8 @@ final class InstagramFilterTests: XCTestCase {
         <video id="v" style="width:200px;height:300px"></video></main>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/search/keyword/")!)
+        let pageShown = try await until(web, "document.readyState !== 'loading' && location.href === 'https://www.instagram.com/explore/search/keyword/'")
+        XCTAssertTrue(pageShown, "the test's page is on screen")
         let js = "['q','acct','tag','accounts','top','reels','sugg','v'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
         var state = ""
         for _ in 0..<30 {
@@ -167,6 +186,8 @@ final class InstagramFilterTests: XCTestCase {
         <div style="flex:1"><a id="me" href="/joe/"><svg width="24" height="24"></svg></a></div></div>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/")!)
+        let pageShown = try await until(web, "document.readyState !== 'loading' && location.href === 'https://www.instagram.com/explore/'")
+        XCTAssertTrue(pageShown, "the test's page is on screen")
         let js = "['home','search','reels','msgs','me','spin'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
         var state = ""
         for _ in 0..<30 {
@@ -190,13 +211,13 @@ final class InstagramFilterTests: XCTestCase {
         <div><a id="bad" href="/amy_x/"><span>amy_x</span><span>Amy | OnlyFans</span></a></div></main>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/search/")!)
+        let loaded = try await until(web, "document.getElementById('ok') && document.getElementById('bad') && location.pathname === '/explore/search/'")
+        XCTAssertTrue(loaded, "the test's page is on screen")
+        let ran = try await until(web, "Number(document.documentElement.getAttribute('data-igf-acc') || 0) >= 1")
+        XCTAssertTrue(ran, "the filter's account checks ran on it")
         let js = "['ok','bad'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
-        var state = ""
-        for _ in 0..<30 {
-            try await Task.sleep(nanoseconds: 300_000_000)
-            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
-            if state.contains("bad:gone") { break }
-        }
+        _ = try await until(web, js.replacingOccurrences(of: ".join(' ')", with: ".join(' ') === 'ok:shown bad:gone'"), seconds: 10)
+        let state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
         let runs = try? await web.evaluateJavaScript("document.documentElement.getAttribute('data-igf-acc') || 'never ran'") as? String
         XCTAssertEqual(state, "ok:shown bad:gone", "account checks: \(runs ?? "?")")
     }
@@ -213,6 +234,8 @@ final class InstagramFilterTests: XCTestCase {
         <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="></a><div>pedals</div></article></main>
         """
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
+        let loaded = try await until(web, "document.getElementById('pic') && document.getElementById('pic').complete")
+        XCTAssertTrue(loaded, "the test's page is on screen")
         // Picking starts once the filter on this page is listening (a slow simulator can take longer than a fixed wait).
         var picking = false
         for _ in 0..<40 where !picking {
