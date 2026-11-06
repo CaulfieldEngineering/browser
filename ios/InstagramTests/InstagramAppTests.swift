@@ -115,7 +115,8 @@ final class InstagramAppTests: XCTestCase {
         _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
         try await Task.sleep(nanoseconds: 2_000_000_000)
         let y = try await web.evaluateJavaScript("scrollY") as? Double
-        XCTAssertEqual(y, 0, "the comments page starts at the top")
+        let seen = try await web.evaluateJavaScript("[document.documentElement.getAttribute('data-igt-nav'), document.documentElement.getAttribute('data-igt-top'), history.length, location.pathname].join(' | ')") as? String
+        XCTAssertEqual(y, 0, "the comments page starts at the top (the filter saw: \(seen ?? "nothing"))")
         let focused = try await web.evaluateJavaScript("document.activeElement && document.activeElement.id") as? String
         XCTAssertNotEqual(focused, "add", "the comment box the page focused is let go")
         // Back, as Instagram's own page sees it: the address goes back without a new entry and popstate fires. (WebKit

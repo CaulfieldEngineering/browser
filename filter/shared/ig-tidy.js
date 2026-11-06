@@ -74,6 +74,8 @@
     const was = lastHref, grew = history.length > lastLen;
     lastHref = location.href; lastLen = history.length;
     const samePage = was.split('#')[0] === location.href.split('#')[0];
+    const root = document.documentElement;
+    if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
     if (samePage || !grew || Date.now() - popAt < 400) return; // a hash change, Back / Forward, or a replaced address
     settleUntil = Date.now() + 1500;
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
