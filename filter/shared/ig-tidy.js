@@ -137,11 +137,14 @@
   // himself; a text box the page focused without his tap is let go so the keyboard does not pull the page down.
   // Back or Forward is told apart by the popstate event, which every Back and Forward fires. (Not by history's length:
   // WebKit does not grow it for an entry pushed without a fresh tap, so a new page can look like Back by that measure.)
+  // How long a new page is kept at the top unless Joe touches it: 4 s (run 67: on a slow device WebKit scrolled a
+  // focused box into view after a 1.5 s window had closed).
+  const SETTLE_MS = 4000;
   let lastHref = location.href, lastLen = history.length, popAt = 0, userAt = 0, settleUntil = 0;
-  addEventListener('popstate', () => { popAt = Date.now(); }, true);
+  addEventListener('popstate', () => { popAt = Date.now(); settleUntil = 0; }, true); // Back ends any settling at once
   for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
   const atTop = () => {
-    if (Date.now() > settleUntil || userAt > settleUntil - 1500) return;
+    if (Date.now() > settleUntil || userAt > settleUntil - SETTLE_MS) return;
     const root = document.documentElement;
     if (scrollY > 0) { scrollTo(0, 0); root && root.setAttribute('data-igt-top', String(Date.now())); }
     const a = document.activeElement;
@@ -159,11 +162,13 @@
     const root = document.documentElement;
     if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
     if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
-    settleUntil = Date.now() + 1500;
+    settleUntil = Date.now() + SETTLE_MS;
     if (root) root.setAttribute('data-igt-settle', String(settleUntil)); // when the putting-back ends (the app tests wait on it)
-    for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
+    for (const ms of [0, 60, 200, 450, 800, 1200, 1500, 2500, SETTLE_MS]) setTimeout(atTop, ms);
   }, 50);
   new MutationObserver(() => { if (Date.now() < settleUntil) atTop(); }).observe(document, { childList: true, subtree: true });
+  // and a scroll he did not make (no touch, wheel or key since the page opened) while it settles
+  addEventListener('scroll', () => { if (Date.now() < settleUntil) atTop(); }, { capture: true, passive: true });
   // The home feed is the Following feed: only the accounts Joe follows, newest first (Joe, 2026-11-05: "I follow like
   // 1000 people but every time I open it I see the same exact post. Even when I refresh. And I feel like I see the same
   // 10 accounts and its not even people I know"). "/" without a variant goes to "/?variant=following": on arriving,

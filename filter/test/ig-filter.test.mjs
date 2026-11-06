@@ -350,6 +350,9 @@ try {
   await page.waitForTimeout(1800);
   check('a new page (comments) starts at the top, its caption in view', await page.evaluate(() => scrollY === 0 && document.getElementById('caption').getBoundingClientRect().top >= 0), String(await page.evaluate(() => scrollY)));
   check('the comment box the page focused is let go (no keyboard pulling the page down)', await page.evaluate(() => document.activeElement !== document.getElementById('add')));
+  await page.evaluate(() => scrollTo(0, 2000)); // a late scroll the page (or WebKit) makes by itself, about 2 s in
+  await page.waitForTimeout(300);
+  check('a late scroll Joe did not make is put back to the top too', await page.evaluate(() => scrollY) === 0, String(await page.evaluate(() => scrollY)));
   await page.evaluate(() => history.back());
   await page.waitForTimeout(1200);
   check('Back returns to the same place in the feed', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
