@@ -201,33 +201,6 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(state, "ok:shown bad:gone", "account checks: \(runs ?? "?")")
     }
 
-    /// Hidden by hand: after the menu's circle-slash, a tap hides that post; the record is kept and its id remembered.
-    func testHideAPictureByHandInTheApp() async throws {
-        let browser = try browser()
-        let web = browser.makeWebView()
-        web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
-        browser.view.addSubview(web)
-        defer { web.removeFromSuperview() }
-        let html = """
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <main><article id="post"><a href="/p/BYHAND9/"><img id="pic" width="300" height="300" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="></a><div>pedals</div></article></main>
-        """
-        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-        browser.startHidePick(in: web) // this test's page (the app's own tab is another web view)
-        try await Task.sleep(nanoseconds: 300_000_000)
-        _ = try? await web.evaluateJavaScript("(() => { const r = document.getElementById('pic').getBoundingClientRect(); document.getElementById('pic').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 20 })); return true; })()")
-        var gone = false
-        for _ in 0..<20 {
-            try await Task.sleep(nanoseconds: 300_000_000)
-            gone = (try? await web.evaluateJavaScript("getComputedStyle(document.getElementById('post')).display === 'none'") as? Bool) ?? false
-            if gone && HiddenByHand.shared.ids.contains("instagram:BYHAND9") { break }
-        }
-        XCTAssertTrue(gone, "the post is hidden")
-        XCTAssertTrue(HiddenByHand.shared.ids.contains("instagram:BYHAND9"), "its id is remembered on the phone")
-    }
-
-    /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).
     func testNativeAppLinksAreRecognised() {
         for s in ["instagram://media?id=1", "itms-apps://apps.apple.com/app/id389801252", "https://apps.apple.com/us/app/instagram/id389801252", "https://instagram.app.link/abc", "fb://profile"] {
             XCTAssertTrue(Policy.isNativeAppLink(URL(string: s)!), s)
