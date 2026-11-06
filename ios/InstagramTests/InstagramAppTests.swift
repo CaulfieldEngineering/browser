@@ -7,6 +7,13 @@ import WebKit
 /// colours of Instagram's header and tab bar, dark and light. Screenshots are attached to the test results.
 @MainActor
 final class InstagramAppTests: XCTestCase {
+
+    /// The app's own first load (instagram.com or facebook.com at launch) can land after a test's page and replace it
+    /// (main run 64: the first test saw "/" and no fixture). Stop it and wait until the web view is idle.
+    private func idle(_ web: WKWebView) async throws {
+        web.stopLoading()
+        for _ in 0..<50 where web.isLoading { try await Task.sleep(nanoseconds: 100_000_000); web.stopLoading() }
+    }
     private func app() throws -> (BrowserViewController, UIWindow) {
         let window = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.rootViewController is BrowserViewController })
         return (window.rootViewController as! BrowserViewController, window)
@@ -32,6 +39,7 @@ final class InstagramAppTests: XCTestCase {
     """
 
     private func load(_ web: WKWebView) async throws {
+        try await idle(web)
         web.loadHTMLString(fixture, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         for _ in 0..<30 { try await Task.sleep(nanoseconds: 200_000_000); if !web.isLoading { break } }
         try await Task.sleep(nanoseconds: 500_000_000)
@@ -82,6 +90,7 @@ final class InstagramAppTests: XCTestCase {
     func testTheFrameDoesNotJumpWithTheKeyboard() async throws {
         let (vc, _) = try app()
         let web = try page(in: vc)
+        try await idle(web)
         web.loadHTMLString("<input id='q' autofocus style='margin-top:600px'>", baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         try await Task.sleep(nanoseconds: 1_000_000_000)
         let before = web.convert(web.bounds, to: vc.view)
@@ -106,6 +115,7 @@ final class InstagramAppTests: XCTestCase {
         addEventListener('popstate', () => { window.popped = true; feed(); scrollTo(0, 1200); });
         </script>
         """
+        try await idle(web)
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         try await Task.sleep(nanoseconds: 1_000_000_000)
         // The feed as its own history entry, as on Instagram (WebKit reloads a loadHTMLString page on Back, so the

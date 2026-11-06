@@ -7,6 +7,13 @@ import WebKit
 /// These fixture pages are shaped like Facebook's; they prove the app's rules, not that Facebook's live site matches.
 @MainActor
 final class FacebookAppTests: XCTestCase {
+
+    /// The app's own first load (instagram.com or facebook.com at launch) can land after a test's page and replace it
+    /// (main run 64: the first test saw "/" and no fixture). Stop it and wait until the web view is idle.
+    private func idle(_ web: WKWebView) async throws {
+        web.stopLoading()
+        for _ in 0..<50 where web.isLoading { try await Task.sleep(nanoseconds: 100_000_000); web.stopLoading() }
+    }
     private func app() throws -> BrowserViewController {
         try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
             .compactMap { $0.rootViewController as? BrowserViewController }.first)
@@ -56,6 +63,7 @@ final class FacebookAppTests: XCTestCase {
           <div role="article" id="sugg"><span>Suggested for you</span><span>Follow</span></div>
         </div></div>
         """
+        try await idle(web)
         web.loadHTMLString(html, baseURL: URL(string: "https://m.facebook.com/groups/pedals/")!)
         let js = "['friend','ad','sugg'].map(i => i + ':' + (getComputedStyle(document.getElementById(i)).display === 'none' ? 'gone' : 'shown')).join(' ') + '|' + /Hidden/.test(document.body.innerText)"
         var state = ""
