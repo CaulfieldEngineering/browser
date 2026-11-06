@@ -1,6 +1,6 @@
 // The Instagram filter's settings, in one place. Read by rules.js and ig-filter.js on every device (the iPhone Browser,
 // the Instagram app, the laptop extension) and by the Devices dashboard on the mini PC (read-only), so what the
-// dashboard shows is what runs. JSON between the first { and the last }. Raising a line or removing anything is
+// dashboard shows is what runs. The object after "= " is JSON. Raising a line or removing anything is
 // loosening (locked memory entry 21); the dashboard cannot change it.
 globalThis.IGFilterConfig = {
   "version": 2,
