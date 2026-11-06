@@ -55,7 +55,7 @@ final class InstagramFilterTests: XCTestCase {
         <article id="hot"><div>new set #lingerie</div></article>
         </main></body></html>
         """
-        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         var gone: [String] = []
         for _ in 0..<50 {
             try await Task.sleep(nanoseconds: 300_000_000)
@@ -91,7 +91,7 @@ final class InstagramFilterTests: XCTestCase {
         web.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
         browser.view.addSubview(web)
         defer { web.removeFromSuperview() }
-        web.loadHTMLString("<main><a id='a' href='https://apps.apple.com/app/instagram/id389801252'>Open app</a><button id='b'>Open Instagram</button><article id='c'>pedals</article></main>", baseURL: URL(string: "https://www.instagram.com/")!)
+        web.loadHTMLString("<main><a id='a' href='https://apps.apple.com/app/instagram/id389801252'>Open app</a><button id='b'>Open Instagram</button><article id='c'>pedals</article></main>", baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         var hidden: [String] = []
         for _ in 0..<30 {
             try await Task.sleep(nanoseconds: 300_000_000)

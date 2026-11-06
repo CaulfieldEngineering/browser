@@ -32,7 +32,7 @@ final class InstagramAppTests: XCTestCase {
     """
 
     private func load(_ web: WKWebView) async throws {
-        web.loadHTMLString(fixture, baseURL: URL(string: "https://www.instagram.com/")!)
+        web.loadHTMLString(fixture, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         for _ in 0..<30 { try await Task.sleep(nanoseconds: 200_000_000); if !web.isLoading { break } }
         try await Task.sleep(nanoseconds: 500_000_000)
     }
@@ -82,7 +82,7 @@ final class InstagramAppTests: XCTestCase {
     func testTheFrameDoesNotJumpWithTheKeyboard() async throws {
         let (vc, _) = try app()
         let web = try page(in: vc)
-        web.loadHTMLString("<input id='q' autofocus style='margin-top:600px'>", baseURL: URL(string: "https://www.instagram.com/")!)
+        web.loadHTMLString("<input id='q' autofocus style='margin-top:600px'>", baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         try await Task.sleep(nanoseconds: 1_000_000_000)
         let before = web.convert(web.bounds, to: vc.view)
         _ = try? await web.evaluateJavaScript("document.getElementById('q').focus()")
@@ -106,11 +106,11 @@ final class InstagramAppTests: XCTestCase {
         addEventListener('popstate', () => { window.popped = true; feed(); scrollTo(0, 1200); });
         </script>
         """
-        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/")!)
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
         try await Task.sleep(nanoseconds: 1_000_000_000)
         // The feed as its own history entry, as on Instagram (WebKit reloads a loadHTMLString page on Back, so the
         // first entry cannot be the feed); then the settling for that new page passes before Joe "scrolls".
-        _ = try? await web.evaluateJavaScript("history.pushState({}, '', '/'); true")
+        _ = try? await web.evaluateJavaScript("history.pushState({}, '', '/?variant=following'); true")
         try await Task.sleep(nanoseconds: 2_000_000_000)
         _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
         try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -124,7 +124,7 @@ final class InstagramAppTests: XCTestCase {
         // reach them; on Instagram every new page follows Joe's tap.)
         let blur = try await web.evaluateJavaScript("document.documentElement.getAttribute('data-igt-blur') || 'none'") as? String
         XCTAssertNotEqual(blur, "failed", "the field could be let go")
-        _ = try? await web.evaluateJavaScript("history.replaceState({}, '', '/'); dispatchEvent(new PopStateEvent('popstate')); true")
+        _ = try? await web.evaluateJavaScript("history.replaceState({}, '', '/?variant=following'); dispatchEvent(new PopStateEvent('popstate')); true")
         try await Task.sleep(nanoseconds: 1_500_000_000)
         let popped = try await web.evaluateJavaScript("window.popped === true") as? Bool
         XCTAssertEqual(popped, true, "Back was a history step inside the page (not a reload)")
