@@ -91,6 +91,40 @@
   new MutationObserver(() => { if (!ps) ps = setTimeout(() => { ps = 0; plainSearch(); }, 60); }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style'] });
   setInterval(plainSearch, 500);
 
+  // A newly opened page starts at the top, as in the native app (Joe, 2026-11-05: "opening certain pages scrolls way
+  // down instead of starting at the top"; a post's comments opened at the last comments). Instagram changes pages without
+  // loading (pushState), so the old scroll position, the filter's collapsing of hidden posts, or a comment box focused by
+  // the page can leave a new page part way down. For 1.5 s after a new address (not Back or Forward, which keep
+  // Instagram's own restored position), the page is put back at the top as it builds, until Joe touches or scrolls it
+  // himself; a text box the page focused without his tap is let go so the keyboard does not pull the page down.
+  // Back or Forward is told apart by the popstate event, which every Back and Forward fires. (Not by history's length:
+  // WebKit does not grow it for an entry pushed without a fresh tap, so a new page can look like Back by that measure.)
+  let lastHref = location.href, lastLen = history.length, popAt = 0, userAt = 0, settleUntil = 0;
+  addEventListener('popstate', () => { popAt = Date.now(); }, true);
+  for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
+  const atTop = () => {
+    if (Date.now() > settleUntil || userAt > settleUntil - 1500) return;
+    const root = document.documentElement;
+    if (scrollY > 0) { scrollTo(0, 0); root && root.setAttribute('data-igt-top', String(Date.now())); }
+    const a = document.activeElement;
+    if (a && (/^(INPUT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) {
+      try { a.blur(); } catch {}
+      if (document.activeElement === a) { try { a.setAttribute('readonly', ''); a.blur(); a.removeAttribute('readonly'); } catch {} }
+      root && root.setAttribute('data-igt-blur', document.activeElement === a ? 'failed' : 'done');
+    }
+  };
+  setInterval(() => {
+    if (location.href === lastHref) return;
+    const was = lastHref, grew = history.length > lastLen;
+    lastHref = location.href; lastLen = history.length;
+    const samePage = was.split('#')[0] === location.href.split('#')[0];
+    const root = document.documentElement;
+    if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
+    if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
+    settleUntil = Date.now() + 1500;
+    for (const ms of [0, 60, 200, 450, 800, 1200, 1500]) setTimeout(atTop, ms);
+  }, 50);
+  new MutationObserver(() => { if (Date.now() < settleUntil) atTop(); }).observe(document, { childList: true, subtree: true });
   // Links to the app that are clicked anyway go nowhere.
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
