@@ -45,10 +45,17 @@
   // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
-    '[data-igf-gone]:not([data-igf-tile]){display:none !important}',
+    '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]){display:none !important}',
+    // A reel or story still being checked holds its place in the viewer (its picture held invisible), not collapsed.
+    '[data-igf-slide-hold]{visibility:hidden !important}',
     '[data-igf-tile]{pointer-events:none !important}',
     '[data-igf-tile]>:not(.igf-ph){display:none !important}',
     '.igf-ph{display:block !important;width:100%;background:transparent;pointer-events:none}',
+    // An avatar judged suggestive: a plain circle the same size, the picture moved out of sight (no icon, no word).
+    'img[data-igf-avatar]{object-position:-99999px -99999px !important;background:rgba(128,128,128,.28) !important;border-radius:50% !important;visibility:visible !important}',
+    // A profile flagged by its name or bio: no posts, reels or tagged grids.
+    'html[data-igf-account] main a[href*="/p/"],html[data-igf-account] main a[href*="/reel/"],html[data-igf-account] main a[href*="/tv/"]{display:none !important}',
+    '[data-igf-bio]{display:none !important}',
   ].join('');
   const addStyle = () => {
     const parent = document.head || document.documentElement;
@@ -77,6 +84,8 @@
       const listing = el.closest(FB_TILE);
       if (listing) return listing;
     } else {
+      // A profile's header is not a post: a picture there (the avatar) stands alone; the bio rule handles the header.
+      if (el.closest('main header')) return el;
       const a = el.closest('article');
       if (a) return a;
       const tile = el.closest('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]');
@@ -111,17 +120,56 @@
     unit.prepend(ph);
   }
   const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
+  // ---- the reel and story viewers: a hidden slide is skipped (Joe, 2026-11-05: "when a reel is blocked it needs to
+  // skip right over it, cause now it just hangs up since the timer doesn't run so I manually have to swipe") ----------
+  const inViewer = () => /^\/(reels?|stories)\//.test(location.pathname) || /\/reel\//.test(location.pathname);
+  const onScreen = (el) => { const r = el.getBoundingClientRect(); const y = innerHeight / 2; return r.height > 0 && r.top <= y && r.bottom >= y; };
+  const shownSlide = (el) => el && getComputedStyle(el).display !== 'none' && !el.hasAttribute('data-igf-gone');
+  function scrollerOf(el) {
+    for (let x = el.parentElement; x && x !== document.body; x = x.parentElement) {
+      const cs = getComputedStyle(x);
+      if (/(auto|scroll)/.test(cs.overflowY) && x.scrollHeight > x.clientHeight + 1) return x;
+    }
+    return null;
+  }
+  /** After the slide on screen was hidden: the next one that is not, else the one before, else close the viewer. */
+  function skipPast(unit, wasOnScreen) {
+    if (!wasOnScreen) return;
+    if (/^\/stories\//.test(location.pathname)) {
+      const next = document.querySelector('button[aria-label="Next"], [role="button"][aria-label="Next"], [aria-label="Next story"]');
+      const close = document.querySelector('button[aria-label="Close"], [role="button"][aria-label="Close"]');
+      if (next) next.click(); else if (close) close.click(); else history.back();
+      stat('skipped-story');
+      return;
+    }
+    const sc = scrollerOf(unit);
+    const slideOf = (x) => { if (!sc) return x; while (x && x.parentElement !== sc) x = x.parentElement; return x || unit; };
+    const slide = slideOf(unit);
+    let next = slide, prev = slide;
+    while ((next = next && next.nextElementSibling) && !shownSlide(next)) {}
+    while ((prev = prev && prev.previousElementSibling) && !shownSlide(prev)) {}
+    const go = next || prev;
+    if (!go) { history.back(); stat('skipped-reel'); return; }
+    if (sc) sc.scrollTo({ top: go.offsetTop - sc.firstElementChild.offsetTop, behavior: 'instant' }); else go.scrollIntoView({ block: 'start', behavior: 'instant' });
+    const v = go.querySelector('video');
+    if (v && !v.hasAttribute('data-igf-hold')) { try { v.play(); } catch {} }
+    stat('skipped-reel');
+  }
+
   /** Hides a post. kind: 'text', 'image', 'video' (for good) or 'checking' (to be tried again). */
   function hide(unit, kind, why) {
     if (!unit) return;
     const was = kindOf(unit);
     if (was && was !== 'checking') return;      // already hidden for good
     if (was === 'checking' && kind === 'checking') return;
+    const viewer = inViewer() && !isTile(unit);
+    const wasOnScreen = viewer && onScreen(unit);
+    if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
     unit.setAttribute('data-igf-gone', kind);
     unit.setAttribute('data-igf-why', why || kind);
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
     placeholder(unit);
-    if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); }
+    if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
   }
   // Shown again only when every held picture in it has now been judged clean (no tap, no control: the verdict).
@@ -130,6 +178,7 @@
     unit.removeAttribute('data-igf-gone');
     unit.removeAttribute('data-igf-why');
     unit.removeAttribute('data-igf-tile');
+    unit.removeAttribute('data-igf-slide-hold');
     const ph = [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
     if (ph) ph.remove();
     stat('restored');
@@ -140,6 +189,7 @@
   const textSeen = new WeakMap();
   function checkText(unit) {
     if (gone(unit)) return true;
+    if (byHand.size) { const id = idOf(unit, null); if (id && byHand.has(id)) { hide(unit, 'image', 'by-hand'); return true; } }
     const t = textOf(unit);
     if (textSeen.get(unit) === t.length) return false;
     textSeen.set(unit, t.length);
@@ -156,16 +206,17 @@
     let r = null;
     try { r = await fn(); } catch (e) { r = { _error: 'bridge' }; }
     // Judged only when both judges answered (nsfwjs and the revealing-clothing model); otherwise "still checking".
-    if (r && !r._error && typeof r === 'object' && 'Neutral' in r && 'Revealing' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
+    if (r && !r._error && typeof r === 'object' && 'Neutral' in r && 'Revealing' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why, scores: r }; }
     state.failed++;
     return { flagged: null, why: 'unjudged-' + ((r && r._error) || 'none') };
   }
   const verdicts = new Map(); // url key -> Promise<verdict>, judged ones only
+  const scoresOf = new Map(); // url key -> the two judges' scores (for a hand-hidden picture's record)
   const keyOf = (url) => url.split('?')[0] + '?' + (url.split('?')[1] || '').replace(/(^|&)(_nc_\w+|oh|oe|ccb|edm|ig_cache_key)=[^&]*/g, '');
   function judgeUrl(url) {
     const key = keyOf(url);
     if (verdicts.has(key)) return verdicts.get(key);
-    const p = ask(() => BRIDGE.classifyUrl(url)).then((v) => { if (v.flagged === null) verdicts.delete(key); else stat(v.flagged ? 'judged-flagged' : 'judged-clean'); return v; });
+    const p = ask(() => BRIDGE.classifyUrl(url)).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); } return v; });
     verdicts.set(key, p);
     if (verdicts.size > 4000) verdicts.delete(verdicts.keys().next().value);
     return p;
@@ -177,6 +228,7 @@
   // often a <div> with an inline background-image, not an <img>).
   function srcOf(el) {
     if (el.tagName === 'IMG') return el.currentSrc || el.src || '';
+    if (el.tagName === 'VIDEO') { const p = el.getAttribute('poster'); return p && isMediaUrl(p) ? new URL(p, location.href).href : ''; }
     const bg = (el.style && el.style.backgroundImage) || '';
     const m = bg.match(/url\(\s*(['"]?)(.*?)\1\s*\)/);
     return m ? m[2] : '';
@@ -188,6 +240,7 @@
     imgDone.set(img, src);
     const unit = unitOf(img);
     if (gone(unit)) return;
+    if (byHand.size) { const id = idOf(unit, img); if (id && byHand.has(id)) { hide(unit, 'image', 'by-hand'); return; } }
     if (checkText(unit)) return;
     img.setAttribute('data-igf-hold', '');
     holdIn(unit, img);
@@ -199,6 +252,9 @@
       const v = await judgeUrl(src);
       if (srcOf(img) !== src) return; // changed meanwhile; the new src is judged on its own
       const u = unitOf(img);
+      // An account's avatar (search results, lists, a profile's header): only the picture goes, the row stays, so
+      // he can still find people (Joe, 2026-11-05: "let's block the picture but keep the line").
+      if (v.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); stat('hidden-avatar'); return; }
       if (v.flagged) hide(u, 'image', v.why);
       else if (v.flagged === false) img.removeAttribute('data-igf-hold');
       else hide(u, 'checking', v.why);
@@ -212,7 +268,7 @@
   const retries = new WeakMap();
   function retry(unit) {
     const n = retries.get(unit) || 0;
-    if (n >= RETRY.length) { unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
+    if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
     retries.set(unit, n + 1);
     setTimeout(async () => {
       if (kindOf(unit) !== 'checking') return;
@@ -224,7 +280,12 @@
         if (v.flagged) { hide(unit, 'image', v.why); return; }
         if (v.flagged === null) { allClean = false; last = v.why; }
       }
-      if (allClean) { for (const img of imgs) img.removeAttribute('data-igf-hold'); restore(unit); return; }
+      if (allClean) {
+        for (const img of imgs) img.removeAttribute('data-igf-hold');
+        restore(unit);
+        for (const v of imgs) if (v.tagName === 'VIDEO') { try { v.muted = true; if (onScreen(unit)) v.play(); } catch {} } // it plays, where it was
+        return;
+      }
       unit.setAttribute('data-igf-why', last);
       retry(unit);
     }, RETRY[n]);
@@ -266,7 +327,12 @@
     const release = () => { if (!gone(v)) { v.removeAttribute('data-igf-hold'); } };
     (async () => {
       const poster = v.getAttribute('poster');
-      if (poster && isMediaUrl(poster)) { const pv = await judgeUrl(poster); if (pv.flagged) { hide(unitOf(v), 'video', pv.why); return; } }
+      if (poster && isMediaUrl(poster)) {
+        const pv = await judgeUrl(poster);
+        if (pv.flagged) { hide(unitOf(v), 'video', pv.why); return; }
+        // Not judged yet: the reel waits as "still checking" (held, tried again), never shown unjudged.
+        if (pv.flagged === null) { const u = unitOf(v); holdIn(u, v); hide(u, 'checking', pv.why); return; }
+      }
       // A first frame, drawn here while the video is still invisible (works when the frame is not cross-origin).
       const until = Date.now() + 4000;
       while (Date.now() < until && v.readyState < 2) await new Promise((r) => setTimeout(r, 150));
@@ -287,6 +353,163 @@
       judgeFrame(v, false).finally(() => { st.busy = false; });
     }
   }, 500);
+
+
+
+  // ---- hidden by hand ---------------------------------------------------------------------------------------------
+  // Joe, 2026-11-05: "Let's just add a settings button to report should be blocked", then "Something discrete" and
+  // "Or just a block icon or something". The app's menu has a plain circle-slash; after it, the next picture or video
+  // he taps is hidden at once, the same discreet way, and stays hidden on this device. A short record goes to the app
+  // (IGFilterBridge.report): the post or media id, the two judges' scores, the rules that fired, the time and the surface.
+  // Never the picture, never an address. No undo, no message. One tap, or it lapses after 15 seconds.
+  const byHand = new Set();
+  try { Promise.resolve(BRIDGE.byHand && BRIDGE.byHand()).then((ids) => { for (const id of ids || []) byHand.add(String(id)); recheckByHand(); }).catch(() => {}); } catch {}
+  function idOf(unit, el) {
+    const links = [];
+    if (unit && unit.matches && unit.matches('a[href]')) links.push(unit);
+    if (unit && unit.querySelectorAll) links.push(...unit.querySelectorAll('a[href]'));
+    for (const a of links) {
+      const h = a.getAttribute('href') || '';
+      const m = h.match(/\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]{5,})/) || h.match(/\/marketplace\/item\/(\d+)/) || h.match(/(?:story_fbid=|fbid=|\/posts\/|\/videos\/|\/reel\/)([\w-]{5,})/);
+      if (m) return SITE + ':' + m[1];
+    }
+    const src = el && srcOf(el);
+    const file = src && src.split('?')[0].split('/').pop();
+    return file ? SITE + ':media:' + file.replace(/\.\w+$/, '').slice(0, 80) : null;
+  }
+  const surfaceOf = (unit) => {
+    const p = location.pathname;
+    if (/^\/explore/.test(p) || /^\/search/.test(p)) return 'search';
+    if (/^\/stories/.test(p)) return 'story';
+    if (/^\/(reels?|watch)\b/.test(p) || /\/reel\//.test(p)) return 'reel';
+    if (onDirect()) return 'messages';
+    if (unit && unit.tagName === 'A') return 'grid';
+    if (/^\/(\?|$)/.test(p + location.search.slice(0, 1)) || p === '/') return 'feed';
+    return unit && unit.matches && unit.matches('article, [role="article"]') ? 'feed' : 'profile';
+  };
+  function recheckByHand() {
+    if (!byHand.size) return;
+    for (const u of document.querySelectorAll(UNITS + ', img, video')) {
+      const unit = u.tagName === 'IMG' || u.tagName === 'VIDEO' ? unitOf(u) : u;
+      const id = idOf(unit, u.tagName === 'IMG' || u.tagName === 'VIDEO' ? u : null);
+      if (id && byHand.has(id) && !kindOf(unit)) hide(unit, 'image', 'by-hand');
+    }
+  }
+  function pickAt(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (el.closest('[data-igt-nav], nav, [role="navigation"]')) return null;
+      const m = el.matches('img, video, [style*="background-image"]') ? el : null;
+      if (m) { const r = m.getBoundingClientRect(); if (r.width >= 40 && r.height >= 40) return m; }
+    }
+    return null;
+  }
+  function hideByHand(el) {
+    const unit = unitOf(el);
+    const id = idOf(unit, el);
+    const src = srcOf(el);
+    const scores = src ? scoresOf.get(keyOf(src)) || null : null;
+    const text = textOf(unit);
+    const rules = RULES.rules.filter((r) => { try { return r.kind === 'text' ? r.test(text) : r.kind === 'unit' ? r.test(unit, { path: location.pathname, site: SITE }) : false; } catch { return false; } }).map((r) => r.id);
+    if (SITE === 'instagram' && RULES.account && RULES.account(text)) rules.push('account:' + RULES.account(text));
+    if (id) byHand.add(id);
+    if (SITE === 'instagram' && isAvatar(el)) { el.setAttribute('data-igf-avatar', 'by-hand'); el.removeAttribute('data-igf-hold'); stat('hidden-by-hand'); }
+    else hide(unit, 'image', 'by-hand'); // counted as hidden-by-hand
+    try { BRIDGE.report && BRIDGE.report({ id, site: SITE, surface: surfaceOf(unit), scores, rules, at: new Date().toISOString() }); } catch {}
+  }
+  document.addEventListener('igf-pick', () => {
+    const root = document.documentElement;
+    let done = false;
+    const end = () => { if (done) return; done = true; document.removeEventListener('click', onTap, true); root.removeAttribute('data-igf-picking'); };
+    const onTap = (e) => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const el = pickAt(e.clientX, e.clientY);
+      end();
+      if (!el) return;
+      el.style.setProperty('outline', '1px solid rgba(128,128,128,.55)', 'important'); // the only cue, for a moment
+      setTimeout(() => { el.style.removeProperty('outline'); hideByHand(el); }, 120);
+    };
+    root.setAttribute('data-igf-picking', '');
+    document.addEventListener('click', onTap, true);
+    setTimeout(end, 15000);
+  });
+
+  // ---- accounts by name and bio (Instagram) ----------------------------------------------------------------------
+  // Joe, 2026-11-05: "let's also do like a textual search. In like profile names or bios". A row in search results,
+  // a follow list or a suggestion list whose username or name carries one of the terms (rules.js account()) goes
+  // entirely. On a profile whose name or bio does, the header keeps only the name; the bio, its link, the avatar and
+  // the posts, reels and tagged grids go.
+  const RESERVED = /^(p|reel|reels|explore|direct|stories|accounts|tv|about|legal|developer|privacy|web|challenge|emails|session)$/;
+  const profileOf = (href) => { const m = String(href || '').match(/^\/([A-Za-z0-9._]{1,30})\/?$/); return m && !RESERVED.test(m[1]) ? m[1] : null; };
+  function isAvatar(img) {
+    if (img.tagName !== 'IMG') return false;
+    if (/profile picture/i.test(img.getAttribute('alt') || '')) return true;
+    const a = img.closest('a[href]');
+    const r = img.getBoundingClientRect();
+    return !!a && !!profileOf(a.getAttribute('href')) && r.width > 0 && r.width <= 64;
+  }
+  // An element's text as its pieces joined by spaces (inline spans run together in innerText: "xo.bella🔞").
+  function pieces(el, max = 1200) {
+    const out = [], walk = document.createTreeWalker(el, 4);
+    let n, len = 0;
+    while ((n = walk.nextNode()) && len < max) {
+      const t = n.data.trim();
+      if (!t || (n.parentElement && n.parentElement.closest('[data-igf-bio]'))) continue;
+      out.push(t); len += t.length + 1;
+    }
+    return out.join(' ');
+  }
+  const rowsSeen = new WeakMap();
+  function checkAccountRows() {
+    for (const a of document.querySelectorAll('a[href]')) {
+      const who = profileOf(a.getAttribute('href'));
+      if (!who || a.closest('article, header, [data-igt-nav], nav, [data-igf-gone]')) continue;
+      // The row: the largest box around this link that holds no other account.
+      let row = a;
+      for (let i = 0; i < 5 && row.parentElement && row.parentElement !== document.body; i++) {
+        const others = [...row.parentElement.querySelectorAll('a[href]')].map((x) => profileOf(x.getAttribute('href'))).filter((x) => x && x !== who);
+        if (others.length || row.parentElement.querySelector('input, [data-igt-nav], nav')) break;
+        row = row.parentElement;
+      }
+      const text = who + ' ' + pieces(row, 300);
+      if (rowsSeen.get(row) === text) continue;
+      rowsSeen.set(row, text);
+      if (RULES.account(text)) hide(row, 'text', 'account-name');
+    }
+  }
+  let profileDone = '', flaggedPath = '';
+  function checkProfile() {
+    const root = document.documentElement;
+    const m = location.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/(reels\/|tagged\/)?$/);
+    const who = m && !RESERVED.test(m[1]) ? m[1] : null;
+    if (!who) { root.removeAttribute('data-igf-account'); profileDone = ''; flaggedPath = ''; return; }
+    const header = document.querySelector('main header') || document.querySelector('header');
+    if (!header) return;
+    const text = who + ' ' + pieces(header);
+    const key = location.pathname + '|' + text.length;
+    if (profileDone === key) return;
+    profileDone = key;
+    // Once flagged, a profile stays flagged on that page (its header text shrinks as the bio goes).
+    const kind = flaggedPath === location.pathname || RULES.account(text);
+    if (!kind) { root.removeAttribute('data-igf-account'); return; }
+    flaggedPath = location.pathname;
+    if (!root.hasAttribute('data-igf-account')) stat('hidden-account-bio');
+    root.setAttribute('data-igf-account', '');
+    for (const img of header.querySelectorAll('img')) { img.setAttribute('data-igf-avatar', 'account'); img.removeAttribute('data-igf-hold'); }
+    // The header keeps only the name: everything that is not the name's heading goes.
+    const keep = (el) => {
+      for (const c of [...el.children]) {
+        if (c.matches('h1, h2')) continue;
+        if (!c.querySelector('h1, h2')) { c.setAttribute('data-igf-bio', ''); continue; } // the avatar, the bio, its link, the counts
+        keep(c);
+      }
+    };
+    keep(header);
+  }
+  if (SITE === 'instagram') {
+    const accounts = () => { try { checkAccountRows(); checkProfile(); } catch {} };
+    setInterval(accounts, 700);
+    document.addEventListener('DOMContentLoaded', accounts, { once: true });
+  }
 
   // ---- watching the page --------------------------------------------------------------------------------------------
   function scan(root) {

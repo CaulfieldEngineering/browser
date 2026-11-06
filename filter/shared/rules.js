@@ -56,6 +56,24 @@
   ];
   const REVEALING_RE = new RegExp('(^|[^\p{L}\p{N}_])#?(' + REVEALING_WORDS.map((w) => w.replace(/ /g, '\s?')).join('|') + ')(?=$|[^\p{L}\p{N}_])', 'iu');
 
+  // Accounts by name or bio, and the same terms in captions (Joe, 2026-11-05: "let's also do like a textual search. In
+  // like profile names or bios", "And captions"). The terms are filter-config.js's "accounts" (by kind; the dashboard
+  // shows the kinds, never the words). Captions use every kind but "names and bios only" (so "spicy ramen" passes);
+  // names and bios use them all, plus the suggestive words and the revealing-clothing tags. A username's dots and
+  // underscores count as spaces ("spicy.amy" is "spicy amy").
+  const ACC = CFG.accounts || { kinds: {}, patterns: {} };
+  const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[\\s._-]?');
+  const termRe = (list) => (list.length ? new RegExp('(^|[^\\p{L}\\p{N}])(' + list.map(esc).join('|') + ')(?=$|[^\\p{L}\\p{N}])', 'iu') : null);
+  const KINDS = Object.entries(ACC.kinds || {}).map(([kind, words]) => ({ kind, re: termRe(words), captions: kind !== 'names and bios only' }));
+  const PATTERNS = Object.entries(ACC.patterns || {}).map(([kind, src]) => ({ kind, re: new RegExp(src, /^OF\b/.test(kind) ? 'u' : 'iu') }));
+  const forName = (t) => String(t || '').replace(/[._]+/g, ' ');
+  function accountKind(text, captionsOnly) {
+    const t = String(text || '');
+    for (const k of KINDS) if (k.re && (!captionsOnly || k.captions) && k.re.test(t)) return k.kind;
+    for (const p of PATTERNS) if (p.re.test(t)) return p.kind;
+    return null;
+  }
+
   // Facebook marks an ad with the word "Sponsored", often spelled out in pieces, in an SVG, or only as an aria-label,
   // and with links to its ad pages. Any of these makes a post an ad.
   // The opening words of a post, its text pieces joined by spaces (Facebook's spans run together in innerText).
@@ -82,6 +100,7 @@
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
     { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
+    { id: 'account-terms-text', kind: 'text', test: (text) => !!accountKind(text, true) },
     {
       id: 'suggestive-image', kind: 'image',
       test: (s) => !!s && ((s.Porn || 0) + (s.Hentai || 0) >= IMAGE.explicit || (s.Sexy || 0) >= IMAGE.sexy ||
@@ -105,6 +124,12 @@
     thresholds: IMAGE,
     revealing: REVEALING,
     facebook: { sponsored, suggested: (unit) => SUGGESTED.test(headText(unit)) },
+    /** The kind of term an account's name or bio carries, or null: every kind, the suggestive words, the revealing tags. */
+    account(text) {
+      const t = forName(text);
+      return accountKind(t, false) || (WORD_RE.test(t) ? 'suggestive words' : null) || (REVEALING_RE.test(t) ? 'revealing-clothing tags' : null);
+    },
+    accountKinds: () => KINDS.map((k) => k.kind).concat(PATTERNS.map((p) => p.kind)),
     /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
      *  device (why a post was hidden); it decides nothing and changes no line. */
     explain(s) {

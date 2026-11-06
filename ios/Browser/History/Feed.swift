@@ -18,6 +18,7 @@ struct FeedEvent: Codable, Equatable {
     var title: String?
     var failed: Bool?
     var state: String? // a beat's: "active" (in use) or "background" (just left)
+    var data: String? // a "report" (a picture hidden by hand): its record as JSON, never the picture or an address
 }
 
 /// Small values that should outlive a reinstall: the install id, the last sequence number, the feed key.
@@ -97,11 +98,11 @@ final class FeedQueue {
     var lastSeq: Int { Int(secrets.string("seq") ?? "") ?? 0 }
 
     @discardableResult
-    func add(type: String, at: Date, url: String? = nil, title: String? = nil, failed: Bool? = nil, state: String? = nil) -> FeedEvent {
+    func add(type: String, at: Date, url: String? = nil, title: String? = nil, failed: Bool? = nil, state: String? = nil, data: String? = nil) -> FeedEvent {
         _ = install
         let seq = lastSeq + 1
         secrets.set(String(seq), for: "seq") // first, so a number is never used twice
-        let event = FeedEvent(seq: seq, type: type, at: at, url: url, title: title, failed: failed, state: state)
+        let event = FeedEvent(seq: seq, type: type, at: at, url: url, title: title, failed: failed, state: state, data: data)
         events.append(event)
         if events.count > Self.cap { events.removeFirst(events.count - Self.cap) }
         save()
@@ -231,6 +232,14 @@ final class Feed {
     func record(_ visit: Visit) {
         work.async {
             self.queue.add(type: "visit", at: visit.at, url: visit.url, title: visit.title, failed: visit.failed ? true : nil)
+            self.soon()
+        }
+    }
+
+    /// A picture hidden by hand: its record (HiddenByHand), as data.
+    func report(_ json: String) {
+        work.async {
+            self.queue.add(type: "report", at: self.now(), data: String(json.prefix(4000)))
             self.soon()
         }
     }

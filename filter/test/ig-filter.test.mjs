@@ -30,6 +30,9 @@ const NAV = `<div class="x1n2onr6" id="tabbar" style="position:fixed;left:0;righ
 </div>`;
 // The "use the app" strip Instagram floats above the bar, with its own close control.
 const BANNER = `<div id="appbanner" style="position:fixed;right:0;bottom:50px;height:36px;display:flex"><a href="https://apps.apple.com/app/instagram/id389801252">Use the app</a><button id="bannerx" aria-label="Close"><svg width="12" height="12" viewBox="0 0 10 10"><path d="M1 1l8 8"/></svg></button></div>`;
+const reelViewer = (names, start) => `<main><div id="sc" style="height:600px;overflow-y:scroll;scroll-snap-type:y mandatory">${names.map((n, i) =>
+  `<div class="slide" id="${n.split('-')[1]}" style="height:600px;scroll-snap-align:start"><div><video poster="${CDN}/${n}.jpg" playsinline muted style="width:340px;height:600px"></video></div><div><a href="/creator${i}/">creator${i}</a></div></div>`).join('')}</div>
+  <script>document.getElementById('sc').scrollTop = ${start} * 600;</script></main>`;
 const pages = {
   '/': `<main role="main">
    <article id="ok"><header><a href="/pedalshop/"><img id="avatar" src="${CDN}/avatar.jpg" width="32" height="32" alt="pedalshop's profile picture"></a><a href="/pedalshop/">pedalshop</a></header>
@@ -70,6 +73,40 @@ const pages = {
     window.openComments = () => { history.pushState({ p: 'c' }, '', '/p/P10/comments/'); comments(); document.getElementById('add').focus(); scrollTo(0, 99999); };
     addEventListener('popstate', () => { feed(); scrollTo(0, 1200); });
   </script>`,
+  '/explore/search/names/': `<main><input id="q" value="amy">
+    <div><a id="n1" href="/amy.pedals/"><img src="${CDN}/plain-n1.jpg" style="width:44px;height:44px"><span>amy.pedals</span><span>Amy | Fuzz boxes</span></a></div>
+    <div><a id="n2" href="/spicy.amy/"><img src="${CDN}/plain-n2.jpg" style="width:44px;height:44px"><span>spicy.amy</span><span>Amy</span></a></div>
+    <div><a id="n3" href="/amy_x/"><img src="${CDN}/plain-n3.jpg" style="width:44px;height:44px"><span>amy_x</span><span>Amy | OnlyFans</span></a></div>
+    <div><a id="n4" href="/amymodel/"><span>amymodel</span><span>Model 📸 DM for collab</span></a></div>
+  </main>`,
+  '/followers/': `<main><div role="dialog"><h1>Followers</h1>
+    <div id="f1row"><a href="/studio.dan/"><span>studio.dan</span></a><span>Dan, live sound</span><button>Remove</button></div>
+    <div id="f2row"><a href="/xo.bella/"><span>xo.bella</span></a><span>🔞 links below</span><button>Remove</button></div>
+  </div></main>`,
+  '/bella.x/': `<main><header><img id="pav" src="${CDN}/plain-pav.jpg" style="width:150px;height:150px" alt="bella.x's profile picture">
+      <section><h2 id="pname">bella.x</h2><div id="pcounts">120 posts 4,000 followers</div><div id="pbio">Exclusive content 🔞 link below</div><a id="plink" href="https://l.instagram.com/?u=x">my.link</a></section></header>
+    <div class="_ac7v">${tile('bp1', '/p/BP1/', 'plain-bp1.jpg')}${tile('bp2', '/p/BP2/', 'plain-bp2.jpg')}</div></main>${NAV}`,
+  '/pedal.dan/': `<main><header><img id="dav" src="${CDN}/plain-dav.jpg" style="width:150px;height:150px" alt="pedal.dan's profile picture">
+      <section><h2 id="dname">pedal.dan</h2><div id="dbio">Guitar pedals, audio electronics. Gym rat. DM for collab.</div></section></header>
+    <div class="_ac7v">${tile('dp1', '/p/DP1/', 'plain-dp1.jpg')}</div></main>${NAV}`,
+  '/captions/': `<main>
+    <article id="c1"><header><a href="/x/">x</a></header><div>New drop, link in bio for my content</div></article>
+    <article id="c2"><header><a href="/y/">y</a></header><div>Find me on fansly</div></article>
+    <article id="c3"><header><a href="/z/">z</a></header><div>Made spicy ramen tonight</div></article>
+    <article id="c4"><header><a href="/w/">w</a></header><div>One of the best fuzz pedals</div></article>
+  </main>`,
+  // The reel viewer: one scrolling column of full-height slides (opened on the second, as from a shared link).
+  '/reels/V1/': reelViewer(['plain-v1', 'flag-v2', 'flag-v3', 'plain-v4'], 1),
+  '/reels/V2/': reelViewer(['plain-w1', 'flag-w2'], 1),
+  '/reels/V3/': reelViewer(['plain-x1', 'late-x2', 'plain-x3'], 1),
+  '/stories/someone/111/': `<main><section id="story"><img id="st" src="${CDN}/flag-st.jpg" style="width:360px;height:640px"></section>
+    <button aria-label="Next" onclick="window.storyNext = (window.storyNext || 0) + 1">›</button><button aria-label="Close" onclick="window.storyClosed = true">×</button></main>`,
+  '/stories/someone/222/': `<main><section id="story2"><img id="st2" src="${CDN}/flag-st2.jpg" style="width:360px;height:640px"></section>
+    <button aria-label="Close" onclick="window.storyClosed = true">×</button></main>`,
+  '/hand/': `<main>
+    <article id="h1"><header><a href="/a/">a</a></header><a href="/p/HAND111/"><img id="h1img" src="${CDN}/plain-h1.jpg" width="400" height="400"></a><div>Saturday #beach</div></article>
+    <article id="h2"><header><a href="/b/">b</a></header><a href="/p/HAND222/"><img id="h2img" src="${CDN}/plain-h2.jpg" width="400" height="400"></a><div>pedals</div></article>
+  </main>`,
   '/revealing/': `<main>
    <article id="rv1"><header><a href="/a/">a</a></header><img src="${CDN}/rev-1.jpg" width="400" height="400"><div>Saturday.</div></article>
    <article id="rv2"><header><a href="/b/">b</a></header><img src="${CDN}/plain-rv2.jpg" width="400" height="400"><div>leg day #gymgirl</div></article>
@@ -98,6 +135,9 @@ globalThis.IGFilterBridge = {
     }, 30));
   },
   classifyData() { return Promise.resolve({ Neutral: 0.99, Sexy: 0, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.01 }); },
+  reports: [],
+  report(r) { this.reports.push(r); },
+  byHand() { return Promise.resolve(JSON.parse(sessionStorage.getItem('igf-byhand') || '[]')); },
 };`;
 
 let failed = 0;
@@ -108,7 +148,7 @@ try {
   const ctx = await browser.newContext();
   await ctx.route('https://www.instagram.com/**', (r) => {
     const p = new URL(r.request().url()).pathname;
-    r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<main></main>'}</body></html>` });
+    r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<main></main>'}</body></html>` });
   });
   await ctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'filter-config.js'), 'utf8') });
@@ -168,7 +208,7 @@ try {
   await go('/someprofile/');
   check('profile grid: a plain tile shows', await visible('#p1 img'));
   check('profile grid: a flagged tile is hidden', (await hiddenAs('#p2 img')) === 'image');
-  check('profile: a large avatar is judged (and hidden when flagged)', (await hiddenAs('#bigavatar')) === 'image');
+  check('profile: a large avatar is judged; flagged, only the picture goes (a plain circle)', await page.$eval('#bigavatar', (e) => !!e.getAttribute('data-igf-avatar') && getComputedStyle(e).objectPosition.startsWith('-99999px') && getComputedStyle(e).borderRadius === '50%'));
   // ---- a profile's Reels tab: background-image tiles ----
   await go('/someprofile/reels/');
   check('reels tab: a plain background tile shows', await page.$eval('#r1 [style*="background-image"]', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')));
@@ -214,13 +254,69 @@ try {
   check('search: the search field stays', await shown('q'));
   check('search: an account result stays, with its small avatar (judged clean)', (await shown('r1')) && (await shown('r1img')));
   check('search: a hashtag result stays', await shown('r2'));
-  check('search: a small avatar the filter flags is gone', !(await shown('r3img')));
+  check('search: a flagged avatar is out of sight, a plain circle in its place', await page.$eval('#r3img', (e) => !!e.getAttribute('data-igf-avatar') && getComputedStyle(e).objectPosition.startsWith('-99999px')));
+  check('search: its row stays, with the username, so he can find the person', (await shown('r3')) && /flagged_acct/.test(await page.$eval('#r3', (e) => e.innerText)));
   check('search: "Suggested for you" is gone, heading and accounts', !(await shown('suggHead')) && !(await shown('sugg')));
   check('search: "Trending" is gone', !(await shown('trend')));
   check('search: a picture larger than a small avatar is gone', !(await shown('bigimg')));
   check('search: the Top and Reels tabs are gone, Accounts stays', !(await shown('tabTop')) && !(await shown('tabReels')) && (await shown('tabAccounts')));
   check('search: post and reel tiles are gone', !(await shown('kw1')));
   check('search: videos are gone', !(await shown('kwv')));
+  // ---- accounts by name and bio; the new caption terms ----
+  await go('/explore/search/names/', 1200);
+  check('names: an ordinary account stays', await shown('n1'));
+  check('names: a username with a term ("spicy.amy") goes, row and all', !(await shown('n2')));
+  check('names: a full name with a term ("Amy | OnlyFans") goes', !(await shown('n3')));
+  check('names: "DM for collab" with "model" goes', !(await shown('n4')));
+  await go('/followers/', 1000);
+  check('follow lists: an ordinary follower stays', await shown('f1row'));
+  check('follow lists: one whose line carries a term goes', !(await shown('f2row')));
+  await go('/bella.x/', 1200);
+  check('bios: the name stays', await shown('pname'));
+  check('bios: the bio, its link and the counts go', !(await shown('pbio')) && !(await shown('plink')) && !(await shown('pcounts')));
+  check('bios: the avatar goes', !(await shown('pav')));
+  check('bios: the posts grid goes', !(await shown('bp1')) && !(await shown('bp2')));
+  await go('/pedal.dan/', 1200);
+  check('bios: an ordinary bio (pedals, audio, the gym, "DM for collab" without "model") leaves the profile as it is', (await shown('dbio')) && (await shown('dav')) && (await shown('dp1')));
+  await go('/captions/', 900);
+  check('captions: "link in bio for my content" hides the post', !(await shown('c1')));
+  check('captions: an adult platform hides the post', !(await shown('c2')));
+  check('captions: "spicy ramen" stays (spicy alone is for names and bios only)', await shown('c3'));
+  check('captions: "of" in a sentence stays', await shown('c4'));
+  const acst = await page.evaluate(() => globalThis.IGFilterBridge.stats);
+  check('counts: accounts by name or bio, and avatars, on the device', true, JSON.stringify(acst));
+  // ---- the reel and story viewers skip a hidden slide ----
+  const onScreenSlide = () => page.evaluate(() => { const sc = document.getElementById('sc'); const r = sc.getBoundingClientRect(); const el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); const s = el && el.closest('.slide'); return s ? s.id : ''; });
+  await go('/reels/V1/', 1800);
+  check('reels: opened on a hidden reel, the viewer goes on to the next one that is not (two in a row skipped)', (await onScreenSlide()) === 'v4', await onScreenSlide());
+  await go('/reels/V2/', 1500);
+  check('reels: the last reel hidden, the viewer goes back to the one before', (await onScreenSlide()) === 'w1', await onScreenSlide());
+  await go('/reels/V3/', 200);
+  check('reels: a reel still being checked holds its place (not collapsed, not shown)', await page.evaluate(() => { const x = document.getElementById('x2'); return x.hasAttribute('data-igf-slide-hold') && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility === 'hidden'; }));
+  await page.waitForTimeout(900);
+  check('reels: once it passes, it is shown where it was', await page.evaluate(() => { const x = document.getElementById('x2'); return !x.hasAttribute('data-igf-gone') && getComputedStyle(x).visibility === 'visible'; }) && (await onScreenSlide()) === 'x2', await onScreenSlide());
+  await go('/stories/someone/111/', 900);
+  check('stories: a hidden story advances to the next', await page.evaluate(() => window.storyNext === 1 && !window.storyClosed));
+  await go('/stories/someone/222/', 900);
+  check('stories: the last story hidden closes the viewer', await page.evaluate(() => window.storyClosed === true));
+  // ---- hidden by hand (the menu's circle-slash, then a tap) ----
+  await go('/hand/', 1000);
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('igf-pick')));
+  await page.click('#h1img');
+  await page.waitForTimeout(400);
+  check('by hand: the tapped picture\'s post is hidden at once, discreetly', !(await shown('h1')) && !/Hidden|reported/i.test(await page.evaluate(() => document.body.innerText)));
+  check('by hand: one tap only; the next tap does nothing', await page.evaluate(() => !document.documentElement.hasAttribute('data-igf-picking')) && (await shown('h2')));
+  const rec = await page.evaluate(() => globalThis.IGFilterBridge.reports[0]);
+  check('by hand: a record with the id, both judges\' scores, the surface, the time (no picture, no address)', !!rec && rec.id === 'instagram:HAND111' && rec.surface === 'feed' && rec.scores && 'Revealing' in rec.scores && 'Sexy' in rec.scores && !!rec.at && !/https?:/.test(JSON.stringify(rec)), JSON.stringify(rec));
+  check('by hand: counted on the device', (await page.evaluate(() => globalThis.IGFilterBridge.stats['hidden-by-hand'])) === 1);
+  await page.evaluate(() => sessionStorage.setItem('igf-byhand', JSON.stringify(['instagram:HAND111'])));
+  await go('/hand/', 1000);
+  check('by hand: remembered: that post stays hidden when it comes back', !(await shown('h1')) && (await shown('h2')));
+  await page.evaluate(() => sessionStorage.removeItem('igf-byhand'));
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('igf-pick')));
+  await page.mouse.click(5, 5);
+  await page.waitForTimeout(300);
+  check('by hand: a tap on no picture cancels, nothing hidden', (await shown('h2')) && await page.evaluate(() => !document.documentElement.hasAttribute('data-igf-picking')));
   // ---- revealing clothing (any person; gender-neutral) ----
   await go('/revealing/');
   check('revealing: a picture the judge scores revealing hides its post', (await hiddenAs('#rv1')) === 'image');

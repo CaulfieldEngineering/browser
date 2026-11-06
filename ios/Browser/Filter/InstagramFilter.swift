@@ -98,6 +98,11 @@ enum InstagramFilter {
             case "stat":
                 if let name = body["name"] as? String { FilterStats.shared.count(name) }
                 replyHandler(true, nil)
+            case "report":
+                if let record = body["record"] as? String { HiddenByHand.shared.add(record) }
+                replyHandler(true, nil)
+            case "byhand":
+                replyHandler(HiddenByHand.shared.ids, nil)
             case "url":
                 guard let s = body["url"] as? String, let url = URL(string: s), InstagramFilter.isMediaHost(url) else { return fail("host") }
                 InstagramFilter.fetchImage(url) { image in
@@ -121,6 +126,27 @@ enum InstagramFilter {
                 fail("bad")
             }
         }
+    }
+}
+
+/// Pictures Joe hid by hand (the menu's circle-slash; Joe, 2026-11-05: "Let's just add a settings button to report
+/// should be blocked", "Something discrete"). Their ids stay hidden on this phone; each record (the post or media id,
+/// the two judges' scores, the rules that fired, the time and the surface; never the picture or an address) goes to
+/// the mini PC with the feed, as data, so the filter can be tuned. No undo.
+final class HiddenByHand {
+    static let shared = HiddenByHand()
+    private let key = "filter.byhand.ids"
+    private(set) var ids: [String]
+    init() { ids = UserDefaults.standard.stringArray(forKey: "filter.byhand.ids") ?? [] }
+
+    func add(_ json: String) {
+        guard let data = json.data(using: .utf8), let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if let id = record["id"] as? String, !id.isEmpty, !ids.contains(id) {
+            ids.append(String(id.prefix(120)))
+            if ids.count > 3000 { ids.removeFirst(ids.count - 3000) }
+            UserDefaults.standard.set(ids, forKey: key)
+        }
+        Feed.shared.report(json)
     }
 }
 
@@ -163,6 +189,9 @@ final class FilterStats {
         lines.append("Shown again after checking: \(t["restored"] ?? 0); judged clean: \(t["judged-clean"] ?? 0)")
         if picture > 0 { lines.append("Picture line: \(sum("hidden-sexy")) suggestive, \(sum("hidden-explicit")) explicit, \(sum("hidden-combined")) combined") }
         lines.append("Revealing clothing: \(t["hidden-revealing"] ?? 0) picture, \(t["hidden-revealing-text"] ?? 0) caption")
+        lines.append("Accounts hidden by name or bio: \((t["hidden-account-name"] ?? 0) + (t["hidden-account-bio"] ?? 0)); avatars hidden: \(t["hidden-avatar"] ?? 0)")
+        lines.append("Hidden by hand: \(t["hidden-by-hand"] ?? 0)")
+        if let s = t["skipped-reel"], s > 0 { lines.append("Reels and stories skipped: \(s + (t["skipped-story"] ?? 0))") }
         let misses = t.filter { $0.key.hasPrefix("unjudged-") }.sorted { $0.key < $1.key }.map { "\($0.key.dropFirst(9)) \($0.value)" }
         if !misses.isEmpty { lines.append("Not judged: " + misses.joined(separator: ", ")) }
         if let b = model["backend"] as? String { lines.append("Model: \(b.isEmpty ? "?" : b), loaded in \(model["loadMs"] as? Int ?? 0) ms, \(model["avgMs"] as? Int ?? 0) ms a picture") }

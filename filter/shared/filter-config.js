@@ -14,6 +14,19 @@ globalThis.IGFilterConfig = {
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",
   "surfaces": ["feed", "post pages", "profile grids (posts, reels, tagged)", "Explore and search (grids removed)", "the reel viewer", "stories", "messages"],
+  "accounts": {
+    "_what": "Names, bios and captions that mark an adult or suggestive account (Joe, 2026-11-05: 'let's also do like a textual search. In like profile names or bios', 'And captions'). Names and bios also check the suggestive words and the revealing-clothing tags. The Devices dashboard shows the kinds as counts, never the words.",
+    "kinds": {
+      "adult platforms": ["onlyfans", "only fans", "fansly", "fanvue", "manyvids", "loyalfans", "fancentro", "justforfans", "fansone", "unlockd"],
+      "18+ markers": ["18+", "🔞", "nsfw", "xxx", "adults only", "not for minors", "no minors"],
+      "come-ons": ["exclusive content", "spicy content", "spicy link", "my spicy", "uncensored", "custom content", "selling content", "content in bio", "link in bio for my content", "link for my content", "dm for prices", "dm for customs", "menu in bio", "🌶️ link", "🍑 link", "sugar daddy", "sugar baby", "sugarbaby", "cam girl", "camgirl", "webcam model"],
+      "names and bios only": ["spicy", "🌶️", "naughty", "thirst", "lewd"]
+    },
+    "patterns": {
+      "OF with a link": "\\bOF\\b.{0,24}(link|below|bio|🔗|👇|⬇)",
+      "DM for collab, as a model": "(dm|message) (me )?(for|4) (collab|collabs|promo).{0,40}model|model.{0,40}(dm|message) (me )?(for|4) (collab|collabs|promo)"
+    }
+  },
   "facebook": {
     "homeGoesTo": "/notifications/",
     "hidden": ["the News Feed (home goes to Notifications)", "sponsored posts, Reels, listings and right-rail ads", "Suggested for you, Suggested groups and pages, People you may know", "the Stories and Reels rails", "prompts to open the app"],

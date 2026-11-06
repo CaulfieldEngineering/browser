@@ -10,5 +10,8 @@
     classifyRect: (r) => ask({ op: 'rect', rect: { x: +r.x, y: +r.y, width: +r.width, height: +r.height } }),
     stat: (name) => { webkit.messageHandlers.igf.postMessage({ op: 'stat', name: String(name).slice(0, 40) }).catch(() => {}); },
     warm: () => { webkit.messageHandlers.igf.postMessage({ op: 'warm' }).catch(() => {}); },
+    // Hidden by hand: a record (ids, scores, rules; never the picture) kept on the phone and sent with the feed.
+    report: (record) => { webkit.messageHandlers.igf.postMessage({ op: 'report', record: JSON.stringify(record).slice(0, 4000) }).catch(() => {}); },
+    byHand: () => webkit.messageHandlers.igf.postMessage({ op: 'byhand' }).then((ids) => (Array.isArray(ids) ? ids : []), () => []),
   };
 })();

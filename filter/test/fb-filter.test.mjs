@@ -59,7 +59,7 @@ try {
   const ctx = await browser.newContext();
   await ctx.route(/https:\/\/(www|m)\.facebook\.com\//, (r) => {
     const p = new URL(r.request().url()).pathname;
-    r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<div role="main"></div>'}</body></html>` });
+    r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<div role="main"></div>'}</body></html>` });
   });
   await ctx.route(/fbcdn\.net/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
   for (const f of ['filter-config.js', 'rules.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
