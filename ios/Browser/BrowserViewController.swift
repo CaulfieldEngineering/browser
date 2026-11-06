@@ -78,13 +78,15 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             self?.saveTabs()
         }
 
-        let restored = TabStore.load()
+        // Under the app tests the app starts with one empty tab and loads nothing itself, so no launch load can land on
+        // a test's page (main run 64). Only in a Debug build run by XCTest; the phone's Release build never does this.
+        let restored = Self.underTest ? (tabs: [Tab(url: nil)], current: 0) : TabStore.load()
         tabs = restored.tabs
         select(tabs[restored.current])
         // The Instagram app: one page, always Instagram; the address is not typed (Flavor.swift).
         if Flavor.isSiteApp {
             field.isEnabled = false
-            if !(current.url.map(Flavor.isSiteHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
+            if !Self.underTest && !(current.url.map(Flavor.isSiteHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
             // Full window (Joe, 2026-11-05: "Make it expand to the entire window size (remove that lower gap)", then, on
             // 0.1.38: "Bleed up top and still a small gap at the bottom"): no bars of ours. The page sits inside the
             // safe area, so Instagram's header is below the status bar and its tab bar's icons above the home
@@ -589,6 +591,15 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     // MARK: - Tabs
 
     /// Opens a tab: its web view (made now if it has none, loading its address) goes in the card, the bars follow it.
+    /// A Debug build run by XCTest (the simulator tests). Release builds compile this to false.
+    static let underTest: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        #else
+        return false
+        #endif
+    }()
+
     private func select(_ tab: Tab) {
         if let old = current, old !== tab { snapshotCurrent() }
         current = tab

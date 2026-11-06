@@ -154,14 +154,23 @@
       root && root.setAttribute('data-igt-blur', document.activeElement === a ? 'failed' : 'done');
     }
   };
+  // "Navigation settled": data-igt-settled names the page (path and query) once the scroll logic is done with it: at
+  // once for the first page, Back, Forward and a hash change; for a new page when its hold ends. The app tests wait on it.
+  const here = () => location.pathname + location.search;
+  const markSettled = () => { const r = document.documentElement; if (r) r.setAttribute('data-igt-settled', here()); };
+  let firstMarked = false;
   setInterval(() => {
+    if (!firstMarked && document.documentElement) { firstMarked = true; if (location.href === lastHref) markSettled(); }
     if (location.href === lastHref) return;
     const was = lastHref, grew = history.length > lastLen;
     lastHref = location.href; lastLen = history.length;
     const samePage = was.split('#')[0] === location.href.split('#')[0];
     const root = document.documentElement;
     if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
-    if (samePage || Date.now() - popAt < 400) return; // a hash change, or Back / Forward
+    if (samePage || Date.now() - popAt < 400) { markSettled(); return; } // a hash change, or Back / Forward
+    if (root) root.removeAttribute('data-igt-settled');
+    const opened = location.href;
+    setTimeout(() => { if (location.href === opened) markSettled(); }, SETTLE_MS + 20);
     settleUntil = Date.now() + SETTLE_MS;
     if (root) root.setAttribute('data-igt-settle', String(settleUntil)); // when the putting-back ends (the app tests wait on it)
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500, 2500, SETTLE_MS]) setTimeout(atTop, ms);

@@ -110,9 +110,9 @@ final class InstagramAppTests: XCTestCase {
         }
         return false
     }
-    /// The scroll logic's settling for the page now on screen is over (ig-tidy.js data-igt-settle), after its address `path`.
+    /// The scroll logic is done with the page at `path` (ig-tidy.js "navigation settled", data-igt-settled).
     private func settled(_ web: WKWebView, path: String) async throws -> Bool {
-        try await until(web, "(document.documentElement.getAttribute('data-igt-nav') || '').startsWith('\(path) ') && Date.now() > Number(document.documentElement.getAttribute('data-igt-settle') || 0) + 100")
+        try await until(web, "document.documentElement.getAttribute('data-igt-settled') === '\(path)'", seconds: 15)
     }
 
     /// A newly opened page starts at the top; Back keeps the place in the feed (Joe, 2026-11-05: "opening certain pages
@@ -131,13 +131,13 @@ final class InstagramAppTests: XCTestCase {
         """
         try await idle(web)
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/?variant=following")!) // the feed, where the app opens
-        let loaded = try await until(web, "typeof openComments === 'function' && document.querySelectorAll('#m article').length === 60 && location.search === '?variant=following'")
+        let loaded = try await until(web, "typeof openComments === 'function' && document.querySelectorAll('#m article').length === 60 && location.search === '?variant=following'", seconds: 15)
         XCTAssertTrue(loaded, "the test's page is on screen (not the app's own launch load)")
+        let feedSettled = try await settled(web, path: "/?variant=following")
+        XCTAssertTrue(feedSettled, "the filter is running on it and done with it")
         // The feed as its own history entry, as on Instagram (WebKit reloads a loadHTMLString page on Back, so the
         // first entry cannot be the feed); then the settling for that new page passes before Joe "scrolls".
         _ = try? await web.evaluateJavaScript("history.pushState({}, '', '/?variant=following'); true")
-        let quiet = try await until(web, "Date.now() > Number(document.documentElement.getAttribute('data-igt-settle') || 0) + 100")
-        XCTAssertTrue(quiet, "no settling is under way before the scroll")
         _ = try? await web.evaluateJavaScript("scrollTo(0, 1200); openComments(); true")
         let commentsSettled = try await settled(web, path: "/p/P10/comments/")
         XCTAssertTrue(commentsSettled, "the filter saw the comments page and finished settling it")
@@ -152,9 +152,8 @@ final class InstagramAppTests: XCTestCase {
         let blur = try await web.evaluateJavaScript("document.documentElement.getAttribute('data-igt-blur') || 'none'") as? String
         XCTAssertNotEqual(blur, "failed", "the field could be let go")
         _ = try? await web.evaluateJavaScript("history.replaceState({}, '', '/?variant=following'); dispatchEvent(new PopStateEvent('popstate')); true")
-        // the filter has seen the address go back (its marker names the feed again); then a moment for any putting-back
-        _ = try await until(web, "window.popped === true && (document.documentElement.getAttribute('data-igt-nav') || '').startsWith('/ ')")
-        _ = try await until(web, "false", seconds: 1.6) // longer than a settling window: a wrong put-back to the top would show
+        let backSettled = try await until(web, "window.popped === true && document.documentElement.getAttribute('data-igt-settled') === '/?variant=following'", seconds: 15)
+        XCTAssertTrue(backSettled, "the filter saw Back and is done with the feed")
         let popped = try await web.evaluateJavaScript("window.popped === true") as? Bool
         XCTAssertEqual(popped, true, "Back was a history step inside the page (not a reload)")
         let back = try await web.evaluateJavaScript("scrollY") as? Double

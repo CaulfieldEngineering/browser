@@ -213,10 +213,9 @@ final class InstagramFilterTests: XCTestCase {
         web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/search/")!)
         let loaded = try await until(web, "document.getElementById('ok') && document.getElementById('bad') && location.pathname === '/explore/search/'")
         XCTAssertTrue(loaded, "the test's page is on screen")
-        let ran = try await until(web, "Number(document.documentElement.getAttribute('data-igf-acc') || 0) >= 1")
-        XCTAssertTrue(ran, "the filter's account checks ran on it")
+        let ran = try await until(web, "Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1")
+        XCTAssertTrue(ran, "the filter finished a pass over it (its account checks included)")
         let js = "['ok','bad'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
-        _ = try await until(web, js.replacingOccurrences(of: ".join(' ')", with: ".join(' ') === 'ok:shown bad:gone'"), seconds: 10)
         let state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
         let runs = try? await web.evaluateJavaScript("document.documentElement.getAttribute('data-igf-acc') || 'never ran'") as? String
         XCTAssertEqual(state, "ok:shown bad:gone", "account checks: \(runs ?? "?")")

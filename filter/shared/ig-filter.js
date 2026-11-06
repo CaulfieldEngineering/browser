@@ -505,9 +505,10 @@
     };
     keep(header);
   }
+  let accountsNow = () => {};
   if (SITE === 'instagram') {
     let accRuns = 0, accTimer = 0;
-    const accounts = () => {
+    const accounts = accountsNow = () => {
       accTimer = 0;
       try { checkAccountRows(); checkProfile(); accRuns++; } catch (e) { accRuns = -1; }
       if (document.documentElement) document.documentElement.setAttribute('data-igf-acc', String(accRuns)); // for the tests
@@ -555,13 +556,19 @@
   mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster', 'style'] });
   // The first pass also judges the text already on the page (posts parsed before the observer saw them).
   const allUnits = () => document.querySelectorAll(UNITS);
+  // "Filter done": data-igf-pass counts the whole-page passes finished (pictures sent to the judges, text and account
+  // checks done). The first is at load; the app tests wait on it instead of on time.
+  let passes = 0;
+  const passDone = () => { passes++; if (document.documentElement) document.documentElement.setAttribute('data-igf-pass', String(passes)); };
   const start = () => {
     addStyle();
     scan(document.documentElement);
     for (const u of allUnits()) checkText(u);
+    accountsNow();
     state.ready = true;
+    passDone();
   };
   // Instagram builds its pages late; a second look catches text the observer batched away.
-  setTimeout(() => { for (const u of allUnits()) checkText(u); }, 1500);
+  setTimeout(() => { for (const u of allUnits()) checkText(u); accountsNow(); passDone(); }, 1500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
 })();

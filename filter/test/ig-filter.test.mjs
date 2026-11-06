@@ -168,6 +168,7 @@ try {
   await go('/');
   check('feed: a plain post stays and its picture shows', await visible('#okimg'));
   check('feed: a small avatar is not held', await visible('#avatar'));
+  check('filter done: the first whole-page pass is marked', await page.evaluate(() => Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1));
   check('feed: a flagged picture hides its post', (await hiddenAs('#img')) === 'image');
   check('feed: a hidden post collapses entirely, with no words', await page.$eval('#img', (e) => getComputedStyle(e).display === 'none' && !e.querySelector('.igf-ph')));
   check('feed: nothing on the page says why (no labels)', !/Hidden|suggestive|caption/i.test(await page.evaluate(() => document.body.innerText)));
@@ -345,8 +346,11 @@ try {
 
   // ---- a newly opened page starts at the top; Back keeps the place in the feed ----
   await go('/spa/', 300);
+  check('navigation settled: the first page is marked at once', (await page.evaluate(() => document.documentElement.getAttribute('data-igt-settled'))) === '/spa/');
   await page.evaluate(() => scrollTo(0, 1200));
   await page.evaluate(() => window.openComments());
+  await page.waitForTimeout(150);
+  check('navigation settled: not while a new page is held', (await page.evaluate(() => document.documentElement.getAttribute('data-igt-settled'))) === null);
   await page.waitForTimeout(1800);
   check('a new page (comments) starts at the top, its caption in view', await page.evaluate(() => scrollY === 0 && document.getElementById('caption').getBoundingClientRect().top >= 0), String(await page.evaluate(() => scrollY)));
   check('the comment box the page focused is let go (no keyboard pulling the page down)', await page.evaluate(() => document.activeElement !== document.getElementById('add')));
@@ -356,12 +360,15 @@ try {
   await page.evaluate(() => history.back());
   await page.waitForTimeout(1200);
   check('Back returns to the same place in the feed', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
+  check('navigation settled: Back is marked at once', (await page.evaluate(() => document.documentElement.getAttribute('data-igt-settled'))) === '/spa/');
   await page.evaluate(() => window.openComments());
   await page.waitForTimeout(100);
   await page.dispatchEvent('main', 'touchstart');
   await page.evaluate(() => scrollTo(0, 800));
   await page.waitForTimeout(1700);
   check('once Joe scrolls a new page himself, it stays where he put it', await page.evaluate(() => scrollY) === 800, String(await page.evaluate(() => scrollY)));
+  const settledAt = await page.waitForFunction(() => document.documentElement.getAttribute('data-igt-settled') === '/p/P10/comments/', null, { timeout: 6000 }).then(() => true, () => false);
+  check('navigation settled: a new page is marked when its hold ends', settledAt);
 
   // ---- the real classifier ----
   const p2 = await browser.newPage();
