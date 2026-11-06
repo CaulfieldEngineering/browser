@@ -84,6 +84,51 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.instagram.tests
         CODE_SIGNING_ALLOWED: NO
+  # The Facebook app (Flavor.swift; Joe, 2026-11-05: "we can start building a facebook version of our filtered app"):
+  # the Browser's code with FACEBOOK_APP set, opening facebook.com only; its own App ID and profile "Facebook AdHoc".
+  Facebook:
+    type: application
+    platform: iOS
+    sources:
+      - path: Browser
+        excludes:
+          - Info.plist
+          - Assets.xcassets
+      - path: Facebook
+        excludes:
+          - Info.plist
+      - path: ../filter/shared
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.facebook
+        PRODUCT_NAME: Facebook
+        INFOPLIST_FILE: Facebook/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: D56QY8C7WL
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) FACEBOOK_APP"
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: Facebook AdHoc
+  # The Facebook app's own tests (its site, home, links), run on the simulator by ios-build.yml.
+  FacebookTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FacebookTests
+    dependencies:
+      - target: Facebook
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.facebook.tests
+        CODE_SIGNING_ALLOWED: NO
   BrowserTests:
     type: bundle.unit-test
     platform: iOS
@@ -117,3 +162,13 @@ schemes:
       config: Debug
       targets:
         - InstagramTests
+  Facebook:
+    build:
+      targets:
+        Facebook: all
+    archive:
+      config: Release
+    test:
+      config: Debug
+      targets:
+        - FacebookTests

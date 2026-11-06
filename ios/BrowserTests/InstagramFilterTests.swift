@@ -11,7 +11,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "classifier", "clip"] {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy", "classifier", "clip"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))
@@ -138,6 +138,14 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertNil(f("https://www.instagram.com/p/abc/"), "a post is left as it is")
         XCTAssertNil(f("https://www.instagram.com/pedalshop/"))
         XCTAssertNil(f("https://example.com/"), "another site is left as it is")
+    }
+
+    /// Facebook's News Feed goes to Notifications in the Browser too (Joe, 2026-11-05: "hiding the default feed").
+    func testFacebooksHomeGoesToNotifications() {
+        XCTAssertEqual(Flavor.rewrite(URL(string: "https://www.facebook.com/")!)?.absoluteString, "https://www.facebook.com/notifications/")
+        XCTAssertEqual(Flavor.rewrite(URL(string: "https://m.facebook.com/home.php")!)?.absoluteString, "https://m.facebook.com/notifications/")
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://www.facebook.com/marketplace/")!))
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://example.com/")!))
     }
 
     /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).

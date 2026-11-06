@@ -55,7 +55,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// HQ, Joe's own chat app, in Chrome's place for its assistant. Only this one app.
     private static let askHQURL = URL(string: "hq://chat")!
 
-    override var preferredStatusBarStyle: UIStatusBarStyle { Flavor.isInstagram && !topIsDark ? .darkContent : .lightContent }
+    override var preferredStatusBarStyle: UIStatusBarStyle { Flavor.isSiteApp && !topIsDark ? .darkContent : .lightContent }
 
     override func loadView() {
         view = UIView()
@@ -82,9 +82,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         tabs = restored.tabs
         select(tabs[restored.current])
         // The Instagram app: one page, always Instagram; the address is not typed (Flavor.swift).
-        if Flavor.isInstagram {
+        if Flavor.isSiteApp {
             field.isEnabled = false
-            if !(current.url.map(Flavor.isInstagramHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
+            if !(current.url.map(Flavor.isSiteHost) ?? false) { webView.load(URLRequest(url: Flavor.home)) }
             // Full window (Joe, 2026-11-05: "Make it expand to the entire window size (remove that lower gap)", then, on
             // 0.1.38: "Bleed up top and still a small gap at the bottom"): no bars of ours. The page sits inside the
             // safe area, so Instagram's header is below the status bar and its tab bar's icons above the home
@@ -144,7 +144,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     /// Reads Instagram's header and tab bar colours and paints the strips (and the status bar text to match).
     func matchStrips(_ done: (() -> Void)? = nil) {
-        guard Flavor.isInstagram, let web = webView, web.url != nil else { done?(); return }
+        guard Flavor.isSiteApp, let web = webView, web.url != nil else { done?(); return }
         web.evaluateJavaScript(Self.edgeColours) { [weak self] result, _ in
             guard let self, let pair = result as? [String], pair.count == 2 else { done?(); return }
             if let top = Self.colour(css: pair[0]) { self.topStrip.backgroundColor = top; self.setTopDark(Self.isDark(top)) }
@@ -167,7 +167,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        guard Flavor.isInstagram, previous?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
+        guard Flavor.isSiteApp, previous?.userInterfaceStyle != traitCollection.userInterfaceStyle else { return }
         for strip in [topStrip, bottomStrip] { strip.backgroundColor = Self.igDefault(for: traitCollection) }
         setTopDark(traitCollection.userInterfaceStyle != .light)
         matchStrips()
@@ -178,7 +178,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// The Instagram app's menu, on a two-finger tap: accounts, reload, history, the filter's counts, updates.
     @objc func showInstagramMenu() {
         guard presentedViewController == nil else { return }
-        let sheet = UIAlertController(title: Accounts.current.name, message: "Instagram \(Self.myVersion)", preferredStyle: .actionSheet)
+        let sheet = UIAlertController(title: Accounts.current.name, message: "\(Flavor.name) \(Self.myVersion)", preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: "Accounts", style: .default) { [weak self] _ in self?.showAccounts() })
         sheet.addAction(UIAlertAction(title: "Reload", style: .default) { [weak self] _ in self?.webView.reload() })
         sheet.addAction(UIAlertAction(title: "History", style: .default) { [weak self] _ in self?.showHistory() })
@@ -332,8 +332,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeCard() {
-        card.backgroundColor = Flavor.isInstagram ? .clear : Look.bg
-        card.layer.cornerRadius = Flavor.isInstagram ? 0 : 18
+        card.backgroundColor = Flavor.isSiteApp ? .clear : Look.bg
+        card.layer.cornerRadius = Flavor.isSiteApp ? 0 : 18
         card.layer.cornerCurve = .continuous
         card.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         card.clipsToBounds = true
@@ -390,7 +390,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     private func makeOverlays() {
-        empty.text = Flavor.isInstagram ? "Instagram \(Self.myVersion)" : "Search or type an address above.\n\nBrowser \(Self.myVersion)"
+        empty.text = Flavor.isSiteApp ? "\(Flavor.name) \(Self.myVersion)" : "Search or type an address above.\n\nBrowser \(Self.myVersion)"
         empty.textColor = Look.faint
         empty.font = .systemFont(ofSize: 15)
         empty.textAlignment = .center
@@ -445,7 +445,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         // nothing. The App Store and TestFlight build leaves it out (Joe: "should we remove "Ask HQ" before submitting").
         #if APPSTORE
         let tools = UIStackView(arrangedSubviews: [newTabButton, allTabs])
-        #elseif INSTAGRAM_APP
+        #elseif INSTAGRAM_APP || FACEBOOK_APP
         // The Instagram app: Instagram's own bar does the work; no toolbar of ours under it.
         let tools = UIStackView(arrangedSubviews: [])
         #else
@@ -492,22 +492,22 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             progress.bottomAnchor.constraint(equalTo: topBar.bottomAnchor),
             progress.heightAnchor.constraint(equalToConstant: 2),
 
-            card.topAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.topAnchor : topBar.bottomAnchor),
+            card.topAnchor.constraint(equalTo: Flavor.isSiteApp ? view.safeAreaLayoutGuide.topAnchor : topBar.bottomAnchor),
             card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            card.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.bottomAnchor : bottomBar.topAnchor),
+            card.bottomAnchor.constraint(equalTo: Flavor.isSiteApp ? view.safeAreaLayoutGuide.bottomAnchor : bottomBar.topAnchor),
 
             bottomBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bottomBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bottomBar.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            tools.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: Flavor.isInstagram ? 0 : 4),
+            tools.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: Flavor.isSiteApp ? 0 : 4),
             tools.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
             tools.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            tools.heightAnchor.constraint(equalToConstant: Flavor.isInstagram ? 0 : 52),
+            tools.heightAnchor.constraint(equalToConstant: Flavor.isSiteApp ? 0 : 52),
             tools.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            updateButton.bottomAnchor.constraint(equalTo: Flavor.isInstagram ? view.safeAreaLayoutGuide.bottomAnchor : card.bottomAnchor, constant: Flavor.isInstagram ? -64 : -14),
+            updateButton.bottomAnchor.constraint(equalTo: Flavor.isSiteApp ? view.safeAreaLayoutGuide.bottomAnchor : card.bottomAnchor, constant: Flavor.isSiteApp ? -64 : -14),
 
             empty.centerYAnchor.constraint(equalTo: card.centerYAnchor),
             empty.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 32),
@@ -553,7 +553,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             about.append(UIAction(title: "Update to \(newer)", image: UIImage(systemName: "arrow.down.circle")) { [weak self] _ in self?.installUpdate() })
         }
         // The Instagram app is one page: no tabs in its menu.
-        if Flavor.isInstagram {
+        if Flavor.isSiteApp {
             return [
                 UIMenu(options: .displayInline, children: [forward, reload]),
                 UIMenu(options: .displayInline, children: [history]),
@@ -708,7 +708,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     func makeWebView(_ given: WKWebViewConfiguration? = nil) -> WKWebView { // internal for the simulator tests
         let config = given ?? WKWebViewConfiguration()
         // Never a private (non-persistent) store. The Instagram app: the open account's own store (Accounts.swift).
-        if given == nil { config.websiteDataStore = Flavor.isInstagram ? Accounts.store(for: Accounts.current) : .default() }
+        if given == nil { config.websiteDataStore = Flavor.isSiteApp ? Accounts.store(for: Accounts.current) : .default() }
         config.allowsInlineMediaPlayback = true
         // Picture in picture (Joe, 2026-10-29: "PIP player would be nice"): WebKit's own, from a video's controls or
         // on leaving the app while a video plays, as in Safari.
@@ -723,7 +723,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         web.allowsLinkPreview = true
         web.isOpaque = false
         // The Instagram app: Instagram's own page colour (WebKit's default), dark or light; the Browser: ours.
-        if !Flavor.isInstagram {
+        if !Flavor.isSiteApp {
             web.backgroundColor = Look.bg
             web.underPageBackgroundColor = Look.bg
             web.scrollView.backgroundColor = Look.bg
@@ -872,7 +872,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         // Instagram's home feed is always the Following feed (Flavor.followingFeed), in both apps; Back and Forward
         // keep what they had.
         if isMainFrame, navigationAction.navigationType != .backForward, let url = navigationAction.request.url,
-           let following = Flavor.followingFeed(for: url) {
+           let following = Flavor.rewrite(url) {
             decisionHandler(.cancel)
             webView.load(URLRequest(url: following))
             return
@@ -883,7 +883,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             // In the Instagram app it opens in its one page.
             if navigationAction.targetFrame == nil {
                 decisionHandler(.cancel)
-                if !Flavor.isInstagram { newTab() }
+                if !Flavor.isSiteApp { newTab() }
                 self.webView.load(navigationAction.request)
                 return
             }
@@ -925,7 +925,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     // here, through the same delegates, so Policy sees it as it sees every navigation.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         // The Instagram app keeps one page: a new window's link loads there, through Policy as always.
-        if Flavor.isInstagram {
+        if Flavor.isSiteApp {
             webView.load(navigationAction.request)
             return nil
         }
@@ -941,10 +941,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         HistoryRecorder.shared.finished(webView)
-        if Flavor.isInstagram {
+        if Flavor.isSiteApp {
             matchStrips()
             let id = Accounts.current.id
-            webView.evaluateJavaScript(Accounts.usernameScript) { name, _ in Accounts.learnName(name as? String ?? "", for: id) }
+            // Instagram's page says who is signed in; an account is named after them (Accounts.swift).
+            if Flavor.isInstagram { webView.evaluateJavaScript(Accounts.usernameScript) { name, _ in Accounts.learnName(name as? String ?? "", for: id) } }
         }
         webView.scrollView.refreshControl?.endRefreshing()
         updateBar()

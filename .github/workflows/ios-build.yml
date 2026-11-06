@@ -79,6 +79,29 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
+      # The Facebook app (target Facebook, Flavor.swift): its own profile; until that secret is there it only compiles.
+      - name: Can it sign the Facebook app?
+        id: fbsigning
+        env:
+          PROFILE: ${{ secrets.IOS_ADHOC_PROFILE_FACEBOOK_BASE64 }}
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ] && [ -n "$PROFILE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::IOS_ADHOC_PROFILE_FACEBOOK_BASE64 is not set: the Facebook app compiles unsigned only (node scripts/apple-provision.mjs Facebook, then apple-secrets.mjs IOS_ADHOC_PROFILE_FACEBOOK_BASE64)."
+          fi
+
+      - name: Compile the Facebook app (unsigned)
+        run: |
+          xcodebuild build             -project ios/Browser.xcodeproj -scheme Facebook -configuration Release             -destination 'generic/platform=iOS'             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Compile (unsigned)
+        if: steps.signing.outputs.signed != 'true'
+        run: |
+          xcodebuild build \
+            -project ios/Browser.xcodeproj -scheme Browser -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
       - name: Test WebKit protection, history and the feed on iPhone simulator
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if "iPhone" in x["name"]))')
@@ -91,6 +114,12 @@ jobs:
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for g in json.load(sys.stdin)["devices"].values() for x in g if "iPhone" in x["name"]]; pick=[x for x in d if x["name"]=="iPhone 13 Pro"] or [x for x in d if "Pro" in x["name"] and "Max" not in x["name"]] or d; print(pick[0]["udid"])')
           xcodebuild test -project ios/Browser.xcodeproj -scheme Instagram -configuration Debug             -destination "platform=iOS Simulator,id=$DEVICE"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      # The Facebook app's frame and links (ios/FacebookTests), on an iPhone 13 Pro if the runner has one.
+      - name: Test the Facebook app on iPhone simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for g in json.load(sys.stdin)["devices"].values() for x in g if "iPhone" in x["name"]]; pick=[x for x in d if x["name"]=="iPhone 13 Pro"] or [x for x in d if "Pro" in x["name"] and "Max" not in x["name"]] or d; print(pick[0]["udid"])')
+          xcodebuild test -project ios/Browser.xcodeproj -scheme Facebook -configuration Debug             -destination "platform=iOS Simulator,id=$DEVICE"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       - name: Import signing certificate and provisioning profile
         if: steps.signing.outputs.signed == 'true'
@@ -124,6 +153,16 @@ jobs:
           PROFILE: ${{ secrets.IOS_ADHOC_PROFILE_INSTAGRAM_BASE64 }}
         run: |
           P=$RUNNER_TEMP/ig.mobileprovision
+          echo -n "$PROFILE" | base64 --decode -o "$P"
+          UUID=$(security cms -D -i "$P" | plutil -extract UUID raw -)
+          cp "$P" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+
+      - name: Import the Facebook app's profile
+        if: steps.fbsigning.outputs.signed == 'true'
+        env:
+          PROFILE: ${{ secrets.IOS_ADHOC_PROFILE_FACEBOOK_BASE64 }}
+        run: |
+          P=$RUNNER_TEMP/fb.mobileprovision
           echo -n "$PROFILE" | base64 --decode -o "$P"
           UUID=$(security cms -D -i "$P" | plutil -extract UUID raw -)
           cp "$P" "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
@@ -184,6 +223,28 @@ jobs:
           EOF
           xcodebuild -exportArchive             -archivePath "$RUNNER_TEMP/Instagram.xcarchive"             -exportPath "$RUNNER_TEMP/export-ig"             -exportOptionsPlist "$RUNNER_TEMP/ExportOptionsIG.plist"
           ls -la "$RUNNER_TEMP/export-ig"
+
+      - name: Archive and export the Facebook app
+        if: steps.fbsigning.outputs.signed == 'true'
+        run: |
+          xcodebuild archive             -project ios/Browser.xcodeproj -scheme Facebook -configuration Release             -destination 'generic/platform=iOS'             -archivePath "$RUNNER_TEMP/Facebook.xcarchive"             MARKETING_VERSION="$VERSION"             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+          cat > "$RUNNER_TEMP/ExportOptionsFB.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.caulfieldengineering.facebook</key><string>Facebook AdHoc</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive             -archivePath "$RUNNER_TEMP/Facebook.xcarchive"             -exportPath "$RUNNER_TEMP/export-fb"             -exportOptionsPlist "$RUNNER_TEMP/ExportOptionsFB.plist"
+          ls -la "$RUNNER_TEMP/export-fb"
 
       # A spare copy only; the install page below is what the phone uses. The account's artifact storage (shared with
       # other repos) fills up (2026-10-28), so a full store does not fail the build.
@@ -290,6 +351,14 @@ jobs:
             sed -e "s#$PAGES/app.ipa#$PAGES/instagram/app.ipa#" -e "s#<string>$BUNDLE_ID</string>#<string>com.caulfieldengineering.instagram</string>#"                 -e "s#<key>title</key><string>$APP_TITLE</string>#<key>title</key><string>Instagram</string>#" "$OUT/manifest.plist" > "$IG/manifest.plist"
             cp "$OUT/version.json" "$IG/version.json"
             sed -e "s#<title>Install Browser</title>#<title>Install Instagram</title>#" -e "s#<h1>$APP_TITLE</h1>#<h1>Instagram</h1>#"                 -e "s#$PAGES/manifest.plist#$PAGES/instagram/manifest.plist#"                 -e "s#Tabs, search and picture in picture; nothing to set up.#Instagram, filtered on the phone; nothing to set up.#" "$OUT/index.html" > "$IG/index.html"
+          fi
+          # The Facebook app, in its own folder of the same page (Policy.isOwnInstall allows exactly this manifest).
+          if ls "$RUNNER_TEMP"/export-fb/*.ipa >/dev/null 2>&1; then
+            FB="$OUT/facebook"; mkdir -p "$FB"
+            cp "$RUNNER_TEMP"/export-fb/*.ipa "$FB/app.ipa"
+            sed -e "s#$PAGES/app.ipa#$PAGES/facebook/app.ipa#" -e "s#<string>$BUNDLE_ID</string>#<string>com.caulfieldengineering.facebook</string>#"                 -e "s#<key>title</key><string>$APP_TITLE</string>#<key>title</key><string>Facebook</string>#" "$OUT/manifest.plist" > "$FB/manifest.plist"
+            cp "$OUT/version.json" "$FB/version.json"
+            sed -e "s#<title>Install Browser</title>#<title>Install Facebook</title>#" -e "s#<h1>$APP_TITLE</h1>#<h1>Facebook</h1>#"                 -e "s#$PAGES/manifest.plist#$PAGES/facebook/manifest.plist#"                 -e "s#Tabs, search and picture in picture; nothing to set up.#Facebook without the News Feed or ads, filtered on the phone; nothing to set up.#" "$OUT/index.html" > "$FB/index.html"
           fi
           touch "$OUT/.nojekyll"
           cd "$OUT"

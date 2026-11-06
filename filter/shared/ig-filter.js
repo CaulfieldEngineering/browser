@@ -22,7 +22,12 @@
   'use strict';
   const g = globalThis;
   if (g.__igFilter) return;
-  if (!/(^|\.)instagram\.com$/i.test(location.hostname)) return;
+  // Instagram, and since 2026-11-05 Facebook (the Facebook app built from the Browser, and facebook.com): the same
+  // judges and the same discreet removal; only the shape of a post differs (unitOf), and Facebook's ads and suggested
+  // injections are rules of their own in rules.js.
+  const SITE = /(^|\.)instagram\.com$/i.test(location.hostname) ? 'instagram'
+    : /(^|\.)(facebook\.com|messenger\.com)$/i.test(location.hostname) ? 'facebook' : null;
+  if (!SITE) return;
   const RULES = g.IGFilterRules;
   const BRIDGE = g.IGFilterBridge;
   if (!RULES || !BRIDGE) return;
@@ -56,17 +61,27 @@
   addStyle();
 
   const isMediaUrl = (u) => { try { return MEDIA_HOST.test(new URL(u, location.href).hostname); } catch { return false; } };
-  const onDirect = () => location.pathname.startsWith('/direct');
+  const onDirect = () => SITE === 'instagram' ? location.pathname.startsWith('/direct')
+    : /(^|\.)messenger\.com$/i.test(location.hostname) || location.pathname.startsWith('/messages');
 
   // ---- the post a piece of media belongs to ------------------------------------------------------------------------
   // Feed and post pages: <article>. Grids (profile, Explore, search, the Reels tab of a profile): the tile's link.
   // Reels and stories: the largest ancestor that holds this one video. Messages: the media itself, so a thread stays.
+  const FB_TILE = 'a[href*="/marketplace/item/"]';
   function unitOf(el) {
     if (onDirect()) return el;
-    const a = el.closest('article');
-    if (a) return a;
-    const tile = el.closest('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]');
-    if (tile) return tile;
+    if (SITE === 'facebook') {
+      // A feed or group post, a Reel, a story card; a Marketplace listing's tile.
+      const post = el.closest('[role="article"]') || el.closest('[data-pagelet^="FeedUnit"]');
+      if (post) return post;
+      const listing = el.closest(FB_TILE);
+      if (listing) return listing;
+    } else {
+      const a = el.closest('article');
+      if (a) return a;
+      const tile = el.closest('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]');
+      if (tile) return tile;
+    }
     let u = el;
     // Up to the largest box that holds only this one piece (at most one video and one picture), so hiding one reel or
     // story never takes its neighbours with it.
@@ -84,7 +99,8 @@
   // ---- hiding ---------------------------------------------------------------------------------------------------------
   // A grid tile (a link to a post or reel on a profile, Explore or search) keeps its place as a blank of the same size;
   // anything else collapses. No text, no icon.
-  const isTile = (unit) => unit.tagName === 'A' && /\/(p|reel|reels|tv)\//.test(unit.getAttribute('href') || '') && !unit.closest('article');
+  const isTile = (unit) => unit.tagName === 'A' && (SITE === 'facebook' ? unit.matches(FB_TILE) && !unit.closest('[role="article"]')
+    : /\/(p|reel|reels|tv)\//.test(unit.getAttribute('href') || '') && !unit.closest('article'));
   function placeholder(unit) {
     if (!isTile(unit) || [...unit.children].some((c) => c.classList && c.classList.contains('igf-ph'))) return;
     const r = unit.getBoundingClientRect();
@@ -129,7 +145,7 @@
     textSeen.set(unit, t.length);
     const hit = RULES.first('text', t, unit);
     if (hit) { hide(unit, 'text', hit === 'revealing-text' ? 'revealing-text' : 'text'); return true; }
-    const u = RULES.first('unit', unit, { path: location.pathname });
+    const u = RULES.first('unit', unit, { path: location.pathname, site: SITE });
     if (u) { hide(unit, 'text', u); return true; }
     return false;
   }
@@ -282,12 +298,15 @@
     for (const img of root.querySelectorAll('img, [style*="background-image"]')) handleImg(img);
     for (const v of root.querySelectorAll('video')) handleVideo(v);
   }
+  // What a post is, for the text and structure rules: Instagram's article or grid tile; Facebook's article, feed unit
+  // or Marketplace tile.
+  const UNITS = SITE === 'facebook' ? '[role="article"], [data-pagelet^="FeedUnit"], ' + FB_TILE : 'article, a[href*="/p/"], a[href*="/reel/"]';
   const textQueue = new Set();
   let textTimer = 0;
   function queueText(node) {
     const el = node && (node.nodeType === 1 ? node : node.parentElement);
     if (!el || (el.classList && el.classList.contains('igf-ph'))) return;
-    const unit = el.closest('article') || el.closest('a[href*="/p/"], a[href*="/reel/"]');
+    const unit = el.closest(UNITS);
     if (unit) textQueue.add(unit);
     if (!textTimer) textTimer = setTimeout(() => { textTimer = 0; for (const u of textQueue) checkText(u); textQueue.clear(); }, 120);
   }
@@ -306,7 +325,7 @@
   });
   mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster', 'style'] });
   // The first pass also judges the text already on the page (posts parsed before the observer saw them).
-  const allUnits = () => document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]');
+  const allUnits = () => document.querySelectorAll(UNITS);
   const start = () => {
     addStyle();
     scan(document.documentElement);

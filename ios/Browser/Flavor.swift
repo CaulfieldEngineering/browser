@@ -1,30 +1,52 @@
 import Foundation
 
-// One code base, two apps. The Browser, and the Instagram app (Joe, 2026-11-05: "We might even make a separate branch of
-// the app where Instagram can be its own icon and interface on my phone"; locked memory entry 21): the same browser,
-// built by the project.yml target Instagram with INSTAGRAM_APP set. It opens instagram.com and nothing else, one page at
-// a time, with the same Instagram filter (Filter/), the same History, and the same feed to the mini PC under its own
-// install (entry 15: if it stops reporting, that counts as tamper).
+// One code base, three apps. The Browser; the Instagram app (Joe, 2026-11-05: "We might even make a separate branch of
+// the app where Instagram can be its own icon and interface on my phone"; locked memory entry 21); and the Facebook app
+// (Joe, 2026-11-05: "we can start building a facebook version of our filtered app, too. Let's start by hiding the
+// default feed, any ads etc."). The site apps are the same browser built by the project.yml targets Instagram and
+// Facebook (INSTAGRAM_APP, FACEBOOK_APP): one site only, one page at a time, full window, the shared filter (Filter/),
+// several accounts, the same History, and the same feed to the mini PC under their own installs (entry 15: if one
+// stops reporting, that counts as tamper).
 enum Flavor {
+    enum Kind { case browser, instagram, facebook }
     #if INSTAGRAM_APP
-    static let isInstagram = true
+    static let kind = Kind.instagram
+    #elseif FACEBOOK_APP
+    static let kind = Kind.facebook
     #else
-    static let isInstagram = false
+    static let kind = Kind.browser
     #endif
+    static let isInstagram = kind == .instagram
+    static let isFacebook = kind == .facebook
+    /// One site, full window, no tabs: the Instagram app and the Facebook app.
+    static let isSiteApp = kind != .browser
 
     /// The name in the menu, on the start page and in the feed.
-    static let name = isInstagram ? "Instagram" : "Browser"
-    /// The app the feed reports for (hq-widget server/browser-feed.js, the laptop watch keeps them apart).
-    static let feedApp = isInstagram ? "instagram" : "browser"
-    /// Where this app's builds are published (ios-build.yml): the Instagram app in a folder of the same install page.
-    static let installPage = isInstagram ? "https://caulfieldengineering.github.io/browser-install/instagram/"
-                                         : "https://caulfieldengineering.github.io/browser-install/"
-    /// Where the Instagram app starts: the Following feed, the accounts Joe follows in time order (Joe, 2026-11-05: "I
-    /// follow like 1000 people but every time I open it I see the same exact post").
-    static let home = URL(string: "https://www.instagram.com/?variant=following")!
+    static let name = ["Browser", "Instagram", "Facebook"][kind == .browser ? 0 : kind == .instagram ? 1 : 2]
+    /// The app the feed reports for (hq-widget server/browser-feed.js; the laptop watch keeps them apart).
+    static let feedApp = name.lowercased()
+    /// Where this app's builds are published (ios-build.yml): the site apps in folders of the same install page.
+    static let installPage = "https://caulfieldengineering.github.io/browser-install/" + (kind == .browser ? "" : feedApp + "/")
+    /// Where a site app starts. Instagram: the Following feed, the accounts Joe follows in time order ("I follow like
+    /// 1000 people but every time I open it I see the same exact post"). Facebook: Notifications, not the News Feed.
+    static let home = isFacebook ? URL(string: "https://m.facebook.com/notifications/")! : URL(string: "https://www.instagram.com/?variant=following")!
+
+    static func isInstagramHost(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return host == "instagram.com" || host.hasSuffix(".instagram.com")
+    }
+
+    /// Facebook and what it needs to sign in and to message: facebook.com, fb.com and fb.me links, messenger.com.
+    static func isFacebookHost(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        return ["facebook.com", "fb.com", "fb.me", "messenger.com"].contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    /// The one site a site app opens.
+    static func isSiteHost(_ url: URL) -> Bool { isFacebook ? isFacebookHost(url) : isInstagramHost(url) }
 
     /// Instagram's home feed asked for without a variant ("/"), as the Following feed instead; nil for anything else
-    /// (a post, a profile, "/?variant=favorites", another site). Used for every main-frame load in both apps, so a
+    /// (a post, a profile, "/?variant=favorites", another site). Used for every main-frame load in all three apps, so a
     /// launch, a link from another app and a pull to refresh all land on Following.
     static func followingFeed(for url: URL) -> URL? {
         guard isInstagramHost(url), url.path.isEmpty || url.path == "/",
@@ -35,8 +57,15 @@ enum Flavor {
         return parts.url
     }
 
-    static func isInstagramHost(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        return host == "instagram.com" || host.hasSuffix(".instagram.com")
+    /// Facebook's home (the News Feed) as Notifications instead; nil for anything else. In all three apps.
+    static func facebookHome(for url: URL) -> URL? {
+        guard let host = url.host?.lowercased(), host == "facebook.com" || host.hasSuffix(".facebook.com"),
+              ["", "/", "/home.php", "/index.php"].contains(url.path) else { return nil }
+        var parts = URLComponents()
+        parts.scheme = "https"; parts.host = host; parts.path = "/notifications/"
+        return parts.url
     }
+
+    /// Where a main-frame load goes instead, if anywhere (the Following feed, Notifications).
+    static func rewrite(_ url: URL) -> URL? { followingFeed(for: url) ?? facebookHome(for: url) }
 }

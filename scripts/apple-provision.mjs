@@ -19,6 +19,7 @@ const BLOCKS = 'C:/Users/Joe/.apple/blocks'; // the shared certificate (dist.p12
 const ALL = [
   { bundle: 'com.caulfieldengineering.browser', name: 'Browser', profileName: 'Browser AdHoc', file: 'Browser_AdHoc.mobileprovision' },
   { bundle: 'com.caulfieldengineering.instagram', name: 'Instagram', profileName: 'Instagram AdHoc', file: 'Instagram_AdHoc.mobileprovision' },
+  { bundle: 'com.caulfieldengineering.facebook', name: 'Facebook', profileName: 'Facebook AdHoc', file: 'Facebook_AdHoc.mobileprovision' },
 ];
 const APPS = process.argv.length > 2 ? ALL.filter((a) => process.argv.slice(2).includes(a.name)) : ALL;
 const OUT = 'C:/Users/Joe/.apple/browser';

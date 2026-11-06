@@ -21,7 +21,7 @@ enum InstagramFilter {
 
     /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
     private static let scripts: [WKUserScript] = {
-        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")
@@ -39,7 +39,7 @@ enum InstagramFilter {
         let bridge = Bridge(web: web)
         ucc.removeScriptMessageHandler(forName: "igf", contentWorld: world)
         ucc.addScriptMessageHandler(bridge, contentWorld: world, name: "igf")
-        if Flavor.isInstagram { Classifier.shared.warmUp() } // the Instagram app opens Instagram: load the model at once
+        if Flavor.isSiteApp { Classifier.shared.warmUp() } // a site app opens its site at once: load the model now
     }
 
     /// Only Instagram's own image hosts are fetched for the page; nothing else can be asked for.

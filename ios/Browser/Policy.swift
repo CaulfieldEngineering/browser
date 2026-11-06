@@ -36,7 +36,7 @@ enum Policy {
         guard let url = request.url, let scheme = url.scheme?.lowercased() else { return .allow }
         // The Instagram app (Flavor.swift): a link that would open the native Instagram app or its App Store page does
         // nothing (Joe, 2026-11-05: "yes hide those"). The native app stays hidden; this app stays on the web.
-        if Flavor.isInstagram, isNativeAppLink(url) { return .ignore }
+        if Flavor.isSiteApp, isNativeAppLink(url) { return .ignore }
         if outsideSchemes.contains(scheme) { return .openOutside }
         if isOwnInstall(url) { return .openOutside }
         if scheme == "itms-services" {
@@ -57,8 +57,8 @@ enum Policy {
         if SearchBlock.isMediaSearch(url) { return .block(title: SearchBlock.title, reason: SearchBlock.reason) }
         // The Instagram app (Flavor.swift) opens Instagram only: a link out to another site stops here. Frames inside
         // Instagram's pages may load what they need.
-        if Flavor.isInstagram, isMainFrame, scheme == "http" || scheme == "https", !Flavor.isInstagramHost(url) {
-            return .block(title: "This app opens Instagram only", reason: "Links to other sites do not open here.")
+        if Flavor.isSiteApp, isMainFrame, scheme == "http" || scheme == "https", !Flavor.isSiteHost(url) {
+            return .block(title: "This app opens \(Flavor.name) only", reason: "Links to other sites do not open here.")
         }
         return .allow
     }
@@ -92,8 +92,8 @@ enum Policy {
         let parts = manifest.path.split(separator: "/", omittingEmptySubsequences: false)
         // "/browser-install/manifest.plist" -> ["", "browser-install", "manifest.plist"]
         if parts.count == 3 && parts[0].isEmpty && ownInstallPages.contains(String(parts[1])) && parts[2] == "manifest.plist" { return true }
-        // The Instagram app built from this code (Flavor.swift): "/browser-install/instagram/manifest.plist", exactly.
-        return manifest.path == "/browser-install/instagram/manifest.plist"
+        // The Instagram and Facebook apps built from this code (Flavor.swift): "/browser-install/<app>/manifest.plist", exactly.
+        return manifest.path == "/browser-install/instagram/manifest.plist" || manifest.path == "/browser-install/facebook/manifest.plist"
     }
 
     static func decide(response: URLResponse, isMainFrame: Bool, canShow: Bool) -> Decision {

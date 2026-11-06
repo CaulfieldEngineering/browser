@@ -56,6 +56,29 @@
   ];
   const REVEALING_RE = new RegExp('(^|[^\p{L}\p{N}_])#?(' + REVEALING_WORDS.map((w) => w.replace(/ /g, '\s?')).join('|') + ')(?=$|[^\p{L}\p{N}_])', 'iu');
 
+  // Facebook marks an ad with the word "Sponsored", often spelled out in pieces, in an SVG, or only as an aria-label,
+  // and with links to its ad pages. Any of these makes a post an ad.
+  // The opening words of a post, its text pieces joined by spaces (Facebook's spans run together in innerText).
+  function headText(unit) {
+    if (!unit || !unit.ownerDocument) return '';
+    const parts = [], walk = unit.ownerDocument.createTreeWalker(unit, 4 /* text */);
+    let n, len = 0;
+    while ((n = walk.nextNode()) && len < 400) { const t = n.data.trim(); if (t) { parts.push(t); len += t.length + 1; } }
+    return parts.join(' ');
+  }
+  const SUGGESTED = /\b(suggested for you|suggested groups|suggested pages|suggested posts|suggested reels|people you may know|reels and short videos|follow more pages|groups you might like)\b/i;
+  function sponsored(unit) {
+    if (!unit || !unit.querySelector) return false;
+    // "Sponsored" (capital S, a word of its own) among a post's first words, where Facebook puts it in place of the time.
+    if (/(^|[^\p{L}])Sponsored($|[^\p{L}])/u.test(headText(unit).slice(0, 160))) return true;
+    if (unit.querySelector('[aria-label="Sponsored" i], a[href*="/ads/about"], a[href*="ad_preferences"], a[href*="/ads/preferences"]')) return true;
+    for (const t of unit.querySelectorAll('svg text, svg title')) if (/^\s*Sponsored\s*$/i.test(t.textContent || '')) return true;
+    for (const el of unit.querySelectorAll('[aria-labelledby]')) {
+      for (const id of el.getAttribute('aria-labelledby').split(/\s+/)) { const l = id && unit.ownerDocument.getElementById(id); if (l && /^\s*Sponsored\s*$/i.test(l.textContent || '')) return true; }
+    }
+    return false;
+  }
+
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
     { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
@@ -65,6 +88,10 @@
         (s.Porn || 0) + (s.Hentai || 0) + (s.Sexy || 0) >= IMAGE.combined),
     },
     { id: 'revealing-image', kind: 'image', test: (s) => !!s && (s.Revealing || 0) >= REVEALING },
+    // Facebook (the Facebook app and facebook.com; Joe, 2026-11-05: "let's start by hiding the default feed, any ads
+    // etc."): every sponsored post, Reel, listing or right-rail ad, and the "suggested" injections, wherever they appear.
+    { id: 'fb-sponsored', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && sponsored(unit) },
+    { id: 'fb-suggested', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && SUGGESTED.test(headText(unit)) },
   ];
 
   g.IGFilterRules = {
@@ -77,6 +104,7 @@
     },
     thresholds: IMAGE,
     revealing: REVEALING,
+    facebook: { sponsored, suggested: (unit) => SUGGESTED.test(headText(unit)) },
     /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
      *  device (why a post was hidden); it decides nothing and changes no line. */
     explain(s) {

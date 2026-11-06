@@ -14,6 +14,11 @@ globalThis.IGFilterConfig = {
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",
   "surfaces": ["feed", "post pages", "profile grids (posts, reels, tagged)", "Explore and search (grids removed)", "the reel viewer", "stories", "messages"],
+  "facebook": {
+    "homeGoesTo": "/notifications/",
+    "hidden": ["the News Feed (home goes to Notifications)", "sponsored posts, Reels, listings and right-rail ads", "Suggested for you, Suggested groups and pages, People you may know", "the Stories and Reels rails", "prompts to open the app"],
+    "kept": ["profiles", "Messages", "Notifications", "Groups", "Pages", "Events", "Marketplace listings", "search", "posting"]
+  },
   "judges": [
     { "name": "Suggestive and explicit", "how": "nsfwjs (MobileNetV2) on the device", "line": "suggestive" },
     { "name": "Revealing clothing", "how": "TinyCLIP-ViT-40M-32 zero-shot, on the device, any person", "line": "revealing" },
