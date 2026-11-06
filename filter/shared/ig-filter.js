@@ -254,7 +254,7 @@
       const u = unitOf(img);
       // An account's avatar (search results, lists, a profile's header): only the picture goes, the row stays, so
       // he can still find people (Joe, 2026-11-05: "let's block the picture but keep the line").
-      if (v.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); stat('hidden-avatar'); return; }
+      if (v.flagged && SITE === 'instagram' && CFG.accountRules === true && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); stat('hidden-avatar'); return; }
       if (v.flagged) hide(u, 'image', v.why);
       else if (v.flagged === false) img.removeAttribute('data-igf-hold');
       else hide(u, 'checking', v.why);
@@ -512,9 +512,11 @@
       try { checkAccountRows(); checkProfile(); accRuns++; } catch (e) { accRuns = -1; }
       if (document.documentElement) document.documentElement.setAttribute('data-igf-acc', String(accRuns)); // for the tests
     };
+    if (CFG.accountRules === true) {
     setInterval(accounts, 700);
     document.addEventListener('DOMContentLoaded', accounts, { once: true });
     new MutationObserver(() => { if (!accTimer) accTimer = setTimeout(accounts, 150); }).observe(document, { childList: true, subtree: true });
+    }
   }
 
   // ---- watching the page --------------------------------------------------------------------------------------------

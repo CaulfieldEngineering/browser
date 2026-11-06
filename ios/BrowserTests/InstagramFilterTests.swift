@@ -179,6 +179,9 @@ final class InstagramFilterTests: XCTestCase {
 
     /// Accounts by name: a matching row goes entirely, an ordinary one stays (Joe, 2026-11-05: "In like profile names or bios").
     func testAccountsByNameInTheApp() async throws {
+        // Switched on with its release (filter-config.js "accountRules"); until then it is held back, not run.
+        let config = try String(contentsOf: XCTUnwrap(Bundle.main.url(forResource: "filter-config", withExtension: "js", subdirectory: "shared")), encoding: .utf8)
+        try XCTSkipUnless(config.contains("\"accountRules\": true"), "accounts by name and bio are held back (accountRules is off)")
         let browser = try browser()
         let web = browser.makeWebView()
         web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)

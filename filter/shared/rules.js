@@ -100,7 +100,7 @@
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
     { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
-    { id: 'account-terms-text', kind: 'text', test: (text) => !!accountKind(text, true) },
+    { id: 'account-terms-text', kind: 'text', test: (text) => CFG.accountRules === true && !!accountKind(text, true) },
     {
       id: 'suggestive-image', kind: 'image',
       test: (s) => !!s && ((s.Porn || 0) + (s.Hentai || 0) >= IMAGE.explicit || (s.Sexy || 0) >= IMAGE.sexy ||
@@ -126,6 +126,7 @@
     facebook: { sponsored, suggested: (unit) => SUGGESTED.test(headText(unit)) },
     /** The kind of term an account's name or bio carries, or null: every kind, the suggestive words, the revealing tags. */
     account(text) {
+      if (CFG.accountRules !== true) return null; // switched on with its tests (filter-config.js "accountRules")
       const t = forName(text);
       return accountKind(t, false) || (WORD_RE.test(t) ? 'suggestive words' : null) || (REVEALING_RE.test(t) ? 'revealing-clothing tags' : null);
     },

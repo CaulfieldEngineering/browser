@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shared = path.join(here, '..', 'shared');
 const require = createRequire(process.env.PLAYWRIGHT_FROM || 'C:/Users/Joe/Documents/GitHub/blocks/package.json');
+const ACCOUNT_RULES = (() => { const g = {}; new Function('globalThis', fs.readFileSync(path.join(here, '..', 'shared', 'filter-config.js'), 'utf8'))(g); return g.IGFilterConfig.accountRules === true; })(); // filter-config.js "accountRules": its tests run when it is on
 const pw = require('playwright');
 const chromium = pw[process.env.ENGINE || 'chromium']; // ENGINE=webkit runs the same tests in WebKit
 
@@ -209,7 +210,8 @@ try {
   await go('/someprofile/');
   check('profile grid: a plain tile shows', await visible('#p1 img'));
   check('profile grid: a flagged tile is hidden', (await hiddenAs('#p2 img')) === 'image');
-  check('profile: a large avatar is judged; flagged, only the picture goes (a plain circle)', await page.$eval('#bigavatar', (e) => !!e.getAttribute('data-igf-avatar') && getComputedStyle(e).objectPosition.startsWith('-99999px') && getComputedStyle(e).borderRadius === '50%'));
+  if (ACCOUNT_RULES) check('profile: a large avatar is judged; flagged, only the picture goes (a plain circle)', await page.$eval('#bigavatar', (e) => !!e.getAttribute('data-igf-avatar') && getComputedStyle(e).objectPosition.startsWith('-99999px') && getComputedStyle(e).borderRadius === '50%'));
+  else check('profile: a large avatar is judged (and hidden when flagged)', (await hiddenAs('#bigavatar')) === 'image');
   // ---- a profile's Reels tab: background-image tiles ----
   await go('/someprofile/reels/');
   check('reels tab: a plain background tile shows', await page.$eval('#r1 [style*="background-image"]', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')));
@@ -255,15 +257,19 @@ try {
   check('search: the search field stays', await shown('q'));
   check('search: an account result stays, with its small avatar (judged clean)', (await shown('r1')) && (await shown('r1img')));
   check('search: a hashtag result stays', await shown('r2'));
+  if (ACCOUNT_RULES) {
   check('search: a flagged avatar is out of sight, a plain circle in its place', await page.$eval('#r3img', (e) => !!e.getAttribute('data-igf-avatar') && getComputedStyle(e).objectPosition.startsWith('-99999px')));
   check('search: its row stays, with the username, so he can find the person', (await shown('r3')) && /flagged_acct/.test(await page.$eval('#r3', (e) => e.innerText)));
+  } else check('search: a small avatar the filter flags is gone', !(await shown('r3img')));
   check('search: "Suggested for you" is gone, heading and accounts', !(await shown('suggHead')) && !(await shown('sugg')));
   check('search: "Trending" is gone', !(await shown('trend')));
   check('search: a picture larger than a small avatar is gone', !(await shown('bigimg')));
   check('search: the Top and Reels tabs are gone, Accounts stays', !(await shown('tabTop')) && !(await shown('tabReels')) && (await shown('tabAccounts')));
   check('search: post and reel tiles are gone', !(await shown('kw1')));
   check('search: videos are gone', !(await shown('kwv')));
-  // ---- accounts by name and bio; the new caption terms ----
+  // ---- accounts by name and bio; the new caption terms (filter-config.js "accountRules") ----
+  if (!ACCOUNT_RULES) console.log('held back: accounts by name and bio, avatars, caption terms (accountRules is off)');
+  else {
   await go('/explore/search/names/', 1200);
   check('names: an ordinary account stays', await shown('n1'));
   check('names: a username with a term ("spicy.amy") goes, row and all', !(await shown('n2')));
@@ -286,14 +292,17 @@ try {
   check('captions: "of" in a sentence stays', await shown('c4'));
   const acst = await page.evaluate(() => globalThis.IGFilterBridge.stats);
   check('counts: accounts by name or bio, and avatars, on the device', true, JSON.stringify(acst));
+  }
   // ---- the reel and story viewers skip a hidden slide ----
   const onScreenSlide = () => page.evaluate(() => { const sc = document.getElementById('sc'); const r = sc.getBoundingClientRect(); const el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); const s = el && el.closest('.slide'); return s ? s.id : ''; });
   await go('/reels/V1/', 1800);
   check('reels: opened on a hidden reel, the viewer goes on to the next one that is not (two in a row skipped)', (await onScreenSlide()) === 'v4', await onScreenSlide());
   await go('/reels/V2/', 1500);
   check('reels: the last reel hidden, the viewer goes back to the one before', (await onScreenSlide()) === 'w1', await onScreenSlide());
-  await go('/reels/V3/', 200);
-  check('reels: a reel still being checked holds its place (not collapsed, not shown)', await page.evaluate(() => { const x = document.getElementById('x2'); return x.hasAttribute('data-igf-slide-hold') && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility === 'hidden'; }));
+  await go('/reels/V3/', 0);
+  // watched from the first moment: its first answer ("still loading") and the next look can be a few ms apart in WebKit
+  const held = await page.waitForFunction(() => { const x = document.getElementById('x2'); return !!x && x.hasAttribute('data-igf-slide-hold') && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility === 'hidden'; }, null, { timeout: 3000, polling: 10 }).then(() => true, () => false);
+  check('reels: a reel still being checked holds its place (not collapsed, not shown)', held);
   await page.waitForTimeout(900);
   check('reels: once it passes, it is shown where it was', await page.evaluate(() => { const x = document.getElementById('x2'); return !x.hasAttribute('data-igf-gone') && getComputedStyle(x).visibility === 'visible'; }) && (await onScreenSlide()) === 'x2', await onScreenSlide());
   await go('/stories/someone/111/', 900);
@@ -328,6 +337,8 @@ try {
   check('revealing: counted on its own lines', rstats['hidden-revealing'] >= 1 && rstats['hidden-revealing-text'] >= 1, JSON.stringify(rstats));
   check('explore link: hidden on a wide screen (the laptop)', !(await visible('#explorelink')));
   await page.setViewportSize({ width: 390, height: 844 });
+  // WebKit applies the media query a moment after the resize
+  await page.waitForFunction(() => { const e = document.getElementById('explorelink'); return e && getComputedStyle(e).display !== 'none'; }, null, { timeout: 2000 }).catch(() => {});
   check('explore link: kept on a phone, where it is the search tab', await visible('#explorelink'));
   await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the reel viewer ----
