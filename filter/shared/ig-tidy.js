@@ -47,6 +47,50 @@
   document.addEventListener('DOMContentLoaded', markExplore, { once: true });
   setInterval(markExplore, 250);
 
+  // The search page, plain (Joe, 2026-11-05: "Can we get rid of all of the junk and images that come along with the
+  // Instagram search page?"): on /explore and below only the search field and a plain list of results (accounts and
+  // hashtags) are left. Gone: every video, every picture shown larger than a small avatar, the suggested, trending and
+  // discover sections, and the Top / Reels / Places tabs with their tiles. A result keeps its small avatar (44 pt or
+  // less), which the filter still judges there (ig-filter.js judges every picture on these pages, however small).
+  const AVATAR = (globalThis.IGFilterConfig && globalThis.IGFilterConfig.searchAvatarPx) || 44;
+  const SECTION = /^(suggested( for you)?|suggested accounts|trending|trending now|discover( people)?|explore|recommended( for you)?|popular|see all|more like this)$/i;
+  const TABS = /^(top|reels|places|videos|for you)$/i;
+  const gone = (el) => { if (el && !el.hasAttribute('data-igt')) { el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); } };
+  // The box a section heading heads: the smallest one around it that also holds that section's links, and never one
+  // with the search field or another section's heading in it (so the real results are never taken with it).
+  function sectionOf(head) {
+    let box = head, best = head;
+    for (let i = 0; i < 5 && box.parentElement && box.parentElement !== document.body; i++) {
+      const up = box.parentElement;
+      if (up.querySelector('input, textarea, [role="search"]')) break;
+      const heads = [...up.querySelectorAll('h1, h2, h3, h4, span, div')].filter((x) => x.children.length <= 1 && SECTION.test((x.textContent || '').trim()));
+      if (heads.length > 1) break;
+      box = up;
+      if (up.querySelectorAll('a[href]').length >= 2) { best = up; break; } // the heading's row and its list
+    }
+    return best;
+  }
+  function plainSearch() {
+    if (!/^\/explore(\/|$)/.test(location.pathname) || !document.body) return;
+    for (const v of document.querySelectorAll('video')) gone(v.closest('a') || v);
+    for (const img of document.querySelectorAll('img, [style*="background-image"]')) {
+      const r = img.getBoundingClientRect();
+      if (r.width > AVATAR + 0.5 || r.height > AVATAR + 0.5) gone(img.closest('a[href*="/p/"], a[href*="/reel/"]') || img);
+    }
+    for (const el of document.querySelectorAll('h1, h2, h3, h4, span, div')) {
+      if (el.children.length > 1) continue;
+      const t = (el.textContent || '').trim();
+      if (!t || t.length > 30) continue;
+      if (SECTION.test(t)) gone(sectionOf(el));
+    }
+    for (const tab of document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] button')) {
+      if (TABS.test((tab.textContent || '').trim())) gone(tab);
+    }
+  }
+  let ps = 0;
+  new MutationObserver(() => { if (!ps) ps = setTimeout(() => { ps = 0; plainSearch(); }, 60); }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style'] });
+  setInterval(plainSearch, 500);
+
   // Links to the app that are clicked anyway go nowhere.
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');

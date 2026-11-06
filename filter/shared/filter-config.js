@@ -7,10 +7,12 @@ globalThis.IGFilterConfig = {
   "suggestive": { "explicit": 0.3, "sexy": 0.45, "combined": 0.6 },
   "revealing": 0.6,
   "smallPx": 120,
+  "searchAvatarPx": 44,
   "retrySeconds": [5, 20, 60],
   "frameEverySeconds": 2,
   "labels": "none",
   "explore": "removed",
+  "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",
   "surfaces": ["feed", "post pages", "profile grids (posts, reels, tagged)", "Explore and search (grids removed)", "the reel viewer", "stories", "messages"],
   "judges": [
     { "name": "Suggestive and explicit", "how": "nsfwjs (MobileNetV2) on the device", "line": "suggestive" },

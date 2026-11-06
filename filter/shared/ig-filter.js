@@ -177,7 +177,9 @@
     holdIn(unit, img);
     const go = async () => {
       const r = img.getBoundingClientRect();
-      if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < SMALL && r.height < SMALL) { img.removeAttribute('data-igf-hold'); return; }
+      // On search and Explore pages every picture is judged, small avatars too (only small ones are kept there).
+      const small = /^\/explore(\/|$)/.test(location.pathname) ? 0 : SMALL;
+      if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < small && r.height < small) { img.removeAttribute('data-igf-hold'); return; }
       const v = await judgeUrl(src);
       if (srcOf(img) !== src) return; // changed meanwhile; the new src is judged on its own
       const u = unitOf(img);

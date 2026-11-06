@@ -101,6 +101,32 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(hidden, ["a", "b"])
     }
 
+    /// The search page, plain: the field and the results stay; suggested and trending sections, the Top and Reels tabs
+    /// and videos go (Joe, 2026-11-05: "get rid of all of the junk and images that come along with the Instagram search page").
+    func testTheSearchPageIsPlainInTheApp() async throws {
+        let browser = try browser()
+        let web = browser.makeWebView()
+        web.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        browser.view.addSubview(web)
+        defer { web.removeFromSuperview() }
+        let html = """
+        <main><input id="q" placeholder="Search">
+        <div role="tablist"><a role="tab" id="top" href="#">Top</a><a role="tab" id="reels" href="#">Reels</a><a role="tab" id="accounts" href="#">Accounts</a></div>
+        <a id="acct" href="/pedalshop/">pedalshop</a><a id="tag" href="/explore/tags/fuzz/">#fuzz</a>
+        <div id="sugg"><div><span>Suggested for you</span><a href="#">See all</a></div><div><a href="/a/">a</a><a href="/b/">b</a></div></div>
+        <video id="v" style="width:200px;height:300px"></video></main>
+        """
+        web.loadHTMLString(html, baseURL: URL(string: "https://www.instagram.com/explore/search/keyword/")!)
+        let js = "['q','acct','tag','accounts','top','reels','sugg','v'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
+        var state = ""
+        for _ in 0..<30 {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+            if state.contains("sugg:gone") && state.contains("v:gone") && state.contains("reels:gone") { break }
+        }
+        XCTAssertEqual(state, "q:shown acct:shown tag:shown accounts:shown top:gone reels:gone sugg:gone v:gone")
+    }
+
     /// Links to the native app or the App Store are recognised (the Instagram app ignores them; Flavor.swift).
     func testNativeAppLinksAreRecognised() {
         for s in ["instagram://media?id=1", "itms-apps://apps.apple.com/app/id389801252", "https://apps.apple.com/us/app/instagram/id389801252", "https://instagram.app.link/abc", "fb://profile"] {

@@ -37,6 +37,21 @@ const pages = {
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
   '/explore/': `<main><input id="search" placeholder="Search"><div id="grid">${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</div></main>`,
   '/explore/search/': `<main><input id="search" value="pedal"><a id="acct" href="/pedalshop/">pedalshop</a>${tile('s1', '/p/S1/', 'plain-s1.jpg')}</main>`,
+  '/explore/search/keyword/': `<main>
+    <div role="search"><input id="q" value="pedal" placeholder="Search"></div>
+    <div role="tablist"><a role="tab" id="tabTop" href="#">Top</a><a role="tab" id="tabReels" href="#">Reels</a><a role="tab" id="tabAccounts" href="#">Accounts</a></div>
+    <div id="results">
+      <a id="r1" href="/pedalshop/"><img id="r1img" src="${CDN}/plain-av1.jpg" style="width:44px;height:44px"><span>pedalshop</span></a>
+      <a id="r2" href="/explore/tags/fuzz/"><span>#fuzz</span></a>
+      <a id="r3" href="/flagged_acct/"><img id="r3img" src="${CDN}/flag-av3.jpg" style="width:44px;height:44px"><span>flagged_acct</span></a>
+    </div>
+    <div id="sugg"><div><span id="suggHead">Suggested for you</span><a href="#">See all</a></div>
+      <div><a href="/someone1/"><img src="${CDN}/plain-s1.jpg" style="width:150px;height:150px">someone1</a><a href="/someone2/"><img src="${CDN}/plain-s2.jpg" style="width:150px;height:150px">someone2</a></div></div>
+    <div id="trend"><h3>Trending</h3><a href="/explore/tags/a/">#a</a><a href="/explore/tags/b/">#b</a></div>
+    <div id="bigrow"><a href="/pedalshop2/"><img id="bigimg" src="${CDN}/plain-big.jpg" style="width:90px;height:90px">pedalshop2</a></div>
+    ${tile('kw1', '/p/KW1/', 'plain-kw1.jpg')}
+    <video id="kwv" src="${CDN}/v.mp4" style="width:200px;height:300px"></video>
+  </main>`,
   '/revealing/': `<main>
    <article id="rv1"><header><a href="/a/">a</a></header><img src="${CDN}/rev-1.jpg" width="400" height="400"><div>Saturday.</div></article>
    <article id="rv2"><header><a href="/b/">b</a></header><img src="${CDN}/plain-rv2.jpg" width="400" height="400"><div>leg day #gymgirl</div></article>
@@ -142,6 +157,19 @@ try {
   check('explore: the search box stays', await visible('#search'));
   await go('/explore/search/');
   check('search results: accounts listed, no recommended posts', (await visible('#acct')) && await page.$eval('#s1', (e) => getComputedStyle(e).display === 'none'));
+  // ---- the search page, plain ("get rid of all of the junk and images that come along with the Instagram search page") ----
+  await go('/explore/search/keyword/', 1200);
+  const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return true; }, id);
+  check('search: the search field stays', await shown('q'));
+  check('search: an account result stays, with its small avatar (judged clean)', (await shown('r1')) && (await shown('r1img')));
+  check('search: a hashtag result stays', await shown('r2'));
+  check('search: a small avatar the filter flags is gone', !(await shown('r3img')));
+  check('search: "Suggested for you" is gone, heading and accounts', !(await shown('suggHead')) && !(await shown('sugg')));
+  check('search: "Trending" is gone', !(await shown('trend')));
+  check('search: a picture larger than a small avatar is gone', !(await shown('bigimg')));
+  check('search: the Top and Reels tabs are gone, Accounts stays', !(await shown('tabTop')) && !(await shown('tabReels')) && (await shown('tabAccounts')));
+  check('search: post and reel tiles are gone', !(await shown('kw1')));
+  check('search: videos are gone', !(await shown('kwv')));
   // ---- revealing clothing (any person; gender-neutral) ----
   await go('/revealing/');
   check('revealing: a picture the judge scores revealing hides its post', (await hiddenAs('#rv1')) === 'image');
