@@ -118,7 +118,12 @@ final class InstagramAppTests: XCTestCase {
         XCTAssertEqual(y, 0, "the comments page starts at the top")
         let focused = try await web.evaluateJavaScript("document.activeElement && document.activeElement.id") as? String
         XCTAssertNotEqual(focused, "add", "the comment box the page focused is let go")
-        _ = try? await web.evaluateJavaScript("history.back(); true")
+        // Back, as Instagram's own page sees it: the address goes back without a new entry and popstate fires. (WebKit
+        // skips history entries made by script without a tap when going Back, so history.back() from a test cannot
+        // reach them; on Instagram every new page follows Joe's tap.)
+        let blur = try await web.evaluateJavaScript("document.documentElement.getAttribute('data-igt-blur') || 'none'") as? String
+        XCTAssertNotEqual(blur, "failed", "the field could be let go")
+        _ = try? await web.evaluateJavaScript("history.replaceState({}, '', '/'); dispatchEvent(new PopStateEvent('popstate')); true")
         try await Task.sleep(nanoseconds: 1_500_000_000)
         let popped = try await web.evaluateJavaScript("window.popped === true") as? Bool
         XCTAssertEqual(popped, true, "Back was a history step inside the page (not a reload)")

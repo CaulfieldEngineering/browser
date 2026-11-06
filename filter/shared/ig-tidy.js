@@ -60,9 +60,14 @@
   for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
   const atTop = () => {
     if (Date.now() > settleUntil || userAt > settleUntil - 1500) return;
-    if (scrollY > 0) scrollTo(0, 0);
+    const root = document.documentElement;
+    if (scrollY > 0) { scrollTo(0, 0); root && root.setAttribute('data-igt-top', String(Date.now())); }
     const a = document.activeElement;
-    if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) || (a && a.isContentEditable)) { try { a.blur(); } catch {} }
+    if (a && (/^(INPUT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) {
+      try { a.blur(); } catch {}
+      if (document.activeElement === a) { try { a.setAttribute('readonly', ''); a.blur(); a.removeAttribute('readonly'); } catch {} }
+      root && root.setAttribute('data-igt-blur', document.activeElement === a ? 'failed' : 'done');
+    }
   };
   setInterval(() => {
     if (location.href === lastHref) return;
