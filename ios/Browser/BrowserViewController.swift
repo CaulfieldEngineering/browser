@@ -179,6 +179,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     @objc func showInstagramMenu() {
         guard presentedViewController == nil else { return }
         let sheet = UIAlertController(title: Accounts.current.name, message: "\(Flavor.name) \(Self.myVersion)", preferredStyle: .actionSheet)
+        // Hide a picture (Joe, 2026-11-05: "Something discrete", "Or just a block icon or something"): an icon, no words.
+        let pick = UIAlertAction(title: " ", style: .default) { [weak self] _ in self?.startHidePick() }
+        pick.setValue(UIImage(systemName: "nosign"), forKey: "image")
+        pick.accessibilityLabel = "Hide a picture"
+        sheet.addAction(pick)
         sheet.addAction(UIAlertAction(title: "Accounts", style: .default) { [weak self] _ in self?.showAccounts() })
         sheet.addAction(UIAlertAction(title: "Reload", style: .default) { [weak self] _ in self?.webView.reload() })
         sheet.addAction(UIAlertAction(title: "History", style: .default) { [weak self] _ in self?.showHistory() })
@@ -551,6 +556,8 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         }
         let history = UIAction(title: "History", image: UIImage(systemName: "clock.arrow.circlepath")) { [weak self] _ in self?.showHistory() }
         let filter = UIAction(title: "Instagram filter today", image: UIImage(systemName: "line.3.horizontal.decrease.circle")) { [weak self] _ in self?.showFilterCounts() }
+        let hidePick = UIAction(title: "", image: UIImage(systemName: "nosign")) { [weak self] _ in self?.startHidePick() }
+        hidePick.accessibilityLabel = "Hide a picture" 
         let share = UIAction(title: "Share", image: UIImage(systemName: "square.and.arrow.up"), attributes: web.url == nil ? .disabled : []) { [weak self] _ in
             self?.sharePage()
         }
@@ -570,7 +577,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         return [
             UIMenu(options: .displayInline, children: [forward, reload]),
             UIMenu(options: .displayInline, children: [newTab, closeTab]),
-            UIMenu(options: .displayInline, children: [history, filter]),
+            UIMenu(options: .displayInline, children: [history, filter, hidePick]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: about),
         ]
