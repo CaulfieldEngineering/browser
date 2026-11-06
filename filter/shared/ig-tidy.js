@@ -31,6 +31,22 @@
   const run = () => { t = 0; tidy(document.body); };
   new MutationObserver(() => { if (!t) t = setTimeout(run, 150); }).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', run, { once: true });
+  // No Explore (Joe, 2026-11-05: "let's get rid of the explore page"). On /explore and everything under it (the search
+  // tab's grid, tag and place grids, search results' recommended posts) every post and reel tile is gone, so only the
+  // search box and the accounts it finds are left. On the phone the search tab itself is /explore/, so its link stays;
+  // on a wide screen (the laptop), where search has its own panel, the Explore link goes too.
+  const exploreCss = 'html[data-igt-explore] a[href*="/p/"],html[data-igt-explore] a[href*="/reel/"],html[data-igt-explore] a[href*="/reels/"],html[data-igt-explore] a[href*="/tv/"]{display:none !important}' +
+    '@media (min-width: 768px){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
+  const markExplore = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    if (!document.getElementById('igt-style')) { const st = document.createElement('style'); st.id = 'igt-style'; st.textContent = exploreCss; (document.head || root).appendChild(st); }
+    if (/^\/explore(\/|$)/.test(location.pathname)) root.setAttribute('data-igt-explore', ''); else root.removeAttribute('data-igt-explore');
+  };
+  markExplore();
+  document.addEventListener('DOMContentLoaded', markExplore, { once: true });
+  setInterval(markExplore, 250);
+
   // Links to the app that are clicked anyway go nowhere.
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');

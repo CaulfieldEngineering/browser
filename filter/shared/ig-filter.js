@@ -28,9 +28,10 @@
   if (!RULES || !BRIDGE) return;
 
   const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
-  const SMALL = 120;           // rendered px: avatars, icons and story rings are not judged
-  const FRAME_EVERY = 2000;    // ms between frame checks while a video plays
-  const RETRY = g.__igFilterRetry || [5000, 20000, 60000]; // tests shorten it; nothing on the page can reach it
+  const CFG = g.IGFilterConfig || {}; // filter-config.js, also shown on the Devices dashboard
+  const SMALL = CFG.smallPx || 120;                                // rendered px: avatars, icons and small story rings are not judged
+  const FRAME_EVERY = (CFG.frameEverySeconds || 2) * 1000;         // between frame checks while a video plays
+  const RETRY = g.__igFilterRetry || (CFG.retrySeconds || [5, 20, 60]).map((x) => x * 1000); // tests shorten it
   const state = { removed: 0, judged: 0, failed: 0, ready: false };
   g.__igFilter = state;
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
@@ -127,7 +128,7 @@
     if (textSeen.get(unit) === t.length) return false;
     textSeen.set(unit, t.length);
     const hit = RULES.first('text', t, unit);
-    if (hit) { hide(unit, 'text', 'text'); return true; }
+    if (hit) { hide(unit, 'text', hit === 'revealing-text' ? 'revealing-text' : 'text'); return true; }
     const u = RULES.first('unit', unit, { path: location.pathname });
     if (u) { hide(unit, 'text', u); return true; }
     return false;
@@ -138,7 +139,8 @@
   async function ask(fn) {
     let r = null;
     try { r = await fn(); } catch (e) { r = { _error: 'bridge' }; }
-    if (r && !r._error && typeof r === 'object' && 'Neutral' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
+    // Judged only when both judges answered (nsfwjs and the revealing-clothing model); otherwise "still checking".
+    if (r && !r._error && typeof r === 'object' && 'Neutral' in r && 'Revealing' in r) { state.judged++; const why = RULES.first('image', r) ? (RULES.explain(r) || 'sexy') : 'clean'; return { flagged: why !== 'clean', why }; }
     state.failed++;
     return { flagged: null, why: 'unjudged-' + ((r && r._error) || 'none') };
   }

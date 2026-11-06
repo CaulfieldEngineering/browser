@@ -35,7 +35,14 @@ const pages = {
    <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>`,
   '/someprofile/reels/': `<main><div class="x1qjc9v5">${bgTile('r1', '/someprofile/reel/C1/', 'plain-r1.jpg')}${bgTile('r2', '/someprofile/reel/C2/', 'flag-r2.jpg')}</div></main>`,
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
-  '/explore/': `<main>${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</main>`,
+  '/explore/': `<main><input id="search" placeholder="Search"><div id="grid">${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</div></main>`,
+  '/explore/search/': `<main><input id="search" value="pedal"><a id="acct" href="/pedalshop/">pedalshop</a>${tile('s1', '/p/S1/', 'plain-s1.jpg')}</main>`,
+  '/revealing/': `<main>
+   <article id="rv1"><header><a href="/a/">a</a></header><img src="${CDN}/rev-1.jpg" width="400" height="400"><div>Saturday.</div></article>
+   <article id="rv2"><header><a href="/b/">b</a></header><img src="${CDN}/plain-rv2.jpg" width="400" height="400"><div>leg day #gymgirl</div></article>
+   <article id="rv3"><header><a href="/c/">c</a></header><img src="${CDN}/half-rv3.jpg" width="400" height="400"><div>new shorts, wire stripper in hand</div></article>
+   <article id="rv4"><header><a href="/d/">d</a></header><img src="${CDN}/nsfwonly-rv4.jpg" width="400" height="400"><div>x</div></article>
+   <nav><a id="explorelink" href="/explore/">Explore</a></nav></main>`,
   '/reels/C9/': `<main><div class="x78zum5"><div class="xh8yej3" id="viewer"><div><video id="rv" poster="${CDN}/flag-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator/">creator</a> caption</div></div>
    <div class="xh8yej3" id="viewer2"><div><video id="rv2" poster="${CDN}/plain-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator2/">creator2</a> fine</div></div></div></main>`,
   '/stories/someone/': `<main><div id="ring"><img id="ringimg" src="${CDN}/flag-ring.jpg" style="width:56px;height:56px"></div><section id="story"><img id="storyimg" src="${CDN}/flag-story.jpg" style="width:360px;height:640px"></section></main>`,
@@ -50,11 +57,14 @@ globalThis.IGFilterBridge = {
     this.calls.push(u);
     return new Promise((r) => setTimeout(() => {
       if (/fail/.test(u)) return r({ _error: 'unreadable' });
-      if (/late/.test(u)) return r(++globalThis.__lateTries < 2 ? { _error: 'loading' } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02 });
-      r(/flag/.test(u) ? { Sexy: 0.8, Neutral: 0.2, Porn: 0, Hentai: 0, Drawing: 0 } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02 });
+      if (/late/.test(u)) return r(++globalThis.__lateTries < 2 ? { _error: 'loading' } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
+      if (/rev/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.92 });
+      if (/half/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.3 });
+      if (/nsfwonly/.test(u)) return r({ Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02 });
+      r(/flag/.test(u) ? { Sexy: 0.8, Neutral: 0.2, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.1 } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
     }, 30));
   },
-  classifyData() { return Promise.resolve({ Neutral: 0.99, Sexy: 0, Porn: 0, Hentai: 0, Drawing: 0 }); },
+  classifyData() { return Promise.resolve({ Neutral: 0.99, Sexy: 0, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.01 }); },
 };`;
 
 let failed = 0;
@@ -68,6 +78,7 @@ try {
     r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<main></main>'}</body></html>` });
   });
   await ctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'filter-config.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'rules.js'), 'utf8') });
   await ctx.addInitScript({ content: fakeBridge });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-filter.js'), 'utf8') });
@@ -125,11 +136,24 @@ try {
   // ---- a profile's tagged grid ----
   await go('/someprofile/tagged/');
   check('tagged grid: flagged hidden, plain shown', (await hiddenAs('#t1 img')) === 'image' && (await visible('#t2 img')));
-  // ---- Explore ----
+  // ---- Explore: gone ("let's get rid of the explore page"); search stays ----
   await go('/explore/');
-  check('explore: a flagged reel tile (background) is hidden', (await hiddenAs('#e1 [style*="background-image"]')) === 'image');
-  check('explore: a plain post tile shows', await visible('#e2 img'));
-  check('explore: a tile not judged is a plain blank while it is checked', ['checking', 'unjudged'].includes(await hiddenAs('#e3 [style*="background-image"]')) && await page.$eval('#e3', (e) => !!e.querySelector('.igf-ph') && e.innerText.trim() === ''));
+  check('explore: the grid is gone, every tile, plain or not', await page.evaluate(() => ['e1', 'e2', 'e3'].every((id) => getComputedStyle(document.getElementById(id)).display === 'none')));
+  check('explore: the search box stays', await visible('#search'));
+  await go('/explore/search/');
+  check('search results: accounts listed, no recommended posts', (await visible('#acct')) && await page.$eval('#s1', (e) => getComputedStyle(e).display === 'none'));
+  // ---- revealing clothing (any person; gender-neutral) ----
+  await go('/revealing/');
+  check('revealing: a picture the judge scores revealing hides its post', (await hiddenAs('#rv1')) === 'image');
+  check('revealing: a caption tag (#gymgirl) hides its post', (await hiddenAs('#rv2')) === 'text');
+  check('revealing: under the line, and ordinary words (shorts, wire stripper), the post stays', (await hiddenAs('#rv3')) === '' && await visible('#rv3 img'));
+  check('revealing: an answer without the revealing judge is not a verdict (held as still checking)', ['checking', 'unjudged'].includes(await hiddenAs('#rv4')));
+  const rstats = await page.evaluate(() => globalThis.IGFilterBridge.stats);
+  check('revealing: counted on its own lines', rstats['hidden-revealing'] >= 1 && rstats['hidden-revealing-text'] >= 1, JSON.stringify(rstats));
+  check('explore link: hidden on a wide screen (the laptop)', !(await visible('#explorelink')));
+  await page.setViewportSize({ width: 390, height: 844 });
+  check('explore link: kept on a phone, where it is the search tab', await visible('#explorelink'));
+  await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the reel viewer ----
   await go('/reels/C9/', 1200);
   check('reel viewer: a reel whose poster is flagged is hidden', (await hiddenAs('#rv')) === 'video' || (await hiddenAs('#rv')) === 'image', await hiddenAs('#rv'));
@@ -141,7 +165,14 @@ try {
 
   // ---- the real classifier ----
   const p2 = await browser.newPage();
-  await p2.goto(pathToFileURL(path.join(shared, 'classifier.html')).href);
+  const types = { html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', json: 'application/json', wasm: 'application/wasm', onnx: 'application/octet-stream', jpg: 'image/jpeg' };
+  await p2.route('https://classifier.test/**', (r) => {
+    const rel = decodeURIComponent(new URL(r.request().url()).pathname).replace(/^\/+/, '');
+    const f = rel.startsWith('eval/') && process.env.EVAL_IMAGES ? path.join(process.env.EVAL_IMAGES, rel.slice(5)) : path.join(shared, rel);
+    if (!fs.existsSync(f)) return r.fulfill({ status: 404, body: '' });
+    r.fulfill({ contentType: types[f.split('.').pop()] || 'application/octet-stream', body: fs.readFileSync(f) });
+  });
+  await p2.goto('https://classifier.test/classifier.html');
   const r = await p2.evaluate(async () => {
     const c = document.createElement('canvas'); c.width = 300; c.height = 500;
     const g = c.getContext('2d'); g.fillStyle = '#28a'; g.fillRect(0, 0, 300, 500); g.fillStyle = '#fd3'; g.fillRect(40, 60, 200, 120);
@@ -153,6 +184,15 @@ try {
   check('classifier: loads and scores a picture (two at once, one after the other)', sum > 0.9 && 'Sexy' in r.s && r.same, JSON.stringify(r));
   check('classifier: a plain picture is not flagged', r.s.Sexy < 0.45 && r.s.Porn + r.s.Hentai < 0.3);
   check('classifier: reports its backend and timing', !!r.info.backend && r.info.n === 2, JSON.stringify(r.info));
+  check('classifier: the revealing-clothing judge loads and answers', typeof r.s.Revealing === 'number' && r.info.clip.ready, JSON.stringify(r.info.clip));
+  check('classifier: a plain picture is not revealing', r.s.Revealing < 0.6, String(r.s.Revealing));
+  // Optional, local only: EVAL_IMAGES=<folder with rev/ and neg/ photos> prints the revealing score of each.
+  if (process.env.EVAL_IMAGES) {
+    for (const kind of ['rev', 'neg']) for (const f of fs.readdirSync(path.join(process.env.EVAL_IMAGES, kind))) {
+      const v = await p2.evaluate(async (u) => { const img = new Image(); img.src = u; await img.decode(); return IGClip.revealing(img); }, `https://classifier.test/eval/${kind}/${f}`);
+      console.log(`     eval ${kind} ${v.toFixed(2)} ${f}`);
+    }
+  }
 } finally {
   await browser.close();
 }

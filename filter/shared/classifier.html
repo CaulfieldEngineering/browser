@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- The Instagram filter's image classifier, on the device (nsfwjs, MobileNetV2, MIT; vendor/). Loaded hidden: by the
+<!-- The Instagram filter's image classifiers, on the device: nsfwjs (MobileNetV2, MIT) and the revealing-clothing
+     judge (TinyCLIP with onnxruntime-web, MIT; clip.js); vendor/. Loaded hidden: by the
      iPhone app in a 1-point web view from its bundle, by the laptop extension as its offscreen document. It is given
      image bytes as data: URLs and answers scores; it loads nothing from the network and sends nothing anywhere. -->
 <html>
@@ -9,6 +10,8 @@
 <script src="vendor/nsfwjs.min.js"></script>
 <script src="vendor/model.min.js"></script>
 <script src="vendor/group1-shard1of1.min.js"></script>
+<script src="vendor/ort/ort.wasm.min.js"></script>
+<script src="clip.js"></script>
 <script src="classifier.js"></script>
 </head>
 <body></body>

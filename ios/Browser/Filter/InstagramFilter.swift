@@ -19,9 +19,9 @@ import WebKit
 enum InstagramFilter {
     static let world = WKContentWorld.world(name: "igfilter")
 
-    /// The page scripts, in order: the rules, the bridge, the filter, the prompt tidier.
+    /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
     private static let scripts: [WKUserScript] = {
-        ["rules", "bridge-ios", "ig-filter", "ig-tidy"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")
@@ -162,6 +162,7 @@ final class FilterStats {
         var lines = ["Hidden today: \(picture) picture, \(caption) caption, \(unchecked) not checked"]
         lines.append("Shown again after checking: \(t["restored"] ?? 0); judged clean: \(t["judged-clean"] ?? 0)")
         if picture > 0 { lines.append("Picture line: \(sum("hidden-sexy")) suggestive, \(sum("hidden-explicit")) explicit, \(sum("hidden-combined")) combined") }
+        lines.append("Revealing clothing: \(t["hidden-revealing"] ?? 0) picture, \(t["hidden-revealing-text"] ?? 0) caption")
         let misses = t.filter { $0.key.hasPrefix("unjudged-") }.sorted { $0.key < $1.key }.map { "\($0.key.dropFirst(9)) \($0.value)" }
         if !misses.isEmpty { lines.append("Not judged: " + misses.joined(separator: ", ")) }
         if let b = model["backend"] as? String { lines.append("Model: \(b.isEmpty ? "?" : b), loaded in \(model["loadMs"] as? Int ?? 0) ms, \(model["avgMs"] as? Int ?? 0) ms a picture") }
@@ -183,17 +184,20 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     private func view() -> WKWebView? {
         if let web { return web }
-        guard let page = Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared") else { return nil }
+        guard Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared") != nil else { return nil }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "igc")
+        // Served from the app's own files under igc://local/ (BundleFiles), so the page can fetch its models (the
+        // revealing-clothing model and its runtime); a file:// page cannot fetch.
+        config.setURLSchemeHandler(BundleFiles(), forURLScheme: "igc")
         let web = WKWebView(frame: CGRect(x: 0, y: 0, width: 4, height: 4), configuration: config)
         web.isUserInteractionEnabled = false
         web.alpha = 0.01 // in a window, so WebKit keeps it running; too small and faint to see
         web.navigationDelegate = self
         self.web = web
         attachToWindow()
-        web.loadFileURL(page, allowingReadAccessTo: page.deletingLastPathComponent())
+        web.load(URLRequest(url: URL(string: "igc://local/classifier.html")!))
         return web
     }
 
@@ -256,5 +260,27 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         for (_, cb) in pending { cb(.failed("timeout")) }
         pending.removeAll()
         webView.reload()
+    }
+}
+
+/// The classifier page's own files (the app's folder "shared"), as igc://local/<path>. Only files inside that folder.
+final class BundleFiles: NSObject, WKURLSchemeHandler {
+    private static let types = ["html": "text/html", "js": "text/javascript", "mjs": "text/javascript", "json": "application/json",
+                                "wasm": "application/wasm", "onnx": "application/octet-stream", "txt": "text/plain"]
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let base = Bundle.main.resourceURL?.appendingPathComponent("shared").standardizedFileURL,
+              let path = task.request.url?.path, !path.contains("..") else { return fail(task) }
+        let file = base.appendingPathComponent(String(path.drop(while: { $0 == "/" }))).standardizedFileURL
+        guard file.path.hasPrefix(base.path + "/"), let data = try? Data(contentsOf: file) else { return fail(task) }
+        let type = Self.types[file.pathExtension.lowercased()] ?? "application/octet-stream"
+        let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": type, "Content-Length": String(data.count), "Cache-Control": "no-store"])!
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+    private func fail(_ task: WKURLSchemeTask) {
+        task.didFailWithError(NSError(domain: NSURLErrorDomain, code: NSURLErrorFileDoesNotExist))
     }
 }

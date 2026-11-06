@@ -295,6 +295,9 @@ jobs:
           cd "$OUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # One fresh commit each time (no history): the apps carry the on-device models (about 60 MB each), and the
+          # page only ever needs the newest build.
+          git checkout -q --orphan fresh
           git add -A
-          git commit -m "Browser iPhone app $VERSION" || echo "nothing changed"
-          git push origin main
+          git commit -q -m "Browser and Instagram iPhone apps $VERSION"
+          git push -f origin fresh:main
