@@ -19,9 +19,9 @@ import WebKit
 enum InstagramFilter {
     static let world = WKContentWorld.world(name: "igfilter")
 
-    /// The page scripts, in order: the rules, the bridge, the filter, the prompt tidier.
+    /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
     private static let scripts: [WKUserScript] = {
-        ["rules", "bridge-ios", "ig-filter", "ig-tidy"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")

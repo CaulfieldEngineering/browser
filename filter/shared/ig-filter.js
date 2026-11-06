@@ -28,9 +28,10 @@
   if (!RULES || !BRIDGE) return;
 
   const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
-  const SMALL = 120;           // rendered px: avatars, icons and story rings are not judged
-  const FRAME_EVERY = 2000;    // ms between frame checks while a video plays
-  const RETRY = g.__igFilterRetry || [5000, 20000, 60000]; // tests shorten it; nothing on the page can reach it
+  const CFG = g.IGFilterConfig || {}; // filter-config.js, also shown on the Devices dashboard
+  const SMALL = CFG.smallPx || 120;                                // rendered px: avatars, icons and small story rings are not judged
+  const FRAME_EVERY = (CFG.frameEverySeconds || 2) * 1000;         // between frame checks while a video plays
+  const RETRY = g.__igFilterRetry || (CFG.retrySeconds || [5, 20, 60]).map((x) => x * 1000); // tests shorten it
   const state = { removed: 0, judged: 0, failed: 0, ready: false };
   g.__igFilter = state;
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };

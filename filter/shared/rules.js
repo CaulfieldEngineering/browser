@@ -38,7 +38,9 @@
 
   // The classifier's line. Porn and Hentai are explicit; Sexy is "suggestive" (swimwear, lingerie, posing). Strict on
   // purpose: a false removal costs a post he did not need; a miss is what this is for.
-  const IMAGE = { explicit: 0.3, sexy: 0.45, combined: 0.6 };
+  // The lines come from filter-config.js (also shown on the Devices dashboard); without it, the same values here.
+  const CFG = g.IGFilterConfig || {};
+  const IMAGE = CFG.suggestive || { explicit: 0.3, sexy: 0.45, combined: 0.6 };
 
   // Revealing clothing (Joe, 2026-11-05: "Can we try upping the filtering on instagram? Like, shorter tank-tops, bikinis,
   // gymwear etc."). Its own category beside the suggestive one, gender-neutral (no gender model; agreed to skip it for
@@ -46,7 +48,7 @@
   // picture is hidden from 0.6 (on a check of public-domain photos, revealing ones scored 0.86 to 0.99 and everyday
   // ones, people at the gym in loose clothes included, 0.27 or less). The text side: these words and tags. Ordinary gear
   // and clothing words (shorts, t-shirt, gym, workout) are not on it.
-  const REVEALING = 0.6;
+  const REVEALING = typeof CFG.revealing === 'number' ? CFG.revealing : 0.6;
   const REVEALING_WORDS = [
     'swimwear', 'swimsuit', 'swimsuits', 'bathingsuit', 'bikinibody', 'bikiniseason', 'gymwear', 'gymgirl', 'gymgirls',
     'fitgirl', 'fitgirls', 'fitnessgirl', 'fitnessgirls', 'fitnessmodel', 'fitness model', 'fitspo', 'sportsbra',
