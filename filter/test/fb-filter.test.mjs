@@ -103,8 +103,11 @@ try {
   // ---- Marketplace: listings stay, sponsored and suggestive ones go ----
   await go('/marketplace/', 1000);
   check('marketplace: a listing stays', (await shown('m1')) && await page.evaluate(() => getComputedStyle(document.querySelector('#m1 img')).visibility === 'visible'));
-  check('marketplace: a sponsored listing is gone (its tile kept blank)', await page.evaluate(() => document.getElementById('m2').hasAttribute('data-igf-gone') && !/Sponsored|sale/.test(document.getElementById('m2').innerText)));
-  check('marketplace: a suggestive listing is gone (its tile kept blank)', await page.evaluate(() => document.getElementById('m3').hasAttribute('data-igf-gone')));
+  // Since 2026-11-08 a tile hidden for good is taken out and the next ones close up (Joe: "can we just skip it instead of
+  // leaving the hole?"), so nothing of it is drawn at all.
+  const takenOut = (id) => page.evaluate((i) => { const e = document.getElementById(i); const r = e.getBoundingClientRect(); return e.hasAttribute('data-igf-gone') && r.width === 0 && r.height === 0; }, id);
+  check('marketplace: a sponsored listing is gone (taken out, the next listing moves up)', await takenOut('m2'));
+  check('marketplace: a suggestive listing is gone (taken out)', await takenOut('m3'));
 
   // ---- Messages and profiles keep working ----
   await go('/messages/t/1/', 900);

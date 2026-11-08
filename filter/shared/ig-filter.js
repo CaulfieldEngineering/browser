@@ -12,8 +12,9 @@
 // they are shown large (120 px or more).
 // What it does: a post or Reel that a rule flags is hidden without a word (Joe, 2026-11-05: "i'd prefer not to label the
 // pictures. Keep it more discrete"): in the feed and the reel viewer it collapses as if it were not there; in a grid the
-// tile stays as a plain blank tile in the page's own colour, so the grid does not reflow. There is no reveal, no blur, no
-// setting and no switch; a blank tile cannot be tapped. Pictures from Instagram's CDN are held invisible until judged.
+// tile is taken out and the tiles after it close up (2026-11-08; before, it stayed a blank). A tile still being checked
+// stays a plain blank in the page's own colour. There is no reveal, no blur, no setting and no switch; a blank tile
+// cannot be tapped. Pictures from Instagram's CDN are held invisible until judged.
 // One that could not be judged yet (the model still loading, the picture not readable) is hidden the same way and tried
 // again at 5, 20 and 60 seconds: it fills in quietly once judged clean, and stays hidden if flagged or never judged.
 // The reason is counted on the device (IGFilterBridge.stat), never shown on the page. Videos are judged by their
@@ -46,6 +47,18 @@
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
     '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]){display:none !important}',
+    // A hidden feed post keeps one invisible pixel in the page instead of none (Joe, 2026-11-08: "my feed seems to stop
+    // after a few scrolls down - presumably it stops once something gets blocked"): Instagram loads the next posts when
+    // the last ones come into view, and a post with display:none never comes into view.
+    'article[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
+    // A grid whose blocked tile was taken out: its rows give their tiles to one grid so the rest close up (Joe,
+    // 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"). Anything else in it
+    // (a spinner, a row not marked yet) spans the full width, as before.
+    '[data-igf-grid]{display:grid !important;grid-template-columns:repeat(var(--igf-cols,3),minmax(0,1fr)) !important;column-gap:var(--igf-cgap,0px) !important;row-gap:var(--igf-rgap,0px) !important}',
+    '[data-igf-grid]>:not([data-igf-row]){grid-column:1/-1}',
+    '[data-igf-row]{display:contents !important}',
+    '[data-igf-row]>*{margin:0 !important;width:auto !important;min-width:0 !important;max-width:none !important}',
+    '[data-igf-row]>[data-igf-cell-gone]{display:none !important}',
     // A reel or story still being checked holds its place in the viewer (its picture held invisible), not collapsed.
     '[data-igf-slide-hold]{visibility:hidden !important}',
     '[data-igf-tile]{pointer-events:none !important}',
@@ -119,6 +132,37 @@
     if (r.height > 0) ph.style.height = Math.round(r.height) + 'px'; else ph.style.aspectRatio = '1';
     unit.prepend(ph);
   }
+  // A tile hidden for good leaves the grid: its row is found (the nearest box whose siblings also hold tiles), the rows'
+  // container becomes one grid with the same columns and gaps, and the tile's cell is dropped, so the tiles after it move
+  // up. A tile still being checked keeps its blank (it may come back). Rows Instagram adds later are marked as they come.
+  const TILE_SEL = SITE === 'facebook' ? FB_TILE : 'a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]';
+  const holdsTile = (el) => el.nodeType === 1 && !!(el.matches(TILE_SEL) || el.querySelector(TILE_SEL));
+  const gridObs = new MutationObserver((ms) => {
+    for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.parentElement && n.parentElement.hasAttribute('data-igf-grid') && holdsTile(n)) n.setAttribute('data-igf-row', '');
+  });
+  function skipTile(unit) {
+    // The cell: the nearest box (the tile or above) with a sibling that also holds a tile. Its parent is the row.
+    let cell = unit;
+    while (cell.parentElement && cell.parentElement !== document.body && ![...cell.parentElement.children].some((c) => c !== cell && holdsTile(c))) cell = cell.parentElement;
+    if (cell === unit) return;  // tiles straight in one grid: the tile's own display:none already closes it up
+    const row = cell.parentElement, grid = row && row.parentElement;
+    if (!grid || grid === document.body || row === document.body) { placeholder(unit); return; } // no grid found: keep the blank
+    if (!grid.hasAttribute('data-igf-grid')) {
+      const cells = [...row.children].filter(holdsTile), rows = [...grid.children].filter(holdsTile);
+      const a = cells[0] && cells[0].getBoundingClientRect(), b = cells[1] && cells[1].getBoundingClientRect();
+      const r1 = rows[0] && rows[0].getBoundingClientRect(), r2 = rows[1] && rows[1].getBoundingClientRect();
+      grid.style.setProperty('--igf-cols', String(Math.max(1, ...rows.map((r) => [...r.children].filter(holdsTile).length))));
+      if (a && b) grid.style.setProperty('--igf-cgap', Math.max(0, Math.round(b.left - a.right)) + 'px');
+      if (r1 && r2) grid.style.setProperty('--igf-rgap', Math.max(0, Math.round(r2.top - r1.bottom)) + 'px');
+      for (const r of rows) r.setAttribute('data-igf-row', '');
+      grid.setAttribute('data-igf-grid', '');
+      gridObs.observe(grid, { childList: true });
+    }
+    row.setAttribute('data-igf-row', '');
+    cell.setAttribute('data-igf-cell-gone', '');
+  }
+  // After a post collapses, Instagram is told the page moved, so it checks whether to load the next ones.
+  const nudge = () => { try { dispatchEvent(new Event('scroll')); } catch {} };
   const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
   // ---- the reel and story viewers: a hidden slide is skipped (Joe, 2026-11-05: "when a reel is blocked it needs to
   // skip right over it, cause now it just hangs up since the timer doesn't run so I manually have to swipe") ----------
@@ -168,7 +212,8 @@
     unit.setAttribute('data-igf-gone', kind);
     unit.setAttribute('data-igf-why', why || kind);
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
-    placeholder(unit);
+    if (kind !== 'checking' && isTile(unit)) skipTile(unit); else placeholder(unit);
+    if (!isTile(unit)) setTimeout(nudge, 50);
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
   }

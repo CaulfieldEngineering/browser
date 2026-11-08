@@ -47,6 +47,7 @@ const pages = {
    </main>${NAV}${BANNER}`,
   '/someprofile/': `<main><nav><a id="home" href="/">Home</a><a id="favs" href="/?variant=favorites">Favorites</a></nav><header><img id="bigavatar" src="${CDN}/flag-avatar.jpg" style="width:150px;height:150px" alt="someprofile's profile picture"></header>
    <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>${NAV}${BANNER}`,
+  '/gridprofile/': `<main><div id="rows">${[[1, 2, 3], [4, 5, 6]].map((row) => `<div class="_ac7v" style="display:flex;gap:4px;margin-bottom:4px">${row.map((n) => tile('g' + n, '/p/G' + n + '/', (n === 2 ? 'flag' : 'plain') + '-g' + n + '.jpg')).join('')}</div>`).join('')}</div></main>`,
   '/someprofile/reels/': `<main><div class="x1qjc9v5">${bgTile('r1', '/someprofile/reel/C1/', 'plain-r1.jpg')}${bgTile('r2', '/someprofile/reel/C2/', 'flag-r2.jpg')}</div></main>`,
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
   '/explore/': `<main><input id="search" placeholder="Search"><div id="spin" role="progressbar" style="width:32px;height:32px"></div><div id="grid">${bgTile('e1', '/other/reel/E1/', 'flag-e1.jpg')}${tile('e2', '/p/E2/', 'plain-e2.jpg')}${bgTile('e3', '/other/reel/E3/', 'fail-e3.jpg')}</div></main>${NAV}${BANNER}`,
@@ -162,6 +163,7 @@ try {
   const go = async (p, wait = 900) => { await page.goto('https://www.instagram.com' + p); await page.waitForTimeout(wait); };
   // hidden: the post is marked and shows only its placeholder; shown: not marked and its media visible
   const hiddenAs = (sel) => page.$eval(sel, (e) => { const u = e.closest('[data-igf-gone]') || (e.previousElementSibling && e.previousElementSibling.classList.contains('igf-ph') && e.hasAttribute('data-igf-gone') ? e : null); return u ? u.getAttribute('data-igf-gone') : ''; });
+  const gone1px = (e) => e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0';
   const visible = (sel) => page.$eval(sel, (e) => getComputedStyle(e).visibility === 'visible' && getComputedStyle(e).display !== 'none' && !e.closest('[data-igf-gone]'));
 
   // ---- the feed ----
@@ -170,10 +172,12 @@ try {
   check('feed: a small avatar is not held', await visible('#avatar'));
   check('filter done: the first whole-page pass is marked', await page.evaluate(() => Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1));
   check('feed: a flagged picture hides its post', (await hiddenAs('#img')) === 'image');
-  check('feed: a hidden post collapses entirely, with no words', await page.$eval('#img', (e) => getComputedStyle(e).display === 'none' && !e.querySelector('.igf-ph')));
+  check('feed: a hidden post collapses entirely, with no words', await page.$eval('#img', (e) => e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0' && !e.querySelector('.igf-ph')));
+  // Joe, 2026-11-08: the feed stopped loading after a hidden post; a post with display:none never comes into view.
+  check('feed: a hidden post still comes into view (one invisible pixel, not display:none), so the next posts load', await page.$eval('#img', (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height === 1));
   check('feed: nothing on the page says why (no labels)', !/Hidden|suggestive|caption/i.test(await page.evaluate(() => document.body.innerText)));
-  check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && await page.$eval('#txt', (e) => getComputedStyle(e).display === 'none'));
-  check('feed: a picture not judged yet is hidden while it is checked', (await hiddenAs('#fail')) === 'checking' && await page.$eval('#fail', (e) => getComputedStyle(e).display === 'none'));
+  check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && await page.$eval('#txt', gone1px));
+  check('feed: a picture not judged yet is hidden while it is checked', (await hiddenAs('#fail')) === 'checking' && await page.$eval('#fail', gone1px));
   await page.waitForTimeout(1500);
   check('feed: still not judged after the last try: stays hidden', (await hiddenAs('#fail')) === 'unjudged');
   check('feed: judged clean on a later try: shown again', await visible('#late img'));
@@ -215,9 +219,16 @@ try {
   await go('/someprofile/reels/');
   check('reels tab: a plain background tile shows', await page.$eval('#r1 [style*="background-image"]', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')));
   check('reels tab: a flagged background tile is hidden', (await hiddenAs('#r2 [style*="background-image"]')) === 'image');
-  check('reels tab: the hidden tile stays a blank of the same size: no picture, no count, no words', await page.$eval('#r2', (e) => { const ph = e.querySelector('.igf-ph'); return !!ph && ph.getBoundingClientRect().height >= 290 && getComputedStyle(e.querySelector('.x6s0dn4')).display === 'none' && e.innerText.trim() === ''; }));
-  check('reels tab: a blank tile does not answer taps (no reveal)', await page.$eval('#r2', (e) => getComputedStyle(e).pointerEvents === 'none'));
-  check('reels tab: the grid does not reflow (the plain tile is still where it was)', await page.$eval('#r1', (e) => e.getBoundingClientRect().height >= 290));
+  // Joe, 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"
+  check('reels tab: the hidden tile is taken out, no blank left (nothing to see or tap)', await page.$eval('#r2', (e) => e.getBoundingClientRect().height === 0 && e.getBoundingClientRect().width === 0));
+  check('reels tab: the plain tile still shows at its size', await page.$eval('#r1', (e) => e.getBoundingClientRect().height >= 290));
+  // ---- a grid of rows: the tiles after a hidden one close up ----
+  await go('/gridprofile/');
+  check('grid: the flagged tile is taken out', await page.$eval('#g2', (e) => e.getBoundingClientRect().height === 0));
+  check('grid: the next tile moves into its place', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g3').top - r('g1').top) < 2 && Math.abs(r('g3').left - r('g1').right - 4) < 3; }));
+  check('grid: a tile from the next row moves up to fill the row', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g4').top - r('g1').top) < 2; }));
+  check('grid: the columns keep their width', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g1').width - r('g4').width) < 2 && r('g1').width >= 190; }));
+  await go('/someprofile/reels/');
   // A tile whose background is set after it is on the page.
   await page.evaluate(() => { const d = document.querySelector('#r1 [style*="background-image"]'); d.style.backgroundImage = 'url("https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-r1b.jpg")'; });
   await page.waitForTimeout(400);
@@ -252,7 +263,7 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the search page, plain ("get rid of all of the junk and images that come along with the Instagram search page") ----
   await go('/explore/search/keyword/', 1200);
-  const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return true; }, id);
+  const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return true; }, id);
   check('search: the search field stays', await shown('q'));
   check('search: an account result stays, with its small avatar (judged clean)', (await shown('r1')) && (await shown('r1img')));
   check('search: a hashtag result stays', await shown('r2'));
