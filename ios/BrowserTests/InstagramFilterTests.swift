@@ -77,8 +77,10 @@ final class InstagramFilterTests: XCTestCase {
         }
         XCTAssertEqual(gone, ["hot"])
         // Discreet (Joe, 2026-11-05: "i'd prefer not to label the pictures"): the post collapses, with no words on the page.
-        let shown = try? await web.evaluateJavaScript("getComputedStyle(document.getElementById('hot')).display + '|' + document.body.innerText") as? String
-        XCTAssertEqual(shown?.components(separatedBy: "|").first, "none", "a hidden post collapses")
+        // Since 2026-11-08 a hidden feed post keeps one invisible pixel, not display:none, so the feed keeps loading past it
+        // (Joe: "my feed seems to stop after a few scrolls down").
+        let shown = try? await web.evaluateJavaScript("(document.getElementById('hot').getBoundingClientRect().height <= 1 && getComputedStyle(document.getElementById('hot')).opacity === '0' ? 'collapsed' : 'shown') + '|' + document.body.innerText") as? String
+        XCTAssertEqual(shown?.components(separatedBy: "|").first, "collapsed", "a hidden post collapses")
         XCTAssertFalse(shown?.contains("Hidden") ?? true, "nothing on the page says why")
         let seen = try? await web.evaluateJavaScript("typeof window.IGFilterRules + typeof window.__igFilter") as? String
         XCTAssertEqual(seen, "undefinedundefined", "the page cannot see the filter")
@@ -248,7 +250,7 @@ final class InstagramFilterTests: XCTestCase {
         var gone = false
         for _ in 0..<20 {
             try await Task.sleep(nanoseconds: 300_000_000)
-            gone = (try? await web.evaluateJavaScript("getComputedStyle(document.getElementById('post')).display === 'none'") as? Bool) ?? false
+            gone = (try? await web.evaluateJavaScript("document.getElementById('post').getBoundingClientRect().height <= 1 && getComputedStyle(document.getElementById('post')).opacity === '0'") as? Bool) ?? false
             if gone && HiddenByHand.shared.ids.contains("instagram:BYHAND9") { break }
         }
         XCTAssertTrue(gone, "the post is hidden")
