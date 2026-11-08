@@ -91,6 +91,10 @@ const pages = {
   '/pedal.dan/': `<main><header><img id="dav" src="${CDN}/plain-dav.jpg" style="width:150px;height:150px" alt="pedal.dan's profile picture">
       <section><h2 id="dname">pedal.dan</h2><div id="dbio">Guitar pedals, audio electronics. Gym rat. DM for collab.</div></section></header>
     <div class="_ac7v">${tile('dp1', '/p/DP1/', 'plain-dp1.jpg')}</div></main>${NAV}`,
+  // A post still being checked when Joe has scrolled past it, then shown again; overflow-anchor:none, as in WebKit.
+  '/anchor/': `<style>html,body{overflow-anchor:none}</style><main><article id="lateup"><header><a href="/y/">y</a></header><img src="${CDN}/late-up.jpg" width="400" height="400"><div>Hi</div></article>
+   ${Array.from({ length: 8 }, (_, i) => `<article id="an${i}" style="height:500px"><header><a href="/p${i}/">p${i}</a></header><div>post ${i}</div></article>`).join('')}</main>
+   <script>scrollTo(0, 1500);</script>`,
   '/captions/': `<main>
     <article id="c1"><header><a href="/x/">x</a></header><div>New drop, link in bio for my content</div></article>
     <article id="c2"><header><a href="/y/">y</a></header><div>Find me on fansly</div></article>
@@ -196,6 +200,14 @@ try {
   check('prompts: an instagram:// link hidden', !(await visible('#scheme')));
   check('prompts: "See this post in the app" answered "Not now"', await page.evaluate(() => !document.getElementById('sheet')));
 
+  // Joe, 2026-11-08: "It keeps pushing back up when we get to a certain point".
+  await page.goto('https://www.instagram.com/anchor/');
+  const drift = await page.evaluate(() => new Promise((done) => {
+    const tops = [], t0 = performance.now();
+    const look = () => { tops.push(Math.round(document.getElementById('an4').getBoundingClientRect().top)); if (performance.now() - t0 < 900) requestAnimationFrame(look); else done({ tops: [...new Set(tops)], state: document.getElementById('lateup').getAttribute('data-igf-gone') || 'shown' }); };
+    look();
+  }));
+  check('feed: a post above the screen that is checked and then shown again does not move the feed', Math.max(...drift.tops) - Math.min(...drift.tops) <= 1 && drift.state === 'shown', JSON.stringify(drift));
   // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
   await go('/', 700);
   check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());

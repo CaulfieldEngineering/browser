@@ -163,6 +163,22 @@
   }
   // After a post collapses, Instagram is told the page moved, so it checks whether to load the next ones.
   const nudge = () => { try { dispatchEvent(new Event('scroll')); } catch {} };
+  // A post above the screen that collapses or comes back must not move what is on screen (Joe, 2026-11-08: "It keeps
+  // pushing back up when we get to a certain point"): WebKit does not hold the scroll still when the page above changes
+  // height, so a post still being checked, shown again seconds later after Joe scrolled past it, threw the feed back up.
+  // The first post at or below the top of the screen is kept where it was.
+  const POST_SEL = SITE === 'facebook' ? '[role="article"]' : 'article';
+  function keepPlace(unit, change) {
+    if (inViewer() || isTile(unit) || unit.getBoundingClientRect().top >= 0) { change(); return; }
+    const anchor = [...document.querySelectorAll(POST_SEL)].find((a) => a !== unit && !unit.contains(a) && !a.contains(unit) && a.getBoundingClientRect().top >= 0);
+    const before = anchor && anchor.getBoundingClientRect().top;
+    change();
+    if (!anchor) return;
+    const d = anchor.getBoundingClientRect().top - before;
+    if (Math.abs(d) < 1) return;
+    const sc = scrollerOf(anchor);
+    if (sc) sc.scrollTop += d; else scrollBy(0, d);
+  }
   const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
   // ---- the reel and story viewers: a hidden slide is skipped (Joe, 2026-11-05: "when a reel is blocked it needs to
   // skip right over it, cause now it just hangs up since the timer doesn't run so I manually have to swipe") ----------
@@ -208,9 +224,11 @@
     if (was === 'checking' && kind === 'checking') return;
     const viewer = inViewer() && !isTile(unit);
     const wasOnScreen = viewer && onScreen(unit);
-    if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
-    unit.setAttribute('data-igf-gone', kind);
-    unit.setAttribute('data-igf-why', why || kind);
+    keepPlace(unit, () => {
+      if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
+      unit.setAttribute('data-igf-gone', kind);
+      unit.setAttribute('data-igf-why', why || kind);
+    });
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
     if (kind !== 'checking' && isTile(unit)) skipTile(unit); else placeholder(unit);
     if (!isTile(unit)) setTimeout(nudge, 50);
@@ -220,10 +238,12 @@
   // Shown again only when every held picture in it has now been judged clean (no tap, no control: the verdict).
   function restore(unit) {
     if (kindOf(unit) !== 'checking') return;
-    unit.removeAttribute('data-igf-gone');
-    unit.removeAttribute('data-igf-why');
-    unit.removeAttribute('data-igf-tile');
-    unit.removeAttribute('data-igf-slide-hold');
+    keepPlace(unit, () => {
+      unit.removeAttribute('data-igf-gone');
+      unit.removeAttribute('data-igf-why');
+      unit.removeAttribute('data-igf-tile');
+      unit.removeAttribute('data-igf-slide-hold');
+    });
     const ph = [...unit.children].find((c) => c.classList && c.classList.contains('igf-ph'));
     if (ph) ph.remove();
     stat('restored');
