@@ -6,6 +6,10 @@
 // next ones. Posts seen during this visit stay, so scrolling back up still finds them, and so does Back. Everywhere else
 // (profiles, a post's own page, messages, Reels) nothing is skipped. Noted on this device only, per account (each
 // account has its own storage), at most 6000 posts and 30 days.
+// Repeats, always (Joe, 2026-11-10, with a screen recording: "I'm also stuck in some cyclical loop when scrolling. It
+// keeps pulling up the same 3 photos"): Instagram sometimes adds the same batch of posts to the bottom of the feed again
+// (the recording: four posts, then the same four, then the same four). A post whose id is already on the page further
+// up is taken out the same way, so scrolling goes on to the next new one. Not part of the setting.
 // The setting: the app's menu, "Skip posts I've seen" (on unless turned off). The app answers IGFilterBridge.seenOn()
 // and sends the events igs-on / igs-off when it is switched; where there is no such bridge (the laptop) it is on.
 (function () {
@@ -39,7 +43,7 @@
     return null;
   };
 
-  const css = 'html:not([data-igs-off]) article[data-igs-seen]{display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}';
+  const css = 'html:not([data-igs-off]) article[data-igs-seen],article[data-igs-dup]{display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}';
   const addStyle = () => {
     const parent = document.head || document.documentElement;
     if (!parent || document.getElementById('igs-style')) return;
@@ -81,13 +85,25 @@
   // Nothing is skipped until the app has said whether the setting is on (at most 1.5 s).
   let asked = !BRIDGE.seenOn;
   function look() {
-    if (!asked || !onFeed() || !document.body) return;
+    if (!onFeed() || !document.body) return;
     addStyle();
     for (const post of document.querySelectorAll('article:not([data-igs-looked])')) {
       const id = idOf(post);
       if (!id) continue; // its link not built yet: looked at again on the next change
       post.setAttribute('data-igs-looked', '');
+      post.setAttribute('data-igs-id', id);
+      // A repeat: the same post already on the page above this one.
+      const first = document.querySelector(`article[data-igs-id="${CSS.escape(id)}"]:not([data-igs-dup])`);
+      if (first && first !== post && (first.compareDocumentPosition(post) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        keepPlace(post, () => post.setAttribute('data-igs-dup', ''));
+        for (const v of post.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
+        state.repeats = (state.repeats || 0) + 1;
+        stat('feed-repeat-skipped');
+        setTimeout(nudge, 50);
+        continue;
+      }
       const t = seen.get(id);
+      if (!asked) { post.removeAttribute('data-igs-looked'); continue; } // the setting not known yet: looked at again
       if (state.on && t && t < loadedAt) {
         keepPlace(post, () => post.setAttribute('data-igs-seen', ''));
         for (const v of post.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }

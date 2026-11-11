@@ -38,6 +38,8 @@ const reelViewer = (names, start) => `<main><div id="sc" style="height:600px;ove
 const seenPost = (id) => `<article id="${id}" style="height:340px"><header><a href="/acct${id}/">acct${id}</a></header><a href="/p/${id}xxxx/"><time>1h</time></a><div>post ${id}</div></article>`;
 const pages = {
   '?seen': `<main role="main">${['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'].map(seenPost).join('')}</main>`,
+  // The recording of 2026-11-10: the same four posts added to the bottom again, twice.
+  '?repeat': `<main role="main">${['R1', 'R2', 'R3', 'R4'].map(seenPost).join('')}${['R1', 'R2', 'R3', 'R4'].map((id) => seenPost(id).replace(`id="${id}"`, `id="${id}b"`)).join('')}</main>`,
   '?seenprofile': `<main><header>acctS1</header>${seenPost('S1')}</main>`,
   '/': `<main role="main">
    <article id="ok"><header><a href="/pedalshop/"><img id="avatar" src="${CDN}/avatar.jpg" width="32" height="32" alt="pedalshop's profile picture"></a><a href="/pedalshop/">pedalshop</a></header>
@@ -256,6 +258,13 @@ try {
   await page.evaluate(() => { sessionStorage.removeItem('igs-off'); document.dispatchEvent(new Event('igs-on')); });
   await go('/someprofile/?fx=seenprofile', 700);
   check('seen: off the home feed (a profile), a seen post is not skipped', await page.$eval('#S1', (e) => e.getBoundingClientRect().height >= 300 && !e.hasAttribute('data-igs-seen')));
+
+  await go('/?variant=following&fx=repeat', 700);
+  check('repeats: a post already further up the feed, added again at the bottom, is skipped', await page.$eval('#R1b', (e) => e.getBoundingClientRect().height === 1) && await page.$eval('#R4b', (e) => e.getBoundingClientRect().height === 1));
+  check('repeats: the first copy stays', await page.$eval('#R1', (e) => e.getBoundingClientRect().height >= 300));
+  await page.evaluate(() => { const m = document.querySelector('main'); m.insertAdjacentHTML('beforeend', '<article id="R2c" style="height:340px"><a href="/p/R2xxxx/">x</a></article><article id="R9" style="height:340px"><a href="/p/R9xxxx/">x</a></article>'); });
+  await page.waitForTimeout(300);
+  check('repeats: one added later is skipped too, a new post after it is not', await page.$eval('#R2c', (e) => e.getBoundingClientRect().height === 1) && await page.$eval('#R9', (e) => e.getBoundingClientRect().height >= 300));
 
   // ---- a profile's posts grid, and its large avatar ----
   await go('/someprofile/');
