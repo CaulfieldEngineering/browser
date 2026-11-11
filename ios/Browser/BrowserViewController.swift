@@ -50,6 +50,12 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// Shown above the toolbar, and in the ••• menu, when the install page has a newer build (Joe, 2026-10-29: "As
     /// always let's build in an updater or link into the app"). It asks iOS to install from the install page's manifest.
     private let updateButton = UIButton(type: .system)
+    /// The little x beside it (Joe, 2026-11-11, the capsule sitting on a checkout button: "Can we get a little x next
+    /// to the update button"). It puts that version's capsule away; the menu's line and dot stay, and the next
+    /// version shows the capsule again.
+    private let updateClose = UIButton(type: .system)
+    private static let dismissedBuildKey = "updateDismissedBuild"
+    private var newerBuild = 0
     private var newerVersion: String?
     private static let installPage = Flavor.installPage
     /// HQ, Joe's own chat app, in Chrome's place for its assistant. Only this one app.
@@ -256,8 +262,11 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.newerVersion = build > Self.myBuild ? version : nil
+                self.newerBuild = build
                 self.updateButton.configuration?.title = "Update to \(version)"
-                self.updateButton.isHidden = self.newerVersion == nil
+                let dismissed = UserDefaults.standard.integer(forKey: Self.dismissedBuildKey) >= build
+                self.updateButton.isHidden = self.newerVersion == nil || dismissed
+                self.updateClose.isHidden = self.updateButton.isHidden
                 self.moreDot.isHidden = self.newerVersion == nil
             }
         }.resume()
@@ -419,6 +428,22 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         updateButton.isHidden = true
         updateButton.addAction(UIAction { [weak self] _ in self?.installUpdate() }, for: .touchUpInside)
 
+        var closeLook = UIButton.Configuration.filled()
+        closeLook.baseBackgroundColor = UIColor.black.withAlphaComponent(0.55)
+        closeLook.baseForegroundColor = .white
+        closeLook.cornerStyle = .capsule
+        closeLook.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+        closeLook.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+        updateClose.configuration = closeLook
+        updateClose.isHidden = true
+        updateClose.accessibilityLabel = "Hide the update button"
+        updateClose.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            UserDefaults.standard.set(self.newerBuild, forKey: Self.dismissedBuildKey)
+            self.updateButton.isHidden = true
+            self.updateClose.isHidden = true
+        }, for: .touchUpInside)
+
         blocked.isHidden = true
         blocked.onBack = { [weak self] in self?.leaveBlocked() }
 
@@ -467,7 +492,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         #endif
         tools.distribution = .fillEqually
 
-        for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, tabsView, historyView, moreDot] as [UIView] {
+        for v in [topBar, row, progress, card, empty, blocked, bottomBar, tools, updateButton, updateClose, tabsView, historyView, moreDot] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         view.addSubview(card)
@@ -479,6 +504,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         view.addSubview(bottomBar)
         bottomBar.addSubview(tools)
         view.addSubview(updateButton)
+        view.addSubview(updateClose)
         view.addSubview(moreDot)
         view.addSubview(tabsView)
         view.addSubview(historyView)
@@ -522,6 +548,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
             updateButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             updateButton.bottomAnchor.constraint(equalTo: Flavor.isSiteApp ? view.safeAreaLayoutGuide.bottomAnchor : card.bottomAnchor, constant: Flavor.isSiteApp ? -64 : -14),
+            updateClose.leadingAnchor.constraint(equalTo: updateButton.trailingAnchor, constant: 8),
+            updateClose.centerYAnchor.constraint(equalTo: updateButton.centerYAnchor),
+            updateClose.widthAnchor.constraint(equalTo: updateClose.heightAnchor),
 
             empty.centerYAnchor.constraint(equalTo: card.centerYAnchor),
             empty.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 32),
