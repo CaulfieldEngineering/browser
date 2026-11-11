@@ -21,7 +21,7 @@ enum InstagramFilter {
 
     /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
     private static let scripts: [WKUserScript] = {
-        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")
@@ -103,6 +103,8 @@ enum InstagramFilter {
                 replyHandler(true, nil)
             case "byhand":
                 replyHandler(HiddenByHand.shared.ids, nil)
+            case "seen":
+                replyHandler(SeenPosts.on, nil)
             case "url":
                 guard let s = body["url"] as? String, let url = URL(string: s), InstagramFilter.isMediaHost(url) else { return fail("host") }
                 InstagramFilter.fetchImage(url) { image in
@@ -150,6 +152,21 @@ final class HiddenByHand {
     }
 }
 
+/// "Skip posts I've seen" (ig-seen.js; Joe, 2026-11-10: "note what we see and not show me literally the same posts every
+/// time I open the app"). On unless turned off in the menu. The posts seen are noted in the page's own storage, per
+/// account; this is only the switch.
+enum SeenPosts {
+    private static let key = "instagram.skipSeen"
+    static var on: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+    /// Tells an open page at once (the page's skipped posts come back when it is turned off).
+    static func tell(_ web: WKWebView?) {
+        web?.evaluateJavaScript("document.dispatchEvent(new Event('\(on ? "igs-on" : "igs-off")')); true", completionHandler: nil)
+    }
+}
+
 /// Counts of what the filter did, by reason, per day, on the phone only: no pictures, no addresses. Shown in the menu
 /// (Filter today) so Joe can read them out; nothing sends them anywhere.
 final class FilterStats {
@@ -191,6 +208,7 @@ final class FilterStats {
         lines.append("Revealing clothing: \(t["hidden-revealing"] ?? 0) picture, \(t["hidden-revealing-text"] ?? 0) caption")
         lines.append("Accounts hidden by name or bio: \((t["hidden-account-name"] ?? 0) + (t["hidden-account-bio"] ?? 0)); avatars hidden: \(t["hidden-avatar"] ?? 0)")
         lines.append("Hidden by hand: \(t["hidden-by-hand"] ?? 0)")
+        lines.append("Seen before, skipped: \(t["seen-skipped"] ?? 0)")
         if let s = t["skipped-reel"], s > 0 { lines.append("Reels and stories skipped: \(s + (t["skipped-story"] ?? 0))") }
         let misses = t.filter { $0.key.hasPrefix("unjudged-") }.sorted { $0.key < $1.key }.map { "\($0.key.dropFirst(9)) \($0.value)" }
         if !misses.isEmpty { lines.append("Not judged: " + misses.joined(separator: ", ")) }

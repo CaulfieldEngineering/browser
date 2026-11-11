@@ -22,7 +22,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy", "classifier", "clip"] {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "classifier", "clip"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))

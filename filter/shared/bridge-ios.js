@@ -12,6 +12,8 @@
     warm: () => { webkit.messageHandlers.igf.postMessage({ op: 'warm' }).catch(() => {}); },
     // Hidden by hand: a record (ids, scores, rules; never the picture) kept on the phone and sent with the feed.
     report: (record) => { webkit.messageHandlers.igf.postMessage({ op: 'report', record: JSON.stringify(record).slice(0, 4000) }).catch(() => {}); },
+    // "Skip posts I've seen" (ig-seen.js): the menu's switch, on unless turned off.
+    seenOn: () => webkit.messageHandlers.igf.postMessage({ op: 'seen' }).then((on) => on !== false, () => true),
     byHand: () => webkit.messageHandlers.igf.postMessage({ op: 'byhand' }).then((ids) => (Array.isArray(ids) ? ids : []), () => []),
   };
 })();

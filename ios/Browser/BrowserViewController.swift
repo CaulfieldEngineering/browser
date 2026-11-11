@@ -190,6 +190,12 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         sheet.addAction(UIAlertAction(title: "Reload", style: .default) { [weak self] _ in self?.webView.reload() })
         sheet.addAction(UIAlertAction(title: "History", style: .default) { [weak self] _ in self?.showHistory() })
         sheet.addAction(UIAlertAction(title: "Filter today", style: .default) { [weak self] _ in self?.showFilterCounts() })
+        // Joe, 2026-11-10: "Could we add a setting in our IG app to note what we see and not show me literally the same
+        // posts every time I open the app" (ig-seen.js). One line that says what it is now; a tap switches it.
+        sheet.addAction(UIAlertAction(title: SeenPosts.on ? "Skip posts I've seen: On" : "Skip posts I've seen: Off", style: .default) { [weak self] _ in
+            SeenPosts.on.toggle()
+            SeenPosts.tell(self?.webView)
+        })
         if let newer = newerVersion { sheet.addAction(UIAlertAction(title: "Update to \(newer)", style: .default) { [weak self] _ in self?.installUpdate() }) }
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         sheet.popoverPresentationController?.sourceView = view

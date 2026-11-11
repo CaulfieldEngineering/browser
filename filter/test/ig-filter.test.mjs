@@ -34,7 +34,11 @@ const BANNER = `<div id="appbanner" style="position:fixed;right:0;bottom:50px;he
 const reelViewer = (names, start) => `<main><div id="sc" style="height:600px;overflow-y:scroll;scroll-snap-type:y mandatory">${names.map((n, i) =>
   `<div class="slide" id="${n.split('-')[1]}" style="height:600px;scroll-snap-align:start"><div><video poster="${CDN}/${n}.jpg" playsinline muted style="width:340px;height:600px"></video></div><div><a href="/creator${i}/">creator${i}</a></div></div>`).join('')}</div>
   <script>document.getElementById('sc').scrollTop = ${start} * 600;</script></main>`;
+// The Following feed with posts that carry their own links (/p/<id>/), tall enough that two fit on the screen at once.
+const seenPost = (id) => `<article id="${id}" style="height:340px"><header><a href="/acct${id}/">acct${id}</a></header><a href="/p/${id}xxxx/"><time>1h</time></a><div>post ${id}</div></article>`;
 const pages = {
+  '?seen': `<main role="main">${['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'].map(seenPost).join('')}</main>`,
+  '?seenprofile': `<main><header>acctS1</header>${seenPost('S1')}</main>`,
   '/': `<main role="main">
    <article id="ok"><header><a href="/pedalshop/"><img id="avatar" src="${CDN}/avatar.jpg" width="32" height="32" alt="pedalshop's profile picture"></a><a href="/pedalshop/">pedalshop</a></header>
      <img id="okimg" src="${CDN}/plain.jpg" width="400" height="400"><div>New pedal day. #guitar #fuzz</div></article>
@@ -144,6 +148,7 @@ globalThis.IGFilterBridge = {
   reports: [],
   report(r) { this.reports.push(r); },
   byHand() { return Promise.resolve(JSON.parse(sessionStorage.getItem('igf-byhand') || '[]')); },
+  seenOn() { return Promise.resolve(sessionStorage.getItem('igs-off') !== '1'); },
 };`;
 
 let failed = 0;
@@ -154,7 +159,8 @@ try {
   const ctx = await browser.newContext();
   await ctx.route('https://www.instagram.com/**', (r) => {
     const p = new URL(r.request().url()).pathname;
-    r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<main></main>'}</body></html>` });
+    const q = new URL(r.request().url()).searchParams.get('fx');
+    r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body>${(q && pages['?' + q]) || pages[p] || '<main></main>'}</body></html>` });
   });
   await ctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'filter-config.js'), 'utf8') });
@@ -162,6 +168,8 @@ try {
   await ctx.addInitScript({ content: fakeBridge });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-filter.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-tidy.js'), 'utf8') });
+  await ctx.addInitScript({ content: 'globalThis.__igSeenMs = 300;' });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-seen.js'), 'utf8') });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
   const go = async (p, wait = 900) => { await page.goto('https://www.instagram.com' + p); await page.waitForTimeout(wait); };
@@ -222,6 +230,31 @@ try {
   await page.evaluate(() => { history.pushState({}, '', '/'); });
   await page.waitForTimeout(700);
   check('following: Instagram changing the address to "/" goes to Following', new URL(page.url()).search === '?variant=following', page.url());
+  // ---- posts already seen are skipped the next time the feed opens (Joe, 2026-11-10: "not show me literally the same
+  // posts every time I open the app") ----
+  const FEED = '/?variant=following&fx=seen';
+  const seenState = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('article')].map((a) => [a.id, a.hasAttribute('data-igs-seen') ? 'skipped' : a.hasAttribute('data-igs-noted') ? 'noted' : '-'])));
+  await go(FEED, 900);
+  let st = await seenState();
+  check('seen: posts on screen for a moment are noted', st.S1 === 'noted' && st.S2 === 'noted', JSON.stringify(st));
+  check('seen: posts not reached are not', st.S5 === '-' && st.S8 === '-', JSON.stringify(st));
+  check('seen: nothing is skipped on the visit that saw it', !Object.values(st).includes('skipped'));
+  await go(FEED, 900);
+  st = await seenState();
+  check('seen: on the next open, the posts seen before are skipped', st.S1 === 'skipped' && st.S2 === 'skipped', JSON.stringify(st));
+  check('seen: a skipped post keeps one invisible pixel, so the feed keeps loading', await page.$eval('#S1', (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height === 1 && getComputedStyle(e).opacity === '0'));
+  check('seen: the first post not seen yet is at the top', await page.$eval('#S3', (e) => Math.abs(e.getBoundingClientRect().top - document.querySelector('main').getBoundingClientRect().top) <= 3));
+  check('seen: counted on the device', (await page.evaluate(() => globalThis.IGFilterBridge.stats['seen-skipped'])) >= 2);
+  await page.evaluate(() => { sessionStorage.setItem('igs-off', '1'); document.dispatchEvent(new Event('igs-off')); });
+  await page.waitForTimeout(100);
+  check('seen: turned off in the menu, the skipped posts come back at once', await page.$eval('#S1', (e) => e.getBoundingClientRect().height >= 300));
+  await go(FEED, 900);
+  st = await seenState();
+  check('seen: turned off, nothing is skipped on a fresh open', !Object.values(st).includes('skipped'), JSON.stringify(st));
+  await page.evaluate(() => { sessionStorage.removeItem('igs-off'); document.dispatchEvent(new Event('igs-on')); });
+  await go('/someprofile/?fx=seenprofile', 700);
+  check('seen: off the home feed (a profile), a seen post is not skipped', await page.$eval('#S1', (e) => e.getBoundingClientRect().height >= 300 && !e.hasAttribute('data-igs-seen')));
+
   // ---- a profile's posts grid, and its large avatar ----
   await go('/someprofile/');
   check('profile grid: a plain tile shows', await visible('#p1 img'));
