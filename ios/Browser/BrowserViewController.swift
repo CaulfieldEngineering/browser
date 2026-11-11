@@ -177,29 +177,24 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     // MARK: - The Instagram app's menu and accounts (Flavor.swift, Accounts.swift)
 
-    /// The Instagram app's menu, on a two-finger tap: accounts, reload, history, the filter's counts, updates.
+    /// The site app's menu, on a two-finger tap: a sheet in sections (SiteMenu.swift). Joe, 2026-11-10: "Can we make
+    /// this a more advanced menu screen". History and Filter today left the menu the same day ("remove the history
+    /// option", "we can hide that Filter Today button"); both are still kept on the phone, History still sent with the feed.
     @objc func showInstagramMenu() {
         guard presentedViewController == nil else { return }
-        let sheet = UIAlertController(title: Accounts.current.name, message: "\(Flavor.name) \(Self.myVersion)", preferredStyle: .actionSheet)
-        // Hide a picture (Joe, 2026-11-05: "Something discrete", "Or just a block icon or something"): an icon, no words.
-        let pick = UIAlertAction(title: " ", style: .default) { [weak self] _ in self?.startHidePick() }
-        pick.setValue(UIImage(systemName: "nosign"), forKey: "image")
-        pick.accessibilityLabel = "Hide a picture"
-        sheet.addAction(pick)
-        sheet.addAction(UIAlertAction(title: "Accounts", style: .default) { [weak self] _ in self?.showAccounts() })
-        sheet.addAction(UIAlertAction(title: "Reload", style: .default) { [weak self] _ in self?.webView.reload() })
-        sheet.addAction(UIAlertAction(title: "History", style: .default) { [weak self] _ in self?.showHistory() })
-        sheet.addAction(UIAlertAction(title: "Filter today", style: .default) { [weak self] _ in self?.showFilterCounts() })
-        // Joe, 2026-11-10: "Could we add a setting in our IG app to note what we see and not show me literally the same
-        // posts every time I open the app" (ig-seen.js). One line that says what it is now; a tap switches it.
-        sheet.addAction(UIAlertAction(title: SeenPosts.on ? "Skip posts I've seen: On" : "Skip posts I've seen: Off", style: .default) { [weak self] _ in
-            SeenPosts.on.toggle()
-            SeenPosts.tell(self?.webView)
-        })
-        if let newer = newerVersion { sheet.addAction(UIAlertAction(title: "Update to \(newer)", style: .default) { [weak self] _ in self?.installUpdate() }) }
-        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        sheet.popoverPresentationController?.sourceView = view
-        present(sheet, animated: true)
+        let menu = SiteMenuViewController(.init(
+            hidePick: { [weak self] in self?.startHidePick() },
+            reload: { [weak self] in self?.webView.reload() },
+            pickAccount: { [weak self] account in self?.switchAccount(to: account) },
+            seenChanged: { [weak self] in SeenPosts.tell(self?.webView) },
+            update: newerVersion == nil ? nil : { [weak self] in self?.installUpdate() },
+            newer: newerVersion,
+            version: Self.myVersion))
+        let nav = UINavigationController(rootViewController: menu)
+        nav.overrideUserInterfaceStyle = .dark
+        nav.navigationBar.tintColor = Look.text
+        if let sheet = nav.sheetPresentationController { sheet.detents = [.medium(), .large()]; sheet.prefersGrabberVisible = true }
+        present(nav, animated: true)
     }
 
     func showAccounts() {
