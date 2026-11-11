@@ -156,6 +156,7 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(f("https://instagram.com/?hl=en"), "https://instagram.com/?hl=en&variant=following")
         XCTAssertNil(f("https://www.instagram.com/?variant=favorites"), "a variant is left as it is")
         XCTAssertNil(f("https://www.instagram.com/?variant=following"))
+        XCTAssertEqual(f("https://www.instagram.com/?variant=home"), "https://www.instagram.com/?variant=following", "Instagram's suggested feed is not a choice")
         XCTAssertNil(f("https://www.instagram.com/p/abc/"), "a post is left as it is")
         XCTAssertNil(f("https://www.instagram.com/pedalshop/"))
         XCTAssertNil(f("https://example.com/"), "another site is left as it is")

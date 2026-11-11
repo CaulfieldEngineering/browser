@@ -185,7 +185,8 @@
   // names a variant (favorites, following) is left as it is, and so is Back. Its posts, and any suggested posts after
   // them, go through the filter like every other post.
   const FOLLOWING = '/?variant=following';
-  const wantsFeed = (href) => { try { const u = new URL(href, location.href); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && !u.searchParams.has('variant'); } catch { return false; } };
+  // "variant=home" is Instagram's own suggested feed (where it goes after a story closes; seen 2026-11-10): as if none.
+  const wantsFeed = (href) => { try { const u = new URL(href, location.href); const v = u.searchParams.get('variant'); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && (v === null || v === 'home'); } catch { return false; } };
   let feedPopAt = 0;
   addEventListener('popstate', () => { feedPopAt = Date.now(); }, true);
   if (wantsFeed(location.href)) location.replace(FOLLOWING);

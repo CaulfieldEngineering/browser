@@ -51,9 +51,11 @@ enum Flavor {
     static func followingFeed(for url: URL) -> URL? {
         guard isInstagramHost(url), url.path.isEmpty || url.path == "/",
               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        if parts.queryItems?.contains(where: { $0.name == "variant" }) == true { return nil }
+        // "home" is Instagram's own name for the suggested feed (it goes there after a story closes; seen in the phone
+        // feed 2026-11-10), so it counts as no variant. Any other variant (favorites, following) is left as it is.
+        if parts.queryItems?.contains(where: { $0.name == "variant" && $0.value != "home" }) == true { return nil }
         parts.path = "/"
-        parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "variant", value: "following")]
+        parts.queryItems = (parts.queryItems ?? []).filter { $0.name != "variant" } + [URLQueryItem(name: "variant", value: "following")]
         return parts.url
     }
 

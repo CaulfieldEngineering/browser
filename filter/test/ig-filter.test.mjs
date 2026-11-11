@@ -219,6 +219,8 @@ try {
   // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
   await go('/', 700);
   check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());
+  await go('/?variant=home', 700);
+  check("following: Instagram's own suggested feed (variant=home) goes to Following", new URL(page.url()).search === '?variant=following', page.url());
   await go('/?variant=favorites', 700);
   check('following: an address with a variant is left as it is', new URL(page.url()).search === '?variant=favorites', page.url());
   await go('/someprofile/', 700);
