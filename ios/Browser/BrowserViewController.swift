@@ -1015,9 +1015,25 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         updateBar()
     }
 
+    /// The page's process ended (iOS takes it back under memory pressure; Joe, 2026-11-12: "A lot of times when it
+    /// blocks a slide too it completely shuts down the app. Like grey box."). Counted on the phone ("page-restarted" in
+    /// FilterStats) and the page opened again. If it ends again within 20 seconds, the reload would only end the same
+    /// way (a heavy reel or story page), so the app's home is opened instead; nothing is left blank.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        webView.reload()
+        FilterStats.shared.count("page-restarted")
+        let now = Date()
+        let again = lastPageEnd.map { now.timeIntervalSince($0) < 20 } ?? false
+        lastPageEnd = now
+        if again, Flavor.isSiteApp {
+            FilterStats.shared.count("page-restarted-home")
+            webView.load(URLRequest(url: Flavor.home))
+        } else if webView.url != nil {
+            webView.reload()
+        } else {
+            webView.load(URLRequest(url: Flavor.isSiteApp ? Flavor.home : (current?.url ?? Flavor.home)))
+        }
     }
+    private var lastPageEnd: Date?
 
     // Alerts, confirms and prompts from pages, as plain sheets.
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
