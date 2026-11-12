@@ -223,14 +223,14 @@ final class ScoreCache {
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.save() }
     }
 
-    /// Written off the main thread; a save lost to a crash only means those pictures are judged once more.
-    func save() {
+    /// Written off the main thread (`wait`: here and now, for the tests); a save lost to a crash only means those
+    /// pictures are judged once more.
+    func save(wait: Bool = false) {
         saveQueued = false
         guard let file else { return }
         let saved = Saved(stamp: stamp, keys: order, values: order.compactMap { scores[$0] })
-        DispatchQueue.global(qos: .utility).async {
-            if let data = try? JSONEncoder().encode(saved) { try? data.write(to: file, options: .atomic) }
-        }
+        let write = { if let data = try? JSONEncoder().encode(saved) { try? data.write(to: file, options: .atomic) } }
+        if wait { write() } else { DispatchQueue.global(qos: .utility).async(execute: write) }
     }
 }
 

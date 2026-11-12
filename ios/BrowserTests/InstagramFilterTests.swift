@@ -51,7 +51,13 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertLessThan(s["Sexy"] ?? 1, 0.45)
         XCTAssertLessThan(s["Revealing"] ?? 1, 0.6, "a plain picture is not revealing clothing")
         // The revealing-clothing judge runs in its lanes (workers, clip-worker.js), served from the app's own files.
-        let clip = FilterStats.shared.model["clip"] as? [String: Any]
+        // On a slow simulator the page's own copy of the model may answer first; a lane comes in within minutes.
+        var clip = FilterStats.shared.model["clip"] as? [String: Any]
+        for _ in 0..<90 where (clip?["mode"] as? String) != "workers" {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            let _: Classifier.Answer = await withCheckedContinuation { done in Classifier.shared.classify(data) { done.resume(returning: $0) } }
+            clip = FilterStats.shared.model["clip"] as? [String: Any]
+        }
         XCTAssertEqual(clip?["mode"] as? String, "workers", "the judge's lanes: \(String(describing: clip))")
         XCTAssertGreaterThanOrEqual((clip?["lanes"] as? NSNumber)?.intValue ?? 0, 1)
         // The same picture again, twice at once: the same scores.
@@ -91,8 +97,7 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(cache.scores(for: ScoreCache.key(for: b)), s)
         XCTAssertNil(cache.scores(for: "half"))
         XCTAssertEqual(cache.count, 1)
-        cache.save()
-        for _ in 0..<50 where !FileManager.default.fileExists(atPath: file.path) { Thread.sleep(forTimeInterval: 0.1) }
+        cache.save(wait: true)
         XCTAssertEqual(ScoreCache(file: file, stamp: "one").scores(for: ScoreCache.key(for: a)), s, "kept across launches")
         XCTAssertNil(ScoreCache(file: file, stamp: "two").scores(for: ScoreCache.key(for: a)), "new judges start empty")
         let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""

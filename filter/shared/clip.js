@@ -10,8 +10,9 @@
 // Lanes (2026-11-12, for speed; Joe: "I spend most of my time looking at empty grey boxes"): this judge is most of the
 // time a picture takes, and it ran one picture at a time on the page's own thread. Now the model runs in workers
 // (clip-worker.js; two, or as many as the app asks for), so two or three pictures are judged at once and the other
-// judge is not held up. The same model, the same numbers. If no worker starts (within 25 s), or they all end,
-// the model runs in the page as before; a picture is never judged without it.
+// judge is not held up. The same model, the same numbers. If no worker is in after 6 s (a slow start, or none can
+// start), the model is also loaded in the page as before and whichever is ready first judges; a worker that comes in
+// later takes over. If they all end, the page's copy judges. A picture is never judged without the model.
 (function () {
   'use strict';
   const MEAN = [0.48145466, 0.4578275, 0.40821073], STD = [0.26862954, 0.26130258, 0.27577711];
@@ -20,7 +21,7 @@
   // judge's process ended twice), else the settings, else two.
   const asked = /[?&]lanes=(\d)/.exec(location.search);
   const WANT = Math.max(0, Math.min(4, asked ? +asked[1] : Number.isFinite(CFG.judgeLanes) ? CFG.judgeLanes : 2));
-  const WORKER_WAIT = window.__igClipWorkerWait || 25000, RUN_WAIT = 30000;
+  const WORKER_WAIT = 180000, RUN_WAIT = 30000, PAGE_AFTER = window.__igClipPageAfter || 6000;
   let session = null, prompts = null, loading = null;
   const lanes = []; // workers that are ready: { worker, busy, jobs: Map }
   const info = { loadMs: 0, n: 0, totalMs: 0, ready: false, error: '', mode: '', lanes: 0 };
@@ -85,15 +86,18 @@
     const t0 = performance.now();
     loading = (async () => {
       const promptsReady = loadPrompts();
-      let ok = false;
       if (WANT > 0 && typeof Worker === 'function') {
         // Ready with the first lane. The others start once it is in (starting them together made every one of them,
-        // and the other judge, slower to load) and join as they load.
-        ok = !!(await startLane());
-        if (ok) for (let i = 1; i < WANT; i++) startLane();
-      }
-      if (ok) info.mode = 'workers';
-      else { await loadInPage(); info.mode = 'page'; }
+        // and the other judge, slower to load) and join as they load. No lane after a few seconds, or none at all:
+        // the model is loaded in the page too, and the first of the two to be ready judges.
+        const first = startLane().then((lane) => { if (lane) for (let i = 1; i < WANT; i++) startLane(); return lane; });
+        const inPage = new Promise((done) => {
+          const t = setTimeout(done, PAGE_AFTER);
+          first.then((lane) => { if (!lane) { clearTimeout(t); done(); } });
+        }).then(() => (lanes.length ? null : loadInPage()));
+        const lane = await Promise.race([first.then((l) => l || inPage), inPage]);
+        if (!lane && !session) await inPage;
+      } else await loadInPage();
       await promptsReady;
       info.loadMs = Math.round(performance.now() - t0);
       info.ready = true;
@@ -133,7 +137,6 @@
       catch (e) { if (lanes.length) return inLane(pixels(img)); } // that lane ended: once more in another, else in the page
     }
     await loadInPage();
-    info.mode = 'page';
     const res = await session.run({ pixel_values: new ort.Tensor('float32', pixels(img), [1, 3, 224, 224]) });
     return res.embeds.data;
   }
@@ -152,5 +155,5 @@
 
   /** How many pictures can be judged at once (the lanes ready now; one in the page). */
   const width = () => Math.max(1, lanes.length);
-  window.IGClip = { load, revealing, width, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
+  window.IGClip = { load, revealing, width, info: () => ({ ...info, mode: lanes.length ? 'workers' : session ? 'page' : '', lanes: lanes.length, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
 })();
