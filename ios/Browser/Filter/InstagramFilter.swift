@@ -308,13 +308,14 @@ final class FilterStats {
 
     /// How the filter runs, for the mini PC (sent with the heartbeat on leaving the app; Feed.swift): how long
     /// pictures waited on screen (the wait-0 to wait-4 steps, ig-filter.js), how many were judged and how many
-    /// answered from the scores kept, restarts, pictures that could not be fetched or judged, and the judges' speed.
+    /// answered from the scores kept, restarts, pictures that could not be fetched or judged, the judges' speed, and
+    /// how many times the feed was held still when the page above the screen changed ("feed-held", ig-filter.js).
     /// Timing only: never what was hidden or why, no addresses, no pictures. Those counts stay on the phone.
     func timing() -> [String: Any] {
         let t = today()
         var out: [String: Any] = ["day": Self.day(), "judged": (t["judged-clean"] ?? 0) + (t["judged-flagged"] ?? 0), "kept": ScoreCache.shared.count]
         for k in ["wait-0", "wait-1", "wait-2", "wait-3", "wait-4", "judged-again", "page-restarted", "page-restarted-home", "page-hung", "page-fresh",
-                  "judge-restarted", "judge-one-lane", "unjudged-timeout", "unjudged-unreadable", "unjudged-loading", "unjudged-bad"] {
+                  "judge-restarted", "judge-one-lane", "unjudged-timeout", "unjudged-unreadable", "unjudged-loading", "unjudged-bad", "feed-held"] {
             if let n = t[k], n > 0 { out[k] = n }
         }
         for k in ["backend", "loadMs", "avgMs", "avgWaitMs", "n"] { if let v = model[k], v is String || v is NSNumber { out[k] = v } }

@@ -39,7 +39,7 @@
   const SMALL = CFG.smallPx || 120;                                // rendered px: avatars, icons and small story rings are not judged
   const FRAME_EVERY = (CFG.frameEverySeconds || 2) * 1000;         // between frame checks while a video plays
   const RETRY = g.__igFilterRetry || (CFG.retrySeconds || [5, 20, 60]).map((x) => x * 1000); // tests shorten it
-  const state = { removed: 0, judged: 0, failed: 0, ready: false };
+  const state = { removed: 0, judged: 0, failed: 0, ready: false, held: 0 };
   g.__igFilter = state;
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
   try { BRIDGE.warm && BRIDGE.warm(); } catch {}
@@ -181,10 +181,12 @@
   // A post above the screen that collapses or comes back must not move what is on screen (Joe, 2026-11-08: "It keeps
   // pushing back up when we get to a certain point"): WebKit does not hold the scroll still when the page above changes
   // height, so a post still being checked, shown again seconds later after Joe scrolled past it, threw the feed back up.
-  // The first post at or below the top of the screen is kept where it was.
+  // Facebook: the first post at or below the top of the screen is kept where it was. Instagram: hold(), below.
   const POST_SEL = SITE === 'facebook' ? '[role="article"]' : 'article';
   function keepPlace(unit, change) {
-    if (inViewer() || isTile(unit) || unit.getBoundingClientRect().top >= 0) { change(); return; }
+    if (inViewer() || isTile(unit)) { change(); return; }
+    if (HOLD) { hold(); change(); hold(unit); return; }
+    if (unit.getBoundingClientRect().top >= 0) { change(); return; }
     const anchor = [...document.querySelectorAll(POST_SEL)].find((a) => a !== unit && !unit.contains(a) && !a.contains(unit) && a.getBoundingClientRect().top >= 0);
     const before = anchor && anchor.getBoundingClientRect().top;
     change();
@@ -193,6 +195,68 @@
     if (Math.abs(d) < 1) return;
     const sc = scrollerOf(anchor);
     if (sc) sc.scrollTop += d; else scrollBy(0, d);
+  }
+  // ---- Instagram's feed holds still (Joe, 2026-11-12: "I scroll down slowly and specific images will trigger some bug
+  // where it jumps 3 or so images back up. So then I scroll back down and hit the same offending image again") ---------
+  // Instagram keeps only the posts near the screen in the page (its PolarisIGVirtualList): the ones scrolled past are
+  // taken out and their room is left as padding, by the sizes it measures; when the page moves back up they are put in
+  // again, as new elements at full height. A post this filter collapsed was measured at one pixel, so put in again it
+  // pushed everything under it down by a whole post, and Instagram does not correct the scroll for that in a window
+  // that scrolls. The filter then collapsed it again, and its own place-keeping (2026-11-08) kept the screen where the
+  // push had left it by scrolling the page up, which made Instagram put in the next post above; when that one was
+  // hidden too, the same again. So a run of hidden posts above threw the screen back by as many posts ("3 or so"). It
+  // started with any move up the page: Joe scrolling back, or the filter's own scroll when a post he had passed was
+  // hidden late (a picture judged after he scrolled by, a video frame, a post still being checked).
+  // Chrome holds the screen still by itself when the page above it changes (scroll anchoring); WebKit, so the iPhone,
+  // does not. So it is done here, for anything that changes the page above the screen, ours or Instagram's: the post
+  // at the top of the screen is noted by where it is in the page, and when it is found somewhere else without a
+  // scroll, the page is scrolled by the difference, before the screen is drawn again. What is hidden is hidden exactly
+  // as before; only the scroll position is kept.
+  // Not at the very top of the page (new posts there are meant to show), not in the reel and story viewers, and not
+  // where the browser holds the screen itself (Chrome on the laptop: doing it twice would move it the other way).
+  const HOLD = SITE === 'instagram';
+  let nativeAt = 0, nativeIs = false;
+  const holdsItself = () => {
+    const now = Date.now();
+    if (now - nativeAt < 1000) return nativeIs;
+    nativeAt = now; nativeIs = false;
+    try {
+      nativeIs = !!(g.CSS && CSS.supports('overflow-anchor', 'auto')) && getComputedStyle(document.documentElement).overflowAnchor !== 'none' && (!document.body || getComputedStyle(document.body).overflowAnchor !== 'none');
+    } catch {}
+    return nativeIs;
+  };
+  let marks = [], markSc = null; // the posts on screen, top first: {el, at: its top in the page}
+  const posOf = (sc) => (sc ? sc.scrollTop : g.scrollY || 0);
+  function mark() {
+    marks = []; markSc = null;
+    if (inViewer()) return;
+    let sc;
+    for (const el of document.querySelectorAll(POST_SEL)) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom <= 0) continue; // scrolled past
+      if (sc === undefined) { sc = scrollerOf(el); markSc = sc; }
+      marks.push({ el, at: r.top + posOf(sc) });
+      if (marks.length >= 3 || r.top > innerHeight) break;
+    }
+  }
+  // `changed`: the post this filter has just collapsed or shown again. When it is the one at the top of the screen, the
+  // next post is the one held (as before 2026-11-12), so what is under it stays where it was.
+  function hold(changed) {
+    if (!HOLD || holdsItself()) return 0;
+    let d = 0;
+    const m = changed && changed.nodeType === 1 ? marks.find((x) => x.el !== changed) : marks[0];
+    if (m && m.el.isConnected && !inViewer() && (!markSc || markSc.isConnected)) {
+      const pos = posOf(markSc);
+      d = m.el.getBoundingClientRect().top + pos - m.at;
+      if (Math.abs(d) < 1 || pos <= 0) d = 0;
+      else {
+        if (markSc) markSc.scrollTop += d; else { try { scrollBy({ top: d, left: 0, behavior: 'instant' }); } catch { scrollBy(0, d); } }
+        state.held++;
+        stat('feed-held');
+      }
+    }
+    mark();
+    return d;
   }
   const kindOf = (unit) => unit && unit.getAttribute && unit.getAttribute('data-igf-gone');
   // ---- the reel and story viewers: a hidden slide is skipped (Joe, 2026-11-05: "when a reel is blocked it needs to
@@ -814,6 +878,15 @@
     if (!document.getElementById('igf-style')) addStyle();
   });
   mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster', 'style'] });
+  // Instagram's feed held still (hold(), above): looked at whenever posts are put in or taken out, a picture finishes
+  // loading (its post may grow), and on every scroll (which also notes the post now on screen).
+  if (HOLD) {
+    state.hold = hold; // ig-seen.js collapses posts too, and keeps the place through this
+    new MutationObserver(hold).observe(document, { childList: true, subtree: true });
+    document.addEventListener('load', hold, true);
+    addEventListener('scroll', hold, { capture: true, passive: true });
+    addEventListener('resize', hold, { passive: true });
+  }
   // The first pass also judges the text already on the page (posts parsed before the observer saw them).
   const allUnits = () => document.querySelectorAll(UNITS);
   // "Filter done": data-igf-pass counts the whole-page passes finished (pictures sent to the judges, text and account

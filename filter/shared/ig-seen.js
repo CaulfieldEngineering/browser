@@ -51,7 +51,10 @@
   };
 
   // Taking a post out above the screen must not move what is on screen (WebKit has no scroll anchoring).
+  // In the app the filter does it for every change above the screen, Instagram's own too (ig-filter.js, hold()).
   function keepPlace(post, change) {
+    const F = g.__igFilter;
+    if (F && F.hold) { F.hold(); change(); F.hold(post); return; }
     if (post.getBoundingClientRect().top >= 0) { change(); return; }
     const anchor = [...document.querySelectorAll('article')].find((a) => a !== post && a.getBoundingClientRect().top >= 0);
     const before = anchor && anchor.getBoundingClientRect().top;

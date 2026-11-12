@@ -101,6 +101,62 @@ const pages = {
   '/anchor/': `<style>html,body{overflow-anchor:none}</style><main><article id="lateup"><header><a href="/y/">y</a></header><img src="${CDN}/late-up.jpg" width="400" height="400"><div>Hi</div></article>
    ${Array.from({ length: 8 }, (_, i) => `<article id="an${i}" style="height:500px"><header><a href="/p${i}/">p${i}</a></header><div>post ${i}</div></article>`).join('')}</main>
    <script>scrollTo(0, 1500);</script>`,
+  // Instagram's feed as it really is (Joe, 2026-11-12: "specific images will trigger some bug where it jumps 3 or so
+  // images back up"): only the posts near the screen are in the page. This is Instagram's own list, ported line for
+  // line from its page code as served on 2026-11-12 (modules PolarisIGVirtualList.react and PolarisSizeCache): the
+  // posts from renderStart to renderEnd are in the page and the rest is padding by the sizes it has measured; on every
+  // scroll it finds the first post on screen from those sizes and how far the list has scrolled, keeps `overscan`
+  // posts either side, and after every change measures each post in the page again (next post's top less its own).
+  // The window scrolls, and for that Instagram makes no scroll correction of its own. A post put in again is a new
+  // element. overflow-anchor:none, as in WebKit. Posts 3, 4, 9, 10, 11, 17 and 22 are flagged; post 14 is flagged too,
+  // but its first verdict only comes when the test lets it (a picture judged late, after Joe has scrolled past it).
+  '/vfeed/': `<style>html,body{overflow-anchor:none;margin:0}</style><div style="height:120px">stories</div><main role="main"><div id="vroot"><div id="vlist"></div></div></main>
+   <script>
+     const N = 40, EST = 100, OVER = 3, FLAG = [3, 4, 9, 10, 11, 17, 22], LATE = [14];
+     const sizes = new Map(), getSize = (i) => sizes.has(i) ? sizes.get(i) : EST;
+     const dist = (a, b) => { let e = 0; for (let r = a; r < b; r++) e += getSize(r); return e; };
+     const getIndex = (t, n) => { let e = 0; for (let r = 0; r < n; r++) if ((e += getSize(r)) > t) return r; return n; };
+     const getLastIndex = (t, n) => { let e = 0; for (let r = 0; r < n; r++) if ((e += getSize(r)) > t) { if (r + 1 < n && getSize(r + 1) === 0) continue; return r; } return n; };
+     const zeros = (a, b) => { let e = 0; for (let r = a; r < b; r++) if (getSize(r) === 0) e++; return e; };
+     const root = document.getElementById('vroot'), list = document.getElementById('vlist'), kids = new Map();
+     let state = { renderStart: 0, renderEnd: 3, visibleStart: 0, visibleEnd: 0 };
+     window.vMounts = 0;
+     const make = (i) => { const a = document.createElement('article'); a.dataset.i = i; const k = FLAG.includes(i) ? 'flag' : LATE.includes(i) ? 'verylate-flag' : 'plain'; a.className = k === 'plain' ? 'vplain' : 'vflag';
+       a.innerHTML = '<header style="height:40px"><a href="/acct' + i + '/">acct' + i + '</a></header><img src="${CDN}/' + k + '-vf' + i + '.jpg" style="width:390px;height:' + (420 + (i % 4) * 40) + 'px;display:block"><a href="/p/VFEED' + i + 'x/"><time>1h</time></a><div style="height:30px">post ' + i + '</div>'; return a; };
+     // its batching of reads and writes: the reads of a frame, then the writes
+     const measures = []; let framed = false;
+     const flush = () => { framed = false; let f; while ((f = measures.shift())) f(); };
+     const measure = (f) => { measures.push(f); if (!framed) { framed = true; requestAnimationFrame(flush); } };
+     function render() {
+       const end = Math.min(state.renderEnd, N);
+       for (const [i, el] of kids) if (i < state.renderStart || i >= end) { el.remove(); kids.delete(i); }
+       for (let i = state.renderStart; i < end; i++) if (!kids.has(i)) {
+         const next = [...kids.keys()].filter((k) => k > i).sort((a, b) => a - b)[0];
+         const el = make(i); list.insertBefore(el, next === undefined ? null : kids.get(next)); kids.set(i, el); window.vMounts++;
+       }
+       list.style.cssText = 'display:flex;flex-direction:column;position:relative;padding-top:' + dist(0, state.renderStart) + 'px;padding-bottom:' + dist(state.renderEnd, N) + 'px';
+       measure(() => { // componentDidUpdate: every post in the page is measured again
+         const rs = state.renderStart;
+         for (let l = 0; l < list.children.length; l++) {
+           const c = list.children[l], e = c.getBoundingClientRect(), n = c.nextElementSibling;
+           const u = e.height === 0 ? 0 : n ? n.getBoundingClientRect().top - e.top : list.getBoundingClientRect().bottom - parseFloat(list.style.paddingBottom) - e.top;
+           if (getSize(rs + l) !== u) sizes.set(rs + l, u);
+         }
+       });
+     }
+     function update() {
+       measure(() => {
+         const scrollStart = Math.max(0, -root.getBoundingClientRect().top), viewportSize = innerHeight;
+         Promise.resolve().then(() => {
+           const l = getIndex(scrollStart, N), s = getLastIndex(scrollStart + viewportSize, N) + 1;
+           const ns = { renderEnd: s + OVER + zeros(s, N), renderStart: Math.max(0, l - OVER - zeros(0, l)), visibleEnd: s, visibleStart: l };
+           if (ns.renderEnd !== state.renderEnd || ns.renderStart !== state.renderStart || ns.visibleEnd !== state.visibleEnd || ns.visibleStart !== state.visibleStart) { state = ns; render(); }
+         });
+       });
+     }
+     addEventListener('scroll', update, { capture: true, passive: true });
+     render(); update();
+   </script>`,
   '/captions/': `<main>
     <article id="c1"><header><a href="/x/">x</a></header><div>New drop, link in bio for my content</div></article>
     <article id="c2"><header><a href="/y/">y</a></header><div>Find me on fansly</div></article>
@@ -180,6 +236,7 @@ globalThis.IGFilterBridge = {
     this.callAt = this.callAt || {}; this.callAt[u.split('/').pop().split('?')[0]] = performance.now();
     return new Promise((r) => setTimeout(() => {
       if (/fail/.test(u)) return r({ _error: 'unreadable' });
+      if (/verylate/.test(u) && !globalThis.__lateOut) { globalThis.__lateGo = () => { globalThis.__lateOut = true; r({ Sexy: 0.8, Neutral: 0.2, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.1 }); }; return; } // judged when the test says
       if (/late/.test(u)) return r(++globalThis.__lateTries < 2 ? { _error: 'loading' } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
       if (/rev/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.92 });
       if (/half/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.3 });
@@ -262,6 +319,56 @@ try {
     look();
   }));
   check('feed: a post above the screen that is checked and then shown again does not move the feed', Math.max(...drift.tops) - Math.min(...drift.tops) <= 1 && drift.state === 'shown', JSON.stringify(drift));
+  // Joe, 2026-11-12: "I scroll down slowly and specific images will trigger some bug where it jumps 3 or so images back up.
+  // So then I scroll back down and hit the same offending image again".
+  await page.goto('https://www.instagram.com/vfeed/');
+  await page.waitForFunction(() => Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1 && document.querySelectorAll('article').length >= 2);
+  // Scrolls in small steps and, at each, checks that the post on screen moved by the step and nothing else; `until`
+  // stops early. A flagged post must never be seen on the way: its picture held or its post collapsed, at every step.
+  const slow = async (step, steps, until = -1) => page.evaluate(({ step, steps, until }) => new Promise((done) => {
+    const out = { worst: 0, at: null, shown: 0, last: 0, moves: 0 };
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 45)));
+    const onScreen = () => [...document.querySelectorAll('article')].find((a) => { const r = a.getBoundingClientRect(); return r.height > 1 && (step > 0 ? r.top >= 0 : r.bottom <= innerHeight && r.bottom > 0); });
+    const flaggedShown = () => { let n = 0; for (const a of document.querySelectorAll('article.vflag')) { const r = a.getBoundingClientRect(), img = a.querySelector('img'); if (r.height > 1 && r.bottom > 0 && r.top < innerHeight && img && getComputedStyle(img).visibility !== 'hidden') n++; } return n; };
+    (async () => {
+      for (let n = 0; n < steps; n++) {
+        const stop = until >= 0 && document.querySelector('article[data-i="' + until + '"]');
+        if (stop && stop.getBoundingClientRect().top < 200) break;
+        const el = onScreen(), before = el && el.getBoundingClientRect().top, y = scrollY;
+        scrollBy(0, step);
+        await frame();
+        if (el && el.isConnected && el.getBoundingClientRect().height > 1 && y + step >= 0) {
+          const off = Math.abs(el.getBoundingClientRect().top - before + step); out.moves++;
+          if (off > out.worst) { out.worst = Math.round(off); out.at = { step: n, post: +el.dataset.i }; }
+        }
+        out.shown += flaggedShown();
+      }
+      const el = onScreen(); out.last = el ? +el.dataset.i : -1; out.held = globalThis.__igFilter.held; out.mounts = window.vMounts;
+      done(out);
+    })();
+  }), { step, steps, until });
+  // A picture judged late: Joe has scrolled past its post (14) and is looking at the next (15) when the verdict comes.
+  const to15 = await slow(70, 200, 15);
+  const late = await page.evaluate(() => new Promise((done) => {
+    const el = () => document.querySelector('article[data-i="15"]'), top = () => { const e = el(); return e ? Math.round(e.getBoundingClientRect().top) : null; };
+    const p14 = document.querySelector('article[data-i="14"]');
+    const out = { before: top(), was14: p14 ? p14.getAttribute('data-igf-gone') || 'held' : 'out', above: p14 ? p14.getBoundingClientRect().top < 0 : null, tops: [] };
+    globalThis.__lateGo();
+    const t0 = performance.now();
+    const look = () => { out.tops.push(top()); if (performance.now() - t0 < 1200) requestAnimationFrame(look); else { out.tops = [...new Set(out.tops)]; const a = document.querySelector('article[data-i="14"]'); out.is14 = a ? a.getAttribute('data-igf-gone') : 'out'; done(out); } };
+    look();
+  }));
+  check('feed: the way down to the late post never jumps', to15.worst <= 2 && to15.moves > 50 && to15.shown === 0, JSON.stringify(to15));
+  check('feed: the late post was past the top of the screen and not yet judged', late.was14 === 'held' && late.above === true, JSON.stringify(late));
+  check('feed: a post hidden after Joe scrolled past it does not throw the screen back up (the hidden posts above are put in again)', late.tops.every((t) => t !== null && Math.abs(t - late.before) <= 1) && late.is14 !== 'out' && late.is14 !== null, JSON.stringify(late));
+  const down = await slow(70, 90);
+  check('feed: scrolling slowly on down past hidden posts, what is on screen never jumps', down.worst <= 2 && down.moves > 60 && down.last >= 20 && down.shown === 0, JSON.stringify(down));
+  const up = await slow(-70, 260);
+  check('feed: nor on the way back up, where runs of hidden posts are put in again and collapse again', up.worst <= 2 && up.moves > 150 && up.last <= 2 && up.shown === 0, JSON.stringify(up));
+  const again = await slow(70, 200);
+  check('feed: nor down again', again.worst <= 2 && again.moves > 150 && again.last >= 20 && again.shown === 0, JSON.stringify(again));
+  check('feed: every flagged post in the page is collapsed', await page.evaluate(() => [...document.querySelectorAll('article.vflag')].every((a) => a.getAttribute('data-igf-gone') === 'image' && a.getBoundingClientRect().height <= 1)));
+  check('feed: held still is counted on the device', (await page.evaluate(() => globalThis.IGFilterBridge.stats['feed-held'] || 0)) >= 3);
   // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
   await go('/', 700);
   check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());
