@@ -46,11 +46,19 @@
   // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
-    '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]){display:none !important}',
+    '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
+    // In the reel and story viewers a hidden slide is covered, not removed (Joe, 2026-11-12: "A lot of times when it
+    // blocks a slide too it completely shuts down the app. Like grey box."): the viewer measures its slides, so a slide
+    // taken out of the layout left it blank and stuck. The slide keeps its box; its pictures and videos are invisible.
+    '[data-igf-cover]{background:#000 !important}',
+    '[data-igf-cover] img,[data-igf-cover] video,[data-igf-cover] [style*="background-image"],img[data-igf-cover],video[data-igf-cover],[data-igf-cover][style*="background-image"]{visibility:hidden !important}',
+    // Hide a picture (the menu's Tools): while picking, the page is dimmed a little and says what to do.
+    '#igf-pick{position:fixed !important;inset:0 !important;z-index:2147483647 !important;background:rgba(0,0,0,.22) !important;touch-action:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-touch-callout:none !important}',
+    '#igf-pick-tip{position:fixed !important;left:50% !important;top:calc(env(safe-area-inset-top, 0px) + 14px) !important;transform:translateX(-50%) !important;padding:9px 16px !important;border-radius:18px !important;background:rgba(18,18,18,.92) !important;color:#fff !important;font:500 15px/1.2 -apple-system,BlinkMacSystemFont,system-ui,sans-serif !important;white-space:nowrap !important;pointer-events:none !important;z-index:2147483647 !important}',
     // A hidden feed post keeps one invisible pixel in the page instead of none (Joe, 2026-11-08: "my feed seems to stop
     // after a few scrolls down - presumably it stops once something gets blocked"): Instagram loads the next posts when
     // the last ones come into view, and a post with display:none never comes into view.
-    'article[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
+    'article[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
     // A grid whose blocked tile was taken out: its rows give their tiles to one grid so the rest close up (Joe,
     // 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"). Anything else in it
     // (a spinner, a row not marked yet) spans the full width, as before.
@@ -106,9 +114,13 @@
     }
     let u = el;
     // Up to the largest box that holds only this one piece (at most one video and one picture), so hiding one reel or
-    // story never takes its neighbours with it.
+    // story never takes its neighbours with it. Never the page itself (2026-11-12: a video story with only its avatar
+    // beside it climbed to Instagram's whole app, and hiding it left a grey screen): not to a box that is or holds the
+    // page's main area, its tab bar, a dialog or Instagram's root.
     const one = (p) => p.querySelectorAll('video').length <= 1 && p.querySelectorAll('img, [style*="background-image"]').length <= 1;
-    while (u.parentElement && u.parentElement !== document.body && one(u.parentElement)) u = u.parentElement;
+    const PAGE = 'main, [role="main"], [role="dialog"], nav, [data-igt-nav], [id^="mount"]';
+    const tooBig = (p) => p === document.documentElement || p.parentElement === document.body || p.matches(PAGE) || !!p.querySelector(PAGE);
+    while (u.parentElement && u.parentElement !== document.body && one(u.parentElement) && !tooBig(u.parentElement)) u = u.parentElement;
     return u;
   }
 
@@ -184,7 +196,7 @@
   // skip right over it, cause now it just hangs up since the timer doesn't run so I manually have to swipe") ----------
   const inViewer = () => /^\/(reels?|stories)\//.test(location.pathname) || /\/reel\//.test(location.pathname);
   const onScreen = (el) => { const r = el.getBoundingClientRect(); const y = innerHeight / 2; return r.height > 0 && r.top <= y && r.bottom >= y; };
-  const shownSlide = (el) => el && getComputedStyle(el).display !== 'none' && !el.hasAttribute('data-igf-gone');
+  const shownSlide = (el) => el && getComputedStyle(el).display !== 'none' && !el.hasAttribute('data-igf-gone') && !el.querySelector('[data-igf-gone]');
   function scrollerOf(el) {
     for (let x = el.parentElement; x && x !== document.body; x = x.parentElement) {
       const cs = getComputedStyle(x);
@@ -226,6 +238,8 @@
     const wasOnScreen = viewer && onScreen(unit);
     keepPlace(unit, () => {
       if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
+      if (viewer && kind !== 'checking') unit.setAttribute('data-igf-cover', ''); // covered, never taken out of the viewer
+      if (viewer) unit.setAttribute('data-igf-for', mediaKey(unit));
       unit.setAttribute('data-igf-gone', kind);
       unit.setAttribute('data-igf-why', why || kind);
     });
@@ -249,6 +263,24 @@
     stat('restored');
   }
   const gone = (el) => { const u = el.closest && el.closest('[data-igf-gone]'); return !!u && kindOf(u) !== 'checking'; };
+  // The viewers reuse their boxes: after a hidden story or reel, Instagram puts the next one's picture into the same
+  // elements. A slide hidden for one picture is let go when its picture changes, and the new one is judged on its own
+  // (held until then), so the next story is neither stuck blank nor shown unjudged.
+  function mediaKey(unit) {
+    let best = '', area = -1;
+    for (const m of unit.matches && unit.matches('img, video, [style*="background-image"]') ? [unit] : unit.querySelectorAll('img, video, [style*="background-image"]')) {
+      const r = m.getBoundingClientRect(), a = r.width * r.height;
+      if (a > area) { area = a; best = keyOf(srcOf(m) || m.getAttribute('src') || ''); }
+    }
+    return best;
+  }
+  function releaseIfChanged(unit) {
+    if (!unit || !unit.hasAttribute || !unit.hasAttribute('data-igf-for') || !inViewer()) return false;
+    if (unit.getAttribute('data-igf-for') === mediaKey(unit)) return false;
+    for (const a of ['data-igf-gone', 'data-igf-why', 'data-igf-cover', 'data-igf-slide-hold', 'data-igf-for']) unit.removeAttribute(a);
+    retries.delete(unit);
+    return true;
+  }
 
   // ---- text ---------------------------------------------------------------------------------------------------------
   const textSeen = new WeakMap();
@@ -278,10 +310,54 @@
   const verdicts = new Map(); // url key -> Promise<verdict>, judged ones only
   const scoresOf = new Map(); // url key -> the two judges' scores (for a hand-hidden picture's record)
   const keyOf = (url) => url.split('?')[0] + '?' + (url.split('?')[1] || '').replace(/(^|&)(_nc_\w+|oh|oe|ccb|edm|ig_cache_key)=[^&]*/g, '');
-  function judgeUrl(url) {
+  // The judge takes one picture at a time, and a feed asks for dozens at once (every slide of every carousel, posts
+  // below the screen). Asked all at once, the pictures on screen waited behind all of them: grey boxes for seconds
+  // (Joe, 2026-11-12: "I spend most of my time looking at empty grey boxes"). So the page keeps the queue: a few in
+  // flight (one being judged while the next are fetched), and each time one is done the next is the picture nearest
+  // the screen: on screen first, then just below, a carousel's next slide, then the rest. Nothing is shown sooner
+  // than before it is judged; only the order changes.
+  const IN_FLIGHT = CFG.judgeInFlight || 3;
+  const waiting = []; // { url, els: Set, resolve }
+  const waitingByKey = new Map();
+  let flying = 0;
+  function nearness(els) {
+    let best = Infinity;
+    for (const el of els) {
+      if (!el || !el.isConnected) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) { best = Math.min(best, 1e7); continue; }
+      const dy = r.bottom < 0 ? -r.bottom * 2 : r.top > innerHeight ? r.top - innerHeight : 0; // above the screen: scrolled past
+      const dx = r.right <= 0 ? -r.right : r.left >= innerWidth ? r.left - innerWidth + 1 : 0;   // a carousel's other slides
+      best = Math.min(best, dy + dx * 1.5);
+    }
+    return best;
+  }
+  function pump() {
+    while (flying < IN_FLIGHT && waiting.length) {
+      let at = 0, near = Infinity;
+      for (let i = 0; i < waiting.length; i++) { const d = nearness(waiting[i].els); if (d < near) { near = d; at = i; if (d === 0) break; } }
+      const job = waiting.splice(at, 1)[0];
+      waitingByKey.delete(keyOf(job.url));
+      flying++;
+      ask(() => BRIDGE.classifyUrl(job.url)).then(job.resolve, () => job.resolve({ flagged: null, why: 'unjudged-bridge' })).finally(() => { flying--; pump(); });
+    }
+  }
+  function queued(url, el) {
     const key = keyOf(url);
-    if (verdicts.has(key)) return verdicts.get(key);
-    const p = ask(() => BRIDGE.classifyUrl(url)).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); } return v; });
+    const w = waitingByKey.get(key);
+    if (w) { if (el) w.els.add(el); return w.promise; }
+    const job = { url, els: new Set(el ? [el] : []) };
+    job.promise = new Promise((r) => { job.resolve = r; });
+    waiting.push(job);
+    waitingByKey.set(key, job);
+    queueMicrotask(pump); // a batch of pictures added together is ordered as one
+    return job.promise;
+  }
+  // A scroll changes what is nearest; the next pick reads it fresh, so nothing else to do here.
+  function judgeUrl(url, el) {
+    const key = keyOf(url);
+    if (verdicts.has(key)) { const w = waitingByKey.get(key); if (w && el) w.els.add(el); return verdicts.get(key); }
+    const p = queued(url, el).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); } return v; });
     verdicts.set(key, p);
     if (verdicts.size > 4000) verdicts.delete(verdicts.keys().next().value);
     return p;
@@ -304,6 +380,7 @@
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
     imgDone.set(img, src);
     const unit = unitOf(img);
+    releaseIfChanged(unit.closest ? unit.closest('[data-igf-for]') || unit : unit);
     if (gone(unit)) return;
     if (byHand.size) { const id = idOf(unit, img); if (id && byHand.has(id)) { hide(unit, 'image', 'by-hand'); return; } }
     if (checkText(unit)) return;
@@ -314,7 +391,7 @@
       // On search and Explore pages every picture is judged, small avatars too (only small ones are kept there).
       const small = /^\/explore(\/|$)/.test(location.pathname) ? 0 : SMALL;
       if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < small && r.height < small) { img.removeAttribute('data-igf-hold'); return; }
-      const v = await judgeUrl(src);
+      const v = await judgeUrl(src, img);
       if (srcOf(img) !== src) return; // changed meanwhile; the new src is judged on its own
       const u = unitOf(img);
       // An account's avatar (search results, lists, a profile's header): only the picture goes, the row stays, so
@@ -333,7 +410,7 @@
   const retries = new WeakMap();
   function retry(unit) {
     const n = retries.get(unit) || 0;
-    if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
+    if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); if (vw) unit.setAttribute('data-igf-cover', ''); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
     retries.set(unit, n + 1);
     setTimeout(async () => {
       if (kindOf(unit) !== 'checking') return;
@@ -341,7 +418,7 @@
       const imgs = [...(held.get(unit) || [])].filter((i) => i.isConnected && i.hasAttribute('data-igf-hold'));
       let allClean = imgs.length > 0, last = 'unjudged-none';
       for (const img of imgs) {
-        const v = await judgeUrl(srcOf(img));
+        const v = await judgeUrl(srcOf(img), img);
         if (v.flagged) { hide(unit, 'image', v.why); return; }
         if (v.flagged === null) { allClean = false; last = v.why; }
       }
@@ -393,7 +470,7 @@
     (async () => {
       const poster = v.getAttribute('poster');
       if (poster && isMediaUrl(poster)) {
-        const pv = await judgeUrl(poster);
+        const pv = await judgeUrl(poster, v);
         if (pv.flagged) { hide(unitOf(v), 'video', pv.why); return; }
         // Not judged yet: the reel waits as "still checking" (held, tried again), never shown unjudged.
         if (pv.flagged === null) { const u = unitOf(v); holdIn(u, v); hide(u, 'checking', pv.why); return; }
@@ -426,7 +503,7 @@
   // "Or just a block icon or something". The app's menu has a plain circle-slash; after it, the next picture or video
   // he taps is hidden at once, the same discreet way, and stays hidden on this device. A short record goes to the app
   // (IGFilterBridge.report): the post or media id, the two judges' scores, the rules that fired, the time and the surface.
-  // Never the picture, never an address. No undo, no message. One tap, or it lapses after 15 seconds.
+  // Never the picture, never an address. No undo. One tap, or it lapses after 20 seconds (picking, below).
   const byHand = new Set();
   try { Promise.resolve(BRIDGE.byHand && BRIDGE.byHand()).then((ids) => { for (const id of ids || []) byHand.add(String(id)); recheckByHand(); }).catch(() => {}); } catch {}
   function idOf(unit, el) {
@@ -460,13 +537,23 @@
       if (id && byHand.has(id) && !kindOf(unit)) hide(unit, 'image', 'by-hand');
     }
   }
+  // The picture under a tap: what the page shows there (Instagram lays a clear box over its pictures for its own taps,
+  // so every element at the point is looked through), else any picture whose box holds the point.
+  const PICKABLE = 'img, video, [style*="background-image"]';
+  const bigEnough = (m) => { const r = m.getBoundingClientRect(); return r.width >= 40 && r.height >= 40; };
   function pickAt(x, y) {
     for (const el of document.elementsFromPoint(x, y)) {
+      if (el.id === 'igf-pick' || el.id === 'igf-pick-tip') continue;
       if (el.closest('[data-igt-nav], nav, [role="navigation"]')) return null;
-      const m = el.matches('img, video, [style*="background-image"]') ? el : null;
-      if (m) { const r = m.getBoundingClientRect(); if (r.width >= 40 && r.height >= 40) return m; }
+      if (el.matches(PICKABLE) && bigEnough(el)) return el;
     }
-    return null;
+    let best = null, area = Infinity;
+    for (const m of document.querySelectorAll(PICKABLE)) {
+      const r = m.getBoundingClientRect();
+      if (!(x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) || !bigEnough(m) || m.closest('[data-igt-nav], nav, [role="navigation"]')) continue;
+      if (r.width * r.height < area) { area = r.width * r.height; best = m; } // the smallest: the slide, not the backdrop
+    }
+    return best;
   }
   function hideByHand(el) {
     const unit = unitOf(el);
@@ -481,22 +568,85 @@
     else hide(unit, 'image', 'by-hand'); // counted as hidden-by-hand
     try { BRIDGE.report && BRIDGE.report({ id, site: SITE, surface: surfaceOf(unit), scores, rules, at: new Date().toISOString() }); } catch {}
   }
-  document.addEventListener('igf-pick', () => {
+  // Picking (Joe, 2026-11-12: "I click it and then I have to click the picture but it doesn't hide anything"): it waited
+  // for a click, and on Instagram a tap on a picture never becomes one (its double-tap-to-like and story taps take the
+  // touch first), so nothing happened. Now, while picking, the page is covered by a faint layer that says "Tap a
+  // picture to hide it", and every touch, pointer and mouse event is stopped at the window before Instagram sees it
+  // (these listeners are the page's first, added at document start), so a tap in a story neither closes nor advances
+  // it. The tap is read on touchend (or the click, with a mouse). The picture goes at once; the layer says "Hidden",
+  // or "No picture there" if the tap was not on one, and picking ends. It lapses after 20 seconds.
+  const TAP_EVENTS = ['touchstart', 'touchmove', 'touchend', 'touchcancel', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'gesturestart', 'gesturechange', 'gestureend'];
+  const swallow = (e) => { if (e.cancelable) e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); };
+  let pick = null; // { shield, tip, timer, done }
+  function say(text, ms) {
+    const tip = document.createElement('div');
+    tip.id = 'igf-pick-tip';
+    tip.textContent = text;
+    (document.documentElement || document).appendChild(tip);
+    setTimeout(() => tip.remove(), ms);
+  }
+  function endPick(message) {
+    if (!pick) return;
+    clearTimeout(pick.timer);
+    pick.shield.remove();
+    pick = null;
+    // the touch's own leftovers (the mouse events WebKit makes after a touch) are still stopped for a moment
+    afterPickUntil = Date.now() + 500;
+    document.documentElement.removeAttribute('data-igf-picking');
+    if (message) say(message, 1100);
+  }
+  let afterPickUntil = 0;
+  function pickAtPoint(x, y) {
+    const el = pickAt(x, y);
+    if (!el) { endPick('No picture there'); return; }
+    endPick('Hidden');
+    try { hideByHand(el); } catch (e) { try { hide(unitOf(el), 'image', 'by-hand'); } catch {} }
+  }
+  function onPickEvent(e) {
+    swallow(e);
+    if (e.type === 'touchend') {
+      const t = e.changedTouches && e.changedTouches[0];
+      if (t && (!e.touches || e.touches.length === 0)) pickAtPoint(t.clientX, t.clientY);
+    } else if (e.type === 'click') pickAtPoint(e.clientX, e.clientY);
+  }
+  function startPick() {
+    if (pick) return;
     const root = document.documentElement;
-    let done = false;
-    const end = () => { if (done) return; done = true; document.removeEventListener('click', onTap, true); root.removeAttribute('data-igf-picking'); };
-    const onTap = (e) => {
-      e.preventDefault(); e.stopImmediatePropagation();
-      const el = pickAt(e.clientX, e.clientY);
-      end();
-      if (!el) return;
-      el.style.setProperty('outline', '1px solid rgba(128,128,128,.55)', 'important'); // the only cue, for a moment
-      setTimeout(() => { el.style.removeProperty('outline'); hideByHand(el); }, 120);
-    };
+    const shield = document.createElement('div');
+    shield.id = 'igf-pick';
+    const tip = document.createElement('div');
+    tip.id = 'igf-pick-tip';
+    tip.textContent = 'Tap a picture to hide it';
+    shield.appendChild(tip);
+    for (const ev of ['touchstart', 'touchmove']) shield.addEventListener(ev, (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+    root.appendChild(shield); // outside Instagram's own tree, so its re-renders leave it alone
     root.setAttribute('data-igf-picking', '');
-    document.addEventListener('click', onTap, true);
-    setTimeout(end, 15000);
-  });
+    pick = { shield, timer: setTimeout(() => endPick(''), 20000) };
+    for (const v of document.querySelectorAll('video')) { try { if (!v.paused && onScreen(v)) { v.pause(); setTimeout(() => { if (!gone(v)) { try { v.play(); } catch {} } }, 400); } } catch {} }
+  }
+  document.addEventListener('igf-pick', startPick);
+  // The two-finger tap that opens the app's menu (Joe, 2026-11-12: "when I two finger tap in a story it closes the
+  // story"): a touch with two or more fingers, and everything after it until every finger is up, never reaches the
+  // page; the clicks and mouse events WebKit makes from it in the next moment are stopped too.
+  let multi = false, multiUntil = 0, pointers = 0;
+  const onGuard = (e) => {
+    if (pick && (e.isTrusted || e.type === 'click')) { onPickEvent(e); return; } // (a click from a script: the app's tests)
+    if (!e.isTrusted) return; // the filter's own clicks (a hidden story's Next) and the page's go through
+    const now = Date.now();
+    const t = e.type;
+    if (t === 'pointerdown') pointers++;
+    if (t === 'touchstart' && e.touches && e.touches.length >= 2) multi = true;
+    if (t === 'pointerdown' && e.pointerType === 'touch' && pointers >= 2) multi = true;
+    if (multi || now < multiUntil || now < afterPickUntil) {
+      swallow(e);
+      if (t === 'touchend' || t === 'touchcancel') { if (!e.touches || e.touches.length === 0) { multi = false; multiUntil = now + 600; } }
+    }
+    if (t === 'pointerup' || t === 'pointercancel') pointers = Math.max(0, pointers - 1);
+    if (t === 'touchend' && e.touches && e.touches.length === 0) pointers = 0;
+  };
+  // touchstart and touchmove are listened to passively, so scrolling never waits on this script (stopping them still
+  // works; while picking, the layer's touch-action:none and its own listeners below keep the page from moving).
+  for (const ev of TAP_EVENTS) addEventListener(ev, onGuard, { capture: true, passive: ev === 'touchstart' || ev === 'touchmove' });
 
   // ---- accounts by name and bio (Instagram) ----------------------------------------------------------------------
   // Joe, 2026-11-05: "let's also do like a textual search. In like profile names or bios". A row in search results,
@@ -610,7 +760,15 @@
       if (m.type === 'attributes') {
         const t = m.target;
         if (t.tagName === 'IMG' || (m.attributeName === 'style' && t.style && t.style.backgroundImage)) handleImg(t);
-        else if (t.tagName === 'VIDEO') handleVideo(t);
+        else if (t.tagName === 'VIDEO') {
+          // A viewer's video element given the next reel or story: judged again from the start.
+          if (inViewer() && vidState.has(t) && (m.attributeName === 'poster' || m.attributeName === 'src')) {
+            const u = unitOf(t);
+            releaseIfChanged(u.closest ? u.closest('[data-igf-for]') || u : u);
+            vidState.delete(t);
+          }
+          handleVideo(t);
+        }
         continue;
       }
       for (const n of m.addedNodes) { if (n.nodeType === 1) { scan(n); queueText(n); } else if (n.nodeType === 3) queueText(n); }

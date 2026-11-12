@@ -119,6 +119,36 @@ const pages = {
     <article id="h1"><header><a href="/a/">a</a></header><a href="/p/HAND111/"><img id="h1img" src="${CDN}/plain-h1.jpg" width="400" height="400"></a><div>Saturday #beach</div></article>
     <article id="h2"><header><a href="/b/">b</a></header><a href="/p/HAND222/"><img id="h2img" src="${CDN}/plain-h2.jpg" width="400" height="400"></a><div>pedals</div></article>
   </main>`,
+  // Instagram's real shape for a feed picture: a clear box laid over it takes the touch (double-tap to like) and stops
+  // it becoming a click; the old pick mode waited for a click and never got one.
+  '/hand2/': `<main>
+    <article id="o1"><header><a href="/a/">a</a></header><div role="button" style="position:relative;width:390px;height:390px"><div class="_aagv"><img id="o1img" src="${CDN}/plain-o1.jpg" style="width:390px;height:390px;display:block"></div><div class="_aagw" id="o1cover" style="position:absolute;inset:0"></div></div><a href="/p/OVER111/"><time>1h</time></a></article>
+    <article id="o2" style="height:600px"><header><a href="/b/">b</a></header><img src="${CDN}/plain-o2.jpg" style="width:390px;height:390px"><a href="/p/OVER222/">x</a></article>
+    <script>
+      window.igTaps = 0;
+      for (const ev of ['touchend', 'pointerup', 'mouseup']) document.getElementById('o1cover').addEventListener(ev, (e) => { window.igTaps++; e.preventDefault(); });
+      document.getElementById('o1cover').addEventListener('click', () => { window.igTaps++; });
+    </script></main>`,
+  // A story as Instagram shows it on the phone: one video (its poster the picture), the owner's avatar beside it, the
+  // whole viewer one box inside the app's root. A tap on the story (anywhere) closes it, as Instagram's does.
+  '/stories/vidstory/333/': `<div id="mount_0_0_x"><div id="app"><section id="viewer" style="width:390px;height:780px;position:relative">
+      <header id="sthead"><a href="/vidstory/"><img src="${CDN}/plain-vsav.jpg" style="width:32px;height:32px" alt="vidstory's profile picture"></a><span>vidstory</span></header>
+      <div id="stmedia"><video id="stv" poster="${CDN}/flag-vs1.jpg" playsinline muted style="width:390px;height:700px"></video></div>
+      <button aria-label="Next" id="stnext" style="position:absolute;right:0;top:0;width:10px;height:10px" onclick="window.storyNext = (window.storyNext || 0) + 1; document.getElementById('stv').setAttribute('poster', '${CDN}/plain-vs2.jpg')">›</button>
+    </section></div></div>
+    <script>
+      window.storyClosedByTap = 0;
+      for (const ev of ['pointerup', 'touchend', 'click']) document.getElementById('viewer').addEventListener(ev, (e) => { if (e.target.id !== 'stnext') window.storyClosedByTap++; });
+    </script>`,
+  '/stories/plainstory/444/': `<div id="mount_0_0_y"><div id="app2"><section id="viewer2" style="width:390px;height:780px;position:relative">
+      <header><img src="${CDN}/plain-psav.jpg" style="width:32px;height:32px" alt="plainstory's profile picture"></header>
+      <div><img id="psimg" src="${CDN}/plain-ps1.jpg" style="width:390px;height:700px;display:block"></div>
+      <button aria-label="Next" id="psnext" style="position:absolute;right:0;top:0;width:10px;height:10px" onclick="window.storyNext = (window.storyNext || 0) + 1">›</button>
+    </section></div></div>
+    <script>
+      window.storyTaps = 0;
+      for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click']) document.getElementById('viewer2').addEventListener(ev, (e) => { if (e.target.id !== 'psnext') window.storyTaps++; });
+    </script>`,
   '/revealing/': `<main>
    <article id="rv1"><header><a href="/a/">a</a></header><img src="${CDN}/rev-1.jpg" width="400" height="400"><div>Saturday.</div></article>
    <article id="rv2"><header><a href="/b/">b</a></header><img src="${CDN}/plain-rv2.jpg" width="400" height="400"><div>leg day #gymgirl</div></article>
@@ -373,9 +403,13 @@ try {
   // ---- hidden by hand (the menu's circle-slash, then a tap) ----
   await go('/hand/', 1000);
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('igf-pick')));
-  await page.click('#h1img');
-  await page.waitForTimeout(400);
-  check('by hand: the tapped picture\'s post is hidden at once, discreetly', !(await shown('h1')) && !/Hidden|reported/i.test(await page.evaluate(() => document.body.innerText)));
+  check('by hand: picking says what to do', await page.evaluate(() => { const t = document.getElementById('igf-pick-tip'); return !!t && /tap a picture to hide it/i.test(t.textContent) && getComputedStyle(t).visibility === 'visible'; }));
+  const centre = (sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  { const c = await centre('#h1img'); await page.mouse.click(c.x, c.y); }
+  await page.waitForTimeout(150);
+  check('by hand: the tapped picture\'s post is hidden at once', !(await shown('h1')));
+  check('by hand: and the page says so ("Hidden"), then the note goes', await page.evaluate(() => /^Hidden$/.test((document.getElementById('igf-pick-tip') || {}).textContent || '')) && await page.waitForFunction(() => !document.getElementById('igf-pick-tip'), null, { timeout: 2000 }).then(() => true, () => false));
+  check('by hand: the dimming layer is gone', await page.evaluate(() => !document.getElementById('igf-pick')));
   check('by hand: one tap only; the next tap does nothing', await page.evaluate(() => !document.documentElement.hasAttribute('data-igf-picking')) && (await shown('h2')));
   const rec = await page.evaluate(() => globalThis.IGFilterBridge.reports[0]);
   check('by hand: a record with the id, both judges\' scores, the surface, the time (no picture, no address)', !!rec && rec.id === 'instagram:HAND111' && rec.surface === 'feed' && rec.scores && 'Revealing' in rec.scores && 'Sexy' in rec.scores && !!rec.at && !/https?:/.test(JSON.stringify(rec)), JSON.stringify(rec));
@@ -386,8 +420,59 @@ try {
   await page.evaluate(() => sessionStorage.removeItem('igf-byhand'));
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('igf-pick')));
   await page.mouse.click(5, 5);
-  await page.waitForTimeout(300);
-  check('by hand: a tap on no picture cancels, nothing hidden', (await shown('h2')) && await page.evaluate(() => !document.documentElement.hasAttribute('data-igf-picking')));
+  await page.waitForTimeout(100);
+  check('by hand: a tap on no picture cancels, nothing hidden, and says "No picture there"', (await shown('h2')) && await page.evaluate(() => !document.documentElement.hasAttribute('data-igf-picking') && /No picture there/.test((document.getElementById('igf-pick-tip') || {}).textContent || '')));
+  // ---- hidden by hand, on the phone: touches, Instagram's clear box over the picture, stories ----
+  {
+    const tctx = await browser.newContext({ hasTouch: true, isMobile: chromium === pw.chromium, viewport: { width: 390, height: 844 } });
+    await tctx.route('https://www.instagram.com/**', (r) => { const p = new URL(r.request().url()).pathname; r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<main></main>'}</body></html>` }); });
+    await tctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
+    for (const f of ['filter-config.js', 'rules.js']) await tctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
+    await tctx.addInitScript({ content: fakeBridge });
+    for (const f of ['ig-filter.js', 'ig-tidy.js']) await tctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
+    const tp = await tctx.newPage();
+    tp.on('pageerror', (e) => console.log('pageerror:', e.message));
+    const tcentre = (sel) => tp.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    const tshown = (id) => tp.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return e.getBoundingClientRect().height > 1; }, id);
+    await tp.goto('https://www.instagram.com/hand2/'); await tp.waitForTimeout(900);
+    check('touch: before picking, a tap on the picture reaches Instagram (nothing changed for normal use)', await (async () => { const c = await tcentre('#o1img'); await tp.touchscreen.tap(c.x, c.y); await tp.waitForTimeout(100); return tp.evaluate(() => window.igTaps > 0); })());
+    await tp.waitForTimeout(700);
+    await tp.evaluate(() => { window.igTaps = 0; document.dispatchEvent(new CustomEvent('igf-pick')); });
+    { const c = await tcentre('#o1img'); await tp.touchscreen.tap(c.x, c.y); }
+    await tp.waitForTimeout(150);
+    check('touch: a tap through Instagram\'s clear box hides the post at once', !(await tshown('o1')));
+    check('touch: Instagram never saw that tap (no like, no navigation)', await tp.evaluate(() => window.igTaps === 0), String(await tp.evaluate(() => window.igTaps)));
+    check('touch: the next post stays', await tshown('o2'));
+    await tp.goto('https://www.instagram.com/stories/plainstory/444/'); await tp.waitForTimeout(900);
+    await tp.evaluate(() => { window.storyTaps = 0; document.dispatchEvent(new CustomEvent('igf-pick')); });
+    { const c = await tcentre('#psimg'); await tp.touchscreen.tap(c.x, c.y); }
+    await tp.waitForTimeout(200);
+    check('story: hide a picture works in a story', await tp.$eval('#psimg', (e) => getComputedStyle(e).visibility === 'hidden'));
+    check('story: the tap did not reach the story (it neither closed nor moved it)', await tp.evaluate(() => window.storyTaps === 0), String(await tp.evaluate(() => window.storyTaps)));
+    check('story: the viewer then goes on to the next story, as a hidden story does', await tp.evaluate(() => window.storyNext === 1));
+    check('story: the app itself is still on screen (no grey page)', await tshown('viewer2'));
+    if (chromium === pw.chromium) {
+      // the two-finger tap that opens the app's menu
+      await tp.waitForTimeout(700);
+      const cdp = await tctx.newCDPSession(tp);
+      await tp.evaluate(() => { window.storyTaps = 0; });
+      const pts = [{ x: 150, y: 400, id: 1 }, { x: 240, y: 420, id: 2 }];
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pts[0]] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await tp.waitForTimeout(100);
+      const taps = await tp.evaluate(() => window.storyTaps);
+      // the first finger's touchstart / pointerdown reach the page before the second finger lands; nothing after does
+      check('story: a two-finger tap does not close or advance the story (no release, no click reaches it)', taps <= 2 && await tp.evaluate(() => window.storyNext === 1), String(taps));
+    }
+    // a video story with only its avatar beside it: hidden, it is covered; the app around it stays
+    await tp.goto('https://www.instagram.com/stories/vidstory/333/'); await tp.waitForTimeout(1200);
+    check('story viewer: Instagram\'s app around a hidden story is still laid out (no grey page)', (await tshown('viewer')) && (await tshown('sthead')) && (await tshown('stnext')));
+    check('story viewer: the hidden story moved on to the next', await tp.evaluate(() => window.storyNext === 1 && window.storyClosedByTap === 0));
+    await tp.waitForTimeout(4600); // a video with no frames to read is let go after its 4 s wait for the first frame
+    check('story viewer: the next story in the same box (a plain one) is judged and shown, not left blank', await tp.$eval('#stv', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')), await tp.$eval('#stv', (e) => (e.closest('[data-igf-gone]') || e).outerHTML.slice(0, 200)));
+    await tctx.close();
+  }
   // ---- revealing clothing (any person; gender-neutral) ----
   await go('/revealing/');
   check('revealing: a picture the judge scores revealing hides its post', (await hiddenAs('#rv1')) === 'image');
