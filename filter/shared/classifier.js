@@ -34,6 +34,10 @@
     if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) throw new Error('not an image');
     await load();
     const img = await image(dataUrl);
+    // The two judges at once (2026-11-12, for speed): nsfwjs runs on the GPU (WebGL) while the revealing-clothing judge
+    // runs on the CPU (wasm). Both must answer, as before; if the second cannot run, the picture is not judged.
+    const revealing = window.IGClip.revealing(img);
+    revealing.catch(() => {}); // awaited below; this only keeps an early failure from being reported as unhandled
     const c = document.createElement('canvas');
     c.width = 224; c.height = 224;
     // Centre-crop to a square, as the model was trained.
@@ -50,9 +54,9 @@
     }
     const scores = {};
     for (const o of out) scores[o.className] = Math.round(o.probability * 10000) / 10000;
-    // The revealing-clothing judge (clip.js) on the same picture. If it cannot run, the picture is not judged (the
-    // page then holds it as "still checking"): the category never quietly switches off.
-    scores.Revealing = await window.IGClip.revealing(img);
+    // The revealing-clothing judge (clip.js) on the same picture, started above. If it cannot run, the picture is not
+    // judged (the page then holds it as "still checking"): the category never quietly switches off.
+    scores.Revealing = await revealing;
     info.n++; info.totalMs += performance.now() - started;
     return scores;
   }
