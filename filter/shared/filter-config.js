@@ -10,6 +10,8 @@ globalThis.IGFilterConfig = {
   "searchAvatarPx": 44,
   "retrySeconds": [5, 20, 60],
   "frameEverySeconds": 2,
+  "judgeLanes": 2,
+  "judgeInFlight": 4,
   "labels": "none",
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",

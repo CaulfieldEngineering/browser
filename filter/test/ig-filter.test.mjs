@@ -157,6 +157,16 @@ const pages = {
    <nav><a id="explorelink" href="/explore/">Explore</a></nav></main>`,
   '/reels/C9/': `<main><div class="x78zum5"><div class="xh8yej3" id="viewer"><div><video id="rv" poster="${CDN}/flag-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator/">creator</a> caption</div></div>
    <div class="xh8yej3" id="viewer2"><div><video id="rv2" poster="${CDN}/plain-poster.jpg" playsinline muted style="width:360px;height:640px"></video></div><div><a href="/creator2/">creator2</a> fine</div></div></div></main>${NAV}`,
+  // Speed (2026-11-12): a big picture still loading is asked for at once; a small one waits; pictures taken off the
+  // page before their turn are not judged at all; a picture that waited on screen is counted and fades in.
+  '/speed/': `<main role="main">
+    <article id="sp1"><header><a href="/a/">a</a></header><img id="slowbig" src="${CDN}/slowload-big.jpg" style="width:390px;height:390px;display:block"><div>one</div></article>
+    <article id="sp2"><header><a href="/b/"><img id="slowsmall" src="${CDN}/slowload-small.jpg" style="width:32px;height:32px" alt="b's profile picture"></a></header><img id="waited" src="${CDN}/slowjudge-w.jpg" style="width:390px;height:390px;display:block"><div>two</div></article>
+    <div id="pile"></div>
+    <script>
+      window.addPile = () => { const pile = document.getElementById('pile'); let h = ''; for (let i = 0; i < 12; i++) h += '<article class="pl"><img class="plimg" src="${CDN}/pile-' + i + '.jpg" style="width:390px;height:390px;display:block"><div>p</div></article>';
+        pile.insertAdjacentHTML('beforeend', h); [...pile.querySelectorAll('.pl')].slice(4).forEach((a) => a.remove()); };
+    </script></main>`,
   '/stories/someone/': `<main><button aria-label="Next">›</button><div id="ring"><img id="ringimg" src="${CDN}/flag-ring.jpg" style="width:56px;height:56px"></div><section id="story"><img id="storyimg" src="${CDN}/flag-story.jpg" style="width:360px;height:640px"></section></main>`,
 };
 
@@ -167,6 +177,7 @@ globalThis.IGFilterBridge = {
   stat(n) { this.stats[n] = (this.stats[n] || 0) + 1; },
   classifyUrl(u) {
     this.calls.push(u);
+    this.callAt = this.callAt || {}; this.callAt[u.split('/').pop().split('?')[0]] = performance.now();
     return new Promise((r) => setTimeout(() => {
       if (/fail/.test(u)) return r({ _error: 'unreadable' });
       if (/late/.test(u)) return r(++globalThis.__lateTries < 2 ? { _error: 'loading' } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
@@ -174,7 +185,7 @@ globalThis.IGFilterBridge = {
       if (/half/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.3 });
       if (/nsfwonly/.test(u)) return r({ Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02 });
       r(/flag/.test(u) ? { Sexy: 0.8, Neutral: 0.2, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.1 } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
-    }, 30));
+    }, /slowjudge/.test(u) ? 500 : 30));
   },
   classifyData() { return Promise.resolve({ Neutral: 0.99, Sexy: 0, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.01 }); },
   reports: [],
@@ -194,7 +205,10 @@ try {
     const q = new URL(r.request().url()).searchParams.get('fx');
     r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head><body>${(q && pages['?' + q]) || pages[p] || '<main></main>'}</body></html>` });
   });
-  await ctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
+  await ctx.route(/cdninstagram\.com/, async (r) => {
+    if (/slowload/.test(r.request().url())) await new Promise((ok) => setTimeout(ok, 1500)); // a picture slow to load
+    r.fulfill({ contentType: 'image/png', body: png }).catch(() => {});
+  });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'filter-config.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'rules.js'), 'utf8') });
   await ctx.addInitScript({ content: fakeBridge });
@@ -522,6 +536,22 @@ try {
   const settledAt = await page.waitForFunction(() => document.documentElement.getAttribute('data-igt-settled') === '/p/P10/comments/', null, { timeout: 6000 }).then(() => true, () => false);
   check('navigation settled: a new page is marked when its hold ends', settledAt);
 
+  // ---- speed: asked while loading, nothing judged that left the page, the wait counted ----
+  await page.goto('https://www.instagram.com/speed/', { waitUntil: 'commit' });
+  await page.waitForFunction(() => globalThis.IGFilterBridge && IGFilterBridge.callAt && IGFilterBridge.callAt['slowload-big.jpg'], null, { timeout: 1200 }).catch(() => {});
+  const early = await page.evaluate(() => ({ asked: !!(IGFilterBridge.callAt || {})['slowload-big.jpg'], loaded: document.getElementById('slowbig').complete, small: !!(IGFilterBridge.callAt || {})['slowload-small.jpg'], held: document.getElementById('slowbig').hasAttribute('data-igf-hold') }));
+  check('speed: a big picture still loading is asked for at once, and stays held', early.asked && !early.loaded && early.held, JSON.stringify(early));
+  check('speed: a small picture still loading is not asked for', !early.small);
+  await page.waitForFunction(() => document.getElementById('slowbig').complete && document.getElementById('slowsmall').complete && !document.getElementById('waited').hasAttribute('data-igf-hold'), null, { timeout: 6000 }).catch(() => {});
+  await page.waitForTimeout(150);
+  const after = await page.evaluate(() => ({ big: getComputedStyle(document.getElementById('slowbig')).visibility, small: getComputedStyle(document.getElementById('slowsmall')).visibility, smallAsked: !!IGFilterBridge.callAt['slowload-small.jpg'], stats: IGFilterBridge.stats }));
+  check('speed: both show once loaded; the avatar was never judged', after.big === 'visible' && after.small === 'visible' && !after.smallAsked, JSON.stringify(after));
+  check('speed: a picture that waited on screen is counted by how long (wait-1: 0.15 to 0.6 s)', (after.stats['wait-1'] || 0) >= 1 && (after.stats['wait-0'] || 0) + (after.stats['wait-1'] || 0) + (after.stats['wait-2'] || 0) >= 2, JSON.stringify(after.stats));
+  await page.evaluate(() => { IGFilterBridge.calls.length = 0; window.addPile(); });
+  await page.waitForFunction(() => document.querySelectorAll('.plimg').length === 4 && [...document.querySelectorAll('.plimg')].every((i) => !i.hasAttribute('data-igf-hold')), null, { timeout: 5000 }).catch(() => {});
+  const pile = await page.evaluate(() => ({ asked: IGFilterBridge.calls.filter((u) => /pile-/.test(u)).map((u) => +u.match(/pile-(\d+)/)[1]).sort((a, b) => a - b), dropped: __igFilter.dropped || 0, shown: [...document.querySelectorAll('.plimg')].filter((i) => getComputedStyle(i).visibility === 'visible').length }));
+  check('speed: pictures taken off the page before their turn are not judged; the rest show', pile.asked.join() === '0,1,2,3' && pile.dropped >= 8 && pile.shown === 4, JSON.stringify(pile));
+
   // ---- the real classifier ----
   const p2 = await browser.newPage();
   const types = { html: 'text/html', js: 'text/javascript', mjs: 'text/javascript', json: 'application/json', wasm: 'application/wasm', onnx: 'application/octet-stream', jpg: 'image/jpeg' };
@@ -545,6 +575,41 @@ try {
   check('classifier: reports its backend and timing', !!r.info.backend && r.info.n === 2, JSON.stringify(r.info));
   check('classifier: the revealing-clothing judge loads and answers', typeof r.s.Revealing === 'number' && r.info.clip.ready, JSON.stringify(r.info.clip));
   check('classifier: a plain picture is not revealing', r.s.Revealing < 0.6, String(r.s.Revealing));
+  // The lanes (2026-11-12): the revealing-clothing judge in two workers; pictures asked for together get the same
+  // scores as one at a time; one lane when asked for one; and in the page itself when no worker can start.
+  const lanes = await p2.evaluate(async () => {
+    const until = Date.now() + 20000;
+    while (IGClip.width() < 2 && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
+    let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.fillStyle = '#777'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 200; i++) { g.fillStyle = 'hsl(' + rnd() * 360 + ',' + rnd() * 90 + '%,' + (10 + rnd() * 80) + '%)'; g.fillRect(rnd() * w, rnd() * h, 30 + rnd() * 120, 30 + rnd() * 120); } return c.toDataURL('image/jpeg', 0.9); };
+    const imgs = [mk(358, 448), mk(252, 448), mk(448, 448), mk(300, 448), mk(448, 300), mk(224, 224)];
+    const one = []; for (const d of imgs) one.push(JSON.stringify(await IGClassifier.classify(d)));
+    const together = (await Promise.all(imgs.map((d) => IGClassifier.classify(d)))).map((x) => JSON.stringify(x));
+    return { width: IGClip.width(), clip: IGClip.info(), same: one.every((s, i) => s === together[i]), one, together };
+  });
+  check('classifier: the revealing-clothing judge runs in two lanes (workers)', lanes.width === 2 && lanes.clip.mode === 'workers', JSON.stringify(lanes.clip));
+  check('classifier: pictures judged together score exactly as one at a time', lanes.same, lanes.same ? '' : JSON.stringify([lanes.one, lanes.together]));
+  const plain = await p2.evaluate(() => { const c = document.createElement('canvas'); c.width = 300; c.height = 500; const g = c.getContext('2d'); g.fillStyle = '#28a'; g.fillRect(0, 0, 300, 500); g.fillStyle = '#fd3'; g.fillRect(40, 60, 200, 120); return c.toDataURL('image/jpeg'); });
+  const two = await p2.evaluate((d) => IGClassifier.classify(d), plain);
+  const p3 = await browser.newPage();
+  let noWorkerFile = false;
+  await p3.route('https://classifier.test/**', (rt) => {
+    const rel = decodeURIComponent(new URL(rt.request().url()).pathname).replace(/^\/+/, '');
+    const f = path.join(shared, rel);
+    if ((noWorkerFile && rel === 'clip-worker.js') || !fs.existsSync(f)) return rt.fulfill({ status: 404, body: '' });
+    rt.fulfill({ contentType: types[f.split('.').pop()] || 'application/octet-stream', body: fs.readFileSync(f) });
+  });
+  await p3.goto('https://classifier.test/classifier.html?lanes=1');
+  const oneLane = await p3.evaluate(async (d) => { const s = await IGClassifier.classify(d); await new Promise((r) => setTimeout(r, 1500)); return { s, width: IGClip.width(), clip: IGClip.info() }; }, plain);
+  check('classifier: one lane when the app asks for one', oneLane.width === 1 && oneLane.clip.lanes === 1 && oneLane.clip.mode === 'workers' && typeof oneLane.s.Revealing === 'number', JSON.stringify(oneLane.clip));
+  check('classifier: one lane or two, the same picture gets the same scores', JSON.stringify(oneLane.s) === JSON.stringify(two), JSON.stringify([oneLane.s, two]));
+  // No worker can start (its file is missing): the model runs in the page, as it did before the lanes.
+  noWorkerFile = true;
+  await p3.goto('https://classifier.test/classifier.html');
+  const noWorker = await p3.evaluate(async (d) => { const s = await IGClassifier.classify(d); return { s, width: IGClip.width(), clip: IGClip.info() }; }, plain);
+  check('classifier: with no worker the judge runs in the page and answers the same', noWorker.clip.mode === 'page' && noWorker.width === 1 && JSON.stringify(noWorker.s) === JSON.stringify(two), JSON.stringify([noWorker.clip, noWorker.s]));
+  await p3.close();
   // Optional, local only: EVAL_IMAGES=<folder with rev/ and neg/ photos> prints the revealing score of each.
   if (process.env.EVAL_IMAGES) {
     for (const kind of ['rev', 'neg']) for (const f of fs.readdirSync(path.join(process.env.EVAL_IMAGES, kind))) {

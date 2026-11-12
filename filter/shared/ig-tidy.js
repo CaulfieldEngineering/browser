@@ -126,7 +126,9 @@
     }
   }
   let ps = 0;
-  new MutationObserver(() => { if (!ps) ps = setTimeout(() => { ps = 0; plainSearch(); }, 60); }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style'] });
+  // Only on the search pages: elsewhere a style that changes every frame (a story's progress bar, a video's) would
+  // run this many times a second for nothing (the 500 ms look below still keeps the tab bar marked).
+  new MutationObserver(() => { if (!ps && /^\/explore(\/|$)/.test(location.pathname)) ps = setTimeout(() => { ps = 0; plainSearch(); }, 60); }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style'] });
   setInterval(plainSearch, 500);
 
   // A newly opened page starts at the top, as in the native app (Joe, 2026-11-05: "opening certain pages scrolls way

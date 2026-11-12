@@ -6,6 +6,7 @@
 //   IGFilterBridge.classifyRect(rect) -> Promise<scores | {_error} | null>   what is on screen there (a playing video), optional
 //   IGFilterBridge.stat(name)         -> count one event on the device (why a post was hidden), optional
 //   IGFilterBridge.warm()             -> start loading the model now, optional
+//   IGFilterBridge.width()            -> Promise<how many pictures the judge takes at a time>, optional
 //
 // Surfaces: the feed (<article>), post pages, profile grids (posts, reels, tagged), Explore and search grids, the reel
 // viewer, stories, messages; pictures as <img> or as a CSS background on the tile; avatars and story rings only when
@@ -46,6 +47,8 @@
   // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
+    '@keyframes igf-in{from{opacity:0}to{opacity:1}}',
+    '[data-igf-in]{animation:igf-in .18s ease-out}',
     '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
     // In the reel and story viewers a hidden slide is covered, not removed (Joe, 2026-11-12: "A lot of times when it
     // blocks a slide too it completely shuts down the app. Like grey box."): the viewer measures its slides, so a slide
@@ -316,7 +319,10 @@
   // flight (one being judged while the next are fetched), and each time one is done the next is the picture nearest
   // the screen: on screen first, then just below, a carousel's next slide, then the rest. Nothing is shown sooner
   // than before it is judged; only the order changes.
-  const IN_FLIGHT = CFG.judgeInFlight || 3;
+  // In flight: as many as the judge takes at a time (its lanes: two or three on the phone, clip.js) being judged, and
+  // two more being fetched meanwhile. The bridge says how many lanes; until it has, the settings' number.
+  let IN_FLIGHT = CFG.judgeInFlight || 4;
+  try { Promise.resolve(BRIDGE.width && BRIDGE.width()).then((n) => { if (n > 0) { IN_FLIGHT = Math.min(8, n + 2); pump(); } }, () => {}); } catch {}
   const waiting = []; // { url, els: Set, resolve }
   const waitingByKey = new Map();
   let flying = 0;
@@ -338,6 +344,9 @@
       for (let i = 0; i < waiting.length; i++) { const d = nearness(waiting[i].els); if (d < near) { near = d; at = i; if (d === 0) break; } }
       const job = waiting.splice(at, 1)[0];
       waitingByKey.delete(keyOf(job.url));
+      // A picture no longer on the page (Instagram takes posts far above the screen out again): not judged at all, so
+      // the judge is free for what is coming. If it is put back, it is asked for again.
+      if (near === Infinity && job.els.size) { for (const el of job.els) imgDone.delete(el); state.dropped = (state.dropped || 0) + 1; job.resolve({ flagged: null, why: 'unjudged-gone' }); continue; }
       flying++;
       ask(() => BRIDGE.classifyUrl(job.url)).then(job.resolve, () => job.resolve({ flagged: null, why: 'unjudged-bridge' })).finally(() => { flying--; pump(); });
     }
@@ -375,6 +384,25 @@
     return m ? m[2] : '';
   }
   const imgDone = new WeakMap(); // element -> the src judged
+  // A picture judged clean is let go. One that had been waiting where Joe could see it comes in with a short fade
+  // instead of popping in (2026-11-12); one judged before it was ever on screen just shows. How long it waited on
+  // screen is counted on the device in five steps (wait-0: under 0.15 s or never on screen, wait-1: under 0.6 s,
+  // wait-2: under 1.5 s, wait-3: under 4 s, wait-4: longer), so the grey boxes can be measured on the phone itself.
+  const onScreenAt = new WeakMap(); // a held picture -> when it first was on screen while held
+  const waitIO = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting && !onScreenAt.has(e.target)) onScreenAt.set(e.target, Date.now()); })
+    : null;
+  function show(el) {
+    el.removeAttribute('data-igf-hold');
+    if (waitIO) waitIO.unobserve(el);
+    const at = onScreenAt.get(el);
+    onScreenAt.delete(el);
+    const ms = at ? Date.now() - at : 0;
+    stat('wait-' + (ms < 150 ? 0 : ms < 600 ? 1 : ms < 1500 ? 2 : ms < 4000 ? 3 : 4));
+    if (ms < 120 || !el.isConnected) return;
+    el.setAttribute('data-igf-in', '');
+    setTimeout(() => el.removeAttribute('data-igf-in'), 260);
+  }
   function handleImg(img) {
     const src = srcOf(img);
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
@@ -386,23 +414,32 @@
     if (checkText(unit)) return;
     img.setAttribute('data-igf-hold', '');
     holdIn(unit, img);
+    if (waitIO) waitIO.observe(img);
     const go = async () => {
       const r = img.getBoundingClientRect();
       // On search and Explore pages every picture is judged, small avatars too (only small ones are kept there).
       const small = /^\/explore(\/|$)/.test(location.pathname) ? 0 : SMALL;
       if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < small && r.height < small) { img.removeAttribute('data-igf-hold'); return; }
       const v = await judgeUrl(src, img);
-      if (srcOf(img) !== src) return; // changed meanwhile; the new src is judged on its own
+      if (srcOf(img) !== src) { handleImg(img); return; } // changed meanwhile (a srcset's other size): the new one is judged on its own
+      if (!img.isConnected) return;
       const u = unitOf(img);
       // An account's avatar (search results, lists, a profile's header): only the picture goes, the row stays, so
       // he can still find people (Joe, 2026-11-05: "let's block the picture but keep the line").
       if (v.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); stat('hidden-avatar'); return; }
       if (v.flagged) hide(u, 'image', v.why);
-      else if (v.flagged === false) img.removeAttribute('data-igf-hold');
+      else if (v.flagged === false) show(img);
       else hide(u, 'checking', v.why);
     };
     if (img.tagName !== 'IMG') { requestAnimationFrame(go); return; } // a background: judged once laid out
-    if (img.complete) go(); else { img.addEventListener('load', go, { once: true }); img.addEventListener('error', go, { once: true }); }
+    if (img.complete) { go(); return; }
+    // Still loading. A picture whose box is already big enough to be judged is asked for now, while the page is still
+    // loading it, so the answer is often there when the picture is (2026-11-12; before, the question waited for the
+    // picture to finish loading). A small or not yet laid out one waits for its size, as before.
+    const r0 = img.getBoundingClientRect();
+    const small0 = /^\/explore(\/|$)/.test(location.pathname) ? 0 : SMALL;
+    if (r0.width > 0 && r0.height > 0 && (r0.width >= small0 || r0.height >= small0)) { go(); return; }
+    img.addEventListener('load', go, { once: true }); img.addEventListener('error', go, { once: true });
   }
 
   // "Still checking": every held picture in the post is tried again; all clean shows it, one flagged hides it for good,
@@ -423,7 +460,7 @@
         if (v.flagged === null) { allClean = false; last = v.why; }
       }
       if (allClean) {
-        for (const img of imgs) img.removeAttribute('data-igf-hold');
+        for (const img of imgs) { if (img.tagName === 'VIDEO') img.removeAttribute('data-igf-hold'); else show(img); }
         restore(unit);
         for (const v of imgs) if (v.tagName === 'VIDEO') { try { v.muted = true; if (onScreen(unit)) v.play(); } catch {} } // it plays, where it was
         return;

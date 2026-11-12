@@ -19,15 +19,24 @@
     });
   }
 
-  // One picture at a time: the model is one engine, and a feed asks for dozens at once. A queue keeps each answer's
-  // time to its own work, so a busy feed does not make the native side give up on pictures still waiting.
-  let chain = Promise.resolve();
-  const info = { backend: '', loadMs: 0, n: 0, totalMs: 0 };
+  // As many pictures at a time as the revealing-clothing judge has lanes (clip.js: two workers, or one in the page),
+  // the rest waiting in order. Each answer's time is its own work, so a busy feed does not make the native side give
+  // up on pictures still waiting. (Until 2026-11-12: strictly one at a time.)
+  const waiting = [];
+  let running = 0;
+  const info = { backend: '', loadMs: 0, n: 0, totalMs: 0, waitMs: 0 };
   const t0 = performance.now();
   function classify(dataUrl) {
-    const run = chain.then(() => classifyNow(dataUrl));
-    chain = run.catch(() => {});
-    return run;
+    return new Promise((resolve, reject) => { waiting.push({ dataUrl, resolve, reject, at: performance.now() }); pump(); });
+  }
+  function pump() {
+    const width = model ? window.IGClip.width() : 1; // one until the models are in
+    while (running < width && waiting.length) {
+      const job = waiting.shift();
+      running++;
+      info.waitMs += performance.now() - job.at;
+      classifyNow(job.dataUrl).then(job.resolve, job.reject).finally(() => { running--; pump(); });
+    }
   }
   async function classifyNow(dataUrl) {
     const started = performance.now();
@@ -61,7 +70,7 @@
     return scores;
   }
 
-  window.IGClassifier = { classify, load, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0, clip: window.IGClip.info() }) };
+  window.IGClassifier = { classify, load, info: () => ({ ...info, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0, avgWaitMs: info.n ? Math.round(info.waitMs / info.n) : 0, clip: window.IGClip.info() }) };
 
   // The iPhone app: native calls igcClassify(id, dataUrl) and hears back on the "igc" message handler.
   window.igcClassify = (id, dataUrl) => {
