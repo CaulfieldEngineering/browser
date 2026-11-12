@@ -42,6 +42,13 @@ enum Flavor {
         return ["facebook.com", "fb.com", "fb.me", "messenger.com"].contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
+    /// A site app's own home: Instagram's feed (any variant), Facebook's Notifications. What a site app opens fresh
+    /// when Joe comes back after a while (BrowserViewController.cameBack).
+    static func isHome(_ url: URL) -> Bool {
+        if isFacebook { return isFacebookHost(url) && url.path.hasPrefix("/notifications") }
+        return isInstagramHost(url) && (url.path.isEmpty || url.path == "/")
+    }
+
     /// The one site a site app opens.
     static func isSiteHost(_ url: URL) -> Bool { isFacebook ? isFacebookHost(url) : isInstagramHost(url) }
 

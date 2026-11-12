@@ -160,6 +160,45 @@ final class InstagramAppTests: XCTestCase {
         XCTAssertEqual(back, 1200, "Back returns to the same place in the feed")
     }
 
+    /// Away for half an hour or more, the app opens its home fresh; sooner, it comes back where it was. Only the home
+    /// feed is ever loaded again on coming back.
+    func testAwayForAWhileOpensHomeFresh() {
+        let now = Date()
+        XCTAssertTrue(BrowserViewController.isStale(leftAt: 0, now: now), "never noted: home")
+        XCTAssertFalse(BrowserViewController.isStale(leftAt: now.timeIntervalSince1970 - 60, now: now))
+        XCTAssertFalse(BrowserViewController.isStale(leftAt: now.timeIntervalSince1970 - 29 * 60, now: now))
+        XCTAssertTrue(BrowserViewController.isStale(leftAt: now.timeIntervalSince1970 - 31 * 60, now: now))
+        XCTAssertTrue(Flavor.isHome(URL(string: "https://www.instagram.com/?variant=following")!))
+        XCTAssertTrue(Flavor.isHome(URL(string: "https://www.instagram.com/")!))
+        XCTAssertFalse(Flavor.isHome(URL(string: "https://www.instagram.com/someone/")!))
+        XCTAssertFalse(Flavor.isHome(URL(string: "https://www.instagram.com/direct/inbox/")!))
+        XCTAssertFalse(Flavor.isHome(URL(string: "https://example.com/")!))
+    }
+
+    /// No long-press previews in the Instagram app (holding a story is Instagram's own gesture).
+    func testNoLinkPreviews() throws {
+        let (vc, _) = try app()
+        XCTAssertFalse(try page(in: vc).allowsLinkPreview)
+    }
+
+    /// A page that did not open for want of a connection offers "Try again"; a page the app does not open, "Go back".
+    func testAPageThatDidNotOpenOffersToTryAgain() throws {
+        func all(_ v: UIView) -> [UIView] { [v] + v.subviews.flatMap(all) }
+        let view = BlockedView()
+        var tried = 0, back = 0
+        view.onRetry = { tried += 1 }
+        view.onBack = { back += 1 }
+        view.show(title: "This page did not open", reason: "The Internet connection appears to be offline.", address: "instagram.com", calm: true, retry: true)
+        let button = try XCTUnwrap(all(view).compactMap { $0 as? UIButton }.first)
+        XCTAssertEqual(button.title(for: .normal), "Try again")
+        button.sendActions(for: .touchUpInside)
+        XCTAssertEqual([tried, back], [1, 0])
+        view.show(title: "This app opens Instagram only", reason: "Links to other sites do not open here.", address: "example.com")
+        XCTAssertEqual(button.title(for: .normal), "Go back")
+        button.sendActions(for: .touchUpInside)
+        XCTAssertEqual([tried, back], [1, 1])
+    }
+
     func testCSSColoursAreRead() {
         XCTAssertEqual(rgb(BrowserViewController.colour(css: "rgb(12, 16, 20)")), [12, 16, 20])
         XCTAssertEqual(rgb(BrowserViewController.colour(css: "rgba(250, 250, 250, 1)")), [250, 250, 250])

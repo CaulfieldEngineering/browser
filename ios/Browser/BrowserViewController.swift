@@ -1,3 +1,4 @@
+import Network
 import UIKit
 import WebKit
 
@@ -78,15 +79,29 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         checkForUpdate()
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.checkForUpdate()
+            self?.cameBack()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             self?.snapshotCurrent()
             self?.saveTabs()
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.leftAtKey)
         }
+        // A page that did not open for want of a connection opens by itself when the connection is back.
+        network.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            DispatchQueue.main.async { self?.retryIfWaiting() }
+        }
+        network.start(queue: .global(qos: .utility))
 
         // Under the app tests the app starts with one empty tab and loads nothing itself, so no launch load can land on
         // a test's page (main run 64). Only in a Debug build run by XCTest; the phone's Release build never does this.
         let restored = Self.underTest ? (tabs: [Tab(url: nil)], current: 0) : TabStore.load()
+        // A site app opened again after half an hour or more starts at its home (the feed, with what is new), not on
+        // the profile or story it was left on; sooner than that, it comes back where it was.
+        if Flavor.isSiteApp, !Self.underTest, Self.isStale(leftAt: UserDefaults.standard.double(forKey: Self.leftAtKey)) {
+            restored.tabs[restored.current].url = Flavor.home
+        }
+        UserDefaults.standard.removeObject(forKey: Self.leftAtKey) // read once; the next time away notes it again
         tabs = restored.tabs
         select(tabs[restored.current])
         // The Instagram app: one page, always Instagram; the address is not typed (Flavor.swift).
@@ -120,7 +135,91 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             twoFingers.cancelsTouchesInView = false
             twoFingers.delegate = self
             card.addGestureRecognizer(twoFingers)
+            if !Self.underTest {
+                watchTimer = Timer.scheduledTimer(withTimeInterval: Self.watchEvery, repeats: true) { [weak self] _ in self?.watchPage() }
+            }
         }
+    }
+
+    // MARK: - Coming back, and a page that stopped answering (the site apps)
+
+    private static let leftAtKey = "leftAt"
+    /// Away this long, a site app opens its home fresh.
+    static let freshAfter: TimeInterval = 30 * 60
+
+    /// `leftAt` is when the app last went to the background (seconds since 1970; 0 if never noted).
+    static func isStale(leftAt: Double, now: Date = Date()) -> Bool {
+        leftAt <= 0 || now.timeIntervalSince1970 - leftAt >= freshAfter
+    }
+
+    /// The app came to the front. A page waiting for a connection is tried again. A site app left for half an hour
+    /// or more, and still on its home feed, loads the feed fresh, so Joe lands on what is new (with "Skip posts I've
+    /// seen", past what he already scrolled) instead of the feed as it was. Anywhere else (a profile, messages, a
+    /// post) nothing is reloaded.
+    private func cameBack() {
+        lastAnswer = Date()
+        unanswered = 0
+        retryIfWaiting()
+        guard Flavor.isSiteApp, !Self.underTest else { return }
+        let left = UserDefaults.standard.double(forKey: Self.leftAtKey)
+        UserDefaults.standard.removeObject(forKey: Self.leftAtKey) // once for each time away
+        guard left > 0, Self.isStale(leftAt: left), presentedViewController == nil, current?.blocked == nil,
+              let web = webView, let url = web.url, Flavor.isHome(url) else { return }
+        FilterStats.shared.count("page-fresh")
+        web.load(URLRequest(url: Flavor.home))
+    }
+
+    private let network = NWPathMonitor()
+
+    /// The page that did not open (no connection, a timeout) is asked for again.
+    private func retryIfWaiting() {
+        guard let tab = current, let info = tab.blocked, info.calm, let web = webView else { return }
+        tab.blocked = nil
+        blocked.isHidden = true
+        if let url = info.retry ?? web.url ?? tab.url { web.load(URLRequest(url: url)) }
+        updateBar()
+    }
+
+    /// A page that stopped answering (Joe, 2026-11-12: "it completely shuts down the app. Like grey box"). While a
+    /// site app is in front, its page is asked a one-word question every few seconds. A page that is only busy still
+    /// answers within a second or two; one that has not answered five times running, for 20 seconds, is stuck. It is
+    /// counted ("page-hung", on the phone) and the page is made again where it was: a new web view, so the stuck
+    /// process goes. Twice within a minute, the app's home opens instead. Not while a sheet of ours or the page's is
+    /// up (a page waits on its own alert or file chooser), and not in the tests.
+    static let watchEvery: TimeInterval = 4
+    static let stuckAfter: TimeInterval = 20
+    private var watchTimer: Timer?
+    private var lastAnswer = Date()
+    private var unanswered = 0
+    private var lastStuck: Date?
+
+    private func watchPage() {
+        guard UIApplication.shared.applicationState == .active, presentedViewController == nil, let web = webView, web.url != nil else {
+            lastAnswer = Date()
+            unanswered = 0
+            return
+        }
+        if unanswered >= 5, Date().timeIntervalSince(lastAnswer) >= Self.stuckAfter { return remakeStuckPage() }
+        unanswered += 1
+        web.evaluateJavaScript("1") { [weak self, weak web] _, _ in
+            guard let self, web === self.webView else { return }
+            self.lastAnswer = Date()
+            self.unanswered = 0
+        }
+    }
+
+    private func remakeStuckPage() {
+        guard let tab = current, let old = webView else { return }
+        FilterStats.shared.count("page-hung")
+        let now = Date()
+        let again = lastStuck.map { now.timeIntervalSince($0) < 60 } ?? false
+        lastStuck = now
+        lastAnswer = now
+        unanswered = 0
+        tab.url = again ? Flavor.home : (old.url ?? Flavor.home)
+        old.stopLoading()
+        tab.webView = nil
+        select(tab)
     }
 
     // MARK: - The Instagram app's frame: the strips by the status bar and the home indicator
@@ -446,6 +545,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
         blocked.isHidden = true
         blocked.onBack = { [weak self] in self?.leaveBlocked() }
+        blocked.onRetry = { [weak self] in self?.retryIfWaiting() }
 
         tabsView.isHidden = true
         tabsView.onSelect = { [weak self] tab in
@@ -652,7 +752,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
             ])
             watch()
         }
-        if let b = tab.blocked { blocked.show(title: b.title, reason: b.reason, address: b.address, calm: b.calm) } else { blocked.isHidden = true }
+        if let b = tab.blocked { blocked.show(title: b.title, reason: b.reason, address: b.address, calm: b.calm, retry: b.calm) } else { blocked.isHidden = true }
         progress.isHidden = true
         progress.progress = 0
         updateBar()
@@ -774,7 +874,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = true
-        web.allowsLinkPreview = true
+        // No long-press previews in the site apps: holding a story or a reel is Instagram's own gesture (pause), and
+        // a preview is a second page.
+        web.allowsLinkPreview = !Flavor.isSiteApp
         web.isOpaque = false
         // The Instagram app: Instagram's own page colour (WebKit's default), dark or light; the Browser: ours.
         if !Flavor.isSiteApp {
@@ -904,7 +1006,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         guard let tab = tab(for: web) else { return }
         tab.blocked = info
         guard tab === current else { return }
-        blocked.show(title: info.title, reason: info.reason, address: info.address, calm: info.calm)
+        blocked.show(title: info.title, reason: info.reason, address: info.address, calm: info.calm, retry: info.calm)
         updateProgress()
         updateBar()
     }
@@ -1011,7 +1113,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         if e.code == NSURLErrorCancelled || e.code == 102 /* frame load interrupted, a cancelled navigation */ { return updateBar() }
         let url = (e.userInfo[NSURLErrorFailingURLErrorKey] as? URL)
         HistoryRecorder.shared.failed(webView, url: url)
-        showBlocked(BlockedInfo(title: "This page did not open", reason: e.localizedDescription, address: url?.host ?? "", calm: true), in: webView)
+        showBlocked(BlockedInfo(title: "This page did not open", reason: e.localizedDescription, address: url?.host ?? "", calm: true, retry: url), in: webView)
         updateBar()
     }
 
@@ -1061,6 +1163,10 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 // The page shown instead of one the browser does not open: what happened, in a line, and the way back.
 final class BlockedView: UIView {
     var onBack: (() -> Void)?
+    /// For a page that did not open (no connection): the button tries it again.
+    var onRetry: (() -> Void)?
+    private var retries = false
+    private let button = UIButton(type: .system)
     private let icon = UIImageView()
     private let title = UILabel()
     private let reason = UILabel()
@@ -1088,7 +1194,6 @@ final class BlockedView: UIView {
         address.textColor = Look.faint
         address.textAlignment = .center
 
-        let button = UIButton(type: .system)
         button.setTitle("Go back", for: .normal)
         button.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
         button.tintColor = Look.text
@@ -1116,7 +1221,9 @@ final class BlockedView: UIView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func show(title: String, reason: String, address: String, calm: Bool = false) {
+    func show(title: String, reason: String, address: String, calm: Bool = false, retry: Bool = false) {
+        retries = retry
+        button.setTitle(retry ? "Try again" : "Go back", for: .normal)
         let symbol = calm ? "wifi.exclamationmark" : "hand.raised"
         icon.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 28, weight: .light))
         self.title.text = title
@@ -1126,5 +1233,5 @@ final class BlockedView: UIView {
         isHidden = false
     }
 
-    @objc private func goBack() { onBack?() }
+    @objc private func goBack() { if retries { onRetry?() } else { onBack?() } }
 }

@@ -22,7 +22,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "classifier", "clip"] {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "classifier", "clip", "clip-worker"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))
@@ -50,6 +50,67 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertEqual(Set(s.keys), ["Drawing", "Hentai", "Neutral", "Porn", "Sexy", "Revealing"], "both judges answered")
         XCTAssertLessThan(s["Sexy"] ?? 1, 0.45)
         XCTAssertLessThan(s["Revealing"] ?? 1, 0.6, "a plain picture is not revealing clothing")
+        // The revealing-clothing judge runs in its lanes (workers, clip-worker.js), served from the app's own files.
+        let clip = FilterStats.shared.model["clip"] as? [String: Any]
+        XCTAssertEqual(clip?["mode"] as? String, "workers", "the judge's lanes: \(String(describing: clip))")
+        XCTAssertGreaterThanOrEqual((clip?["lanes"] as? NSNumber)?.intValue ?? 0, 1)
+        // The same picture again, twice at once: the same scores.
+        let both: [Classifier.Answer] = await withCheckedContinuation { done in
+            var got: [Classifier.Answer] = []
+            for _ in 0..<2 { Classifier.shared.classify(data) { got.append($0); if got.count == 2 { done.resume(returning: got) } } }
+        }
+        for answer in both {
+            guard case let .scores(t) = answer else { return XCTFail("the classifier answered \(answer)") }
+            XCTAssertEqual(t, s)
+        }
+    }
+
+    /// How many lanes the judge gets follows the phone's cores and memory.
+    func testTheJudgesLanesFollowThePhone() {
+        let gb: UInt64 = 1_073_741_824
+        XCTAssertEqual(Classifier.lanesFor(cores: 6, memory: 6 * gb - 300_000_000), 3, "an iPhone 13 Pro")
+        XCTAssertEqual(Classifier.lanesFor(cores: 6, memory: 4 * gb - 300_000_000), 2)
+        XCTAssertEqual(Classifier.lanesFor(cores: 2, memory: 2 * gb), 1)
+    }
+
+    /// A picture judged once is answered from its kept scores: found again whatever server and signature its address
+    /// carries, kept without the address, only when both judges answered, and dropped when the judges change.
+    func testScoresOfAPictureAreKeptAndFoundAgain() {
+        let a = URL(string: "https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/123_n.jpg?stp=dst-jpg_e35_p640x640&_nc_ht=scontent-iad3-1.cdninstagram.com&_nc_cat=1&oh=00_AAA&oe=6543")!
+        let b = URL(string: "https://scontent-mia3-2.cdninstagram.com/v/t51.2885-15/123_n.jpg?_nc_cat=7&stp=dst-jpg_e35_p640x640&oh=00_BBB&oe=7777&_nc_sid=x")!
+        let bigger = URL(string: "https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/123_n.jpg?stp=dst-jpg_e35_p1080x1080&oh=00_AAA&oe=6543")!
+        XCTAssertEqual(ScoreCache.key(for: a), ScoreCache.key(for: b), "the same picture from another server, signed again")
+        XCTAssertNotEqual(ScoreCache.key(for: a), ScoreCache.key(for: bigger), "another size is another picture")
+        XCTAssertFalse(ScoreCache.key(for: a).contains("123"), "a hash, not the address")
+
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("scores-\(UUID().uuidString).json")
+        let cache = ScoreCache(file: file, stamp: "one")
+        let s = ["Drawing": 0.1, "Hentai": 0.0, "Neutral": 0.8, "Porn": 0.0, "Sexy": 0.1, "Revealing": 0.2]
+        cache.put(ScoreCache.key(for: a), s)
+        cache.put("half", ["Neutral": 0.9, "Sexy": 0.1]) // one judge only: not kept
+        XCTAssertEqual(cache.scores(for: ScoreCache.key(for: b)), s)
+        XCTAssertNil(cache.scores(for: "half"))
+        XCTAssertEqual(cache.count, 1)
+        cache.save()
+        for _ in 0..<50 where !FileManager.default.fileExists(atPath: file.path) { Thread.sleep(forTimeInterval: 0.1) }
+        XCTAssertEqual(ScoreCache(file: file, stamp: "one").scores(for: ScoreCache.key(for: a)), s, "kept across launches")
+        XCTAssertNil(ScoreCache(file: file, stamp: "two").scores(for: ScoreCache.key(for: a)), "new judges start empty")
+        let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        XCTAssertFalse(text.isEmpty)
+        XCTAssertFalse(text.contains("cdninstagram") || text.contains("123_n"), "no addresses are kept")
+        try? FileManager.default.removeItem(at: file)
+    }
+
+    /// What goes to the mini PC about the filter is timing only: never what was hidden or why.
+    func testTheFiltersTimingCarriesNoReasons() {
+        let stats = FilterStats()
+        for n in ["hidden-sexy", "hidden-text", "hidden-by-hand", "seen-skipped", "wait-0", "wait-2", "judged-clean", "judged-flagged", "page-hung"] { stats.count(n) }
+        let t = stats.timing()
+        XCTAssertGreaterThanOrEqual(t["judged"] as? Int ?? 0, 2)
+        XCTAssertGreaterThanOrEqual(t["wait-2"] as? Int ?? 0, 1)
+        XCTAssertGreaterThanOrEqual(t["page-hung"] as? Int ?? 0, 1)
+        XCTAssertNil(t.keys.first { $0.hasPrefix("hidden") || $0.hasPrefix("seen") || $0 == "judged-flagged" || $0 == "judged-clean" }, "\(t.keys.sorted())")
+        XCTAssertNotNil(try? JSONSerialization.data(withJSONObject: t))
     }
 
     /// In the app's own web view, on an instagram.com page: a post whose caption is suggestive is removed, a plain one

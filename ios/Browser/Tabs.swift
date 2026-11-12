@@ -12,6 +12,8 @@ struct BlockedInfo {
     let reason: String
     let address: String
     let calm: Bool
+    /// A page that did not open for want of a connection: the address to try again.
+    var retry: URL? = nil
 }
 
 final class Tab {

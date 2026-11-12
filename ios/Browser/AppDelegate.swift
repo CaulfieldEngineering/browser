@@ -9,6 +9,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // away from the app?"). With UIBackgroundModes audio in Info.plist.
         // History and the feed to the mini PC (History/): send what waited, and say while the browser is in use.
         Feed.shared.start()
+        // With the heartbeat on leaving: how the filter ran (how long pictures waited, the judges' speed, restarts).
+        // Timing only, and only when pictures were judged today (FilterStats.timing).
+        Heartbeat.timing = {
+            let t = FilterStats.shared.timing()
+            guard (t["judged"] as? Int ?? 0) + (t["judged-again"] as? Int ?? 0) > 0, let data = try? JSONSerialization.data(withJSONObject: t) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
         Heartbeat.shared.start()
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         return true

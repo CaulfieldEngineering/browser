@@ -1,3 +1,4 @@
+import CryptoKit
 import UIKit
 import WebKit
 
@@ -13,6 +14,9 @@ import WebKit
 //   data  a frame the page drew (a video)
 //   rect  what is on screen there (a playing video whose frames the page cannot read): a snapshot of the web view
 //   warm  start loading the model now;  stat  count one event (FilterStats, on the phone only)
+//   width how many pictures the judge takes at a time on this phone (Classifier.lanes)
+// A picture judged once is not judged again: its scores are kept on the phone (ScoreCache), so a profile opened a
+// second time, Back, a reload, shows at once. The rules still decide from the scores each time.
 // An answer is the scores, or {_error: loading | unreadable | timeout | host | bad}, so the page can say "still checking"
 // and try again rather than treat every miss alike. The judging is the classifier page (classifier.html, nsfwjs) in a
 // hidden web view, loaded at launch in the Instagram app and on the first Instagram page in the Browser.
@@ -64,7 +68,7 @@ enum InstagramFilter {
     /// The picture, fetched as the page would (a Safari-like client, Instagram as the referrer), tried three times.
     static func fetchImage(_ url: URL, attempt: Int = 0, _ done: @escaping (UIImage?) -> Void) {
         var request = URLRequest(url: url)
-        request.timeoutInterval = 20
+        request.timeoutInterval = 12 // was 20: three slow pictures held every other picture's turn for a minute
         request.setValue("https://www.instagram.com/", forHTTPHeaderField: "Referer")
         request.setValue("image/webp,image/avif,image/jpeg,image/png,image/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
@@ -72,7 +76,7 @@ enum InstagramFilter {
             let ok = (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
             if ok, let data, let image = UIImage(data: data) { return done(image) }
             guard attempt < 2 else { return done(nil) }
-            DispatchQueue.global().asyncAfter(deadline: .now() + (attempt == 0 ? 1.0 : 3.0)) { fetchImage(url, attempt: attempt + 1, done) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + (attempt == 0 ? 0.4 : 1.5)) { fetchImage(url, attempt: attempt + 1, done) }
         }.resume()
     }
 
@@ -95,6 +99,8 @@ enum InstagramFilter {
             switch op {
             case "warm":
                 Classifier.shared.warmUp(); replyHandler(true, nil)
+            case "width":
+                replyHandler(Classifier.shared.lanes, nil)
             case "stat":
                 if let name = body["name"] as? String { FilterStats.shared.count(name) }
                 replyHandler(true, nil)
@@ -107,9 +113,20 @@ enum InstagramFilter {
                 replyHandler(SeenPosts.on, nil)
             case "url":
                 guard let s = body["url"] as? String, let url = URL(string: s), InstagramFilter.isMediaHost(url) else { return fail("host") }
+                // Judged before (this visit or an earlier one): the same scores, at once.
+                let key = ScoreCache.key(for: url)
+                if let known = ScoreCache.shared.scores(for: key) {
+                    FilterStats.shared.count("judged-again")
+                    return replyHandler(known, nil)
+                }
                 InstagramFilter.fetchImage(url) { image in
                     guard let image, let d = InstagramFilter.dataURL(image) else { return fail("unreadable") }
-                    Classifier.shared.classify(d, judged)
+                    Classifier.shared.classify(d) { answer in
+                        DispatchQueue.main.async {
+                            if case let .scores(s) = answer { ScoreCache.shared.put(key, s) }
+                            judged(answer)
+                        }
+                    }
                 }
             case "data":
                 guard let d = body["data"] as? String, d.hasPrefix("data:image/"), d.count < 4_000_000 else { return fail("bad") }
@@ -127,6 +144,92 @@ enum InstagramFilter {
             default:
                 fail("bad")
             }
+        }
+    }
+}
+
+/// The scores of pictures already judged, kept on the phone (2026-11-12, for speed; Joe: "I spend most of my time
+/// looking at empty grey boxes"). The two judges give the same scores for the same picture every time, so a picture
+/// seen before (a profile opened again, Back, a reload, the feed after the page restarted) is answered at once
+/// instead of being fetched and judged again. What is kept: the six scores under a short hash of the picture's
+/// address (never the address, never the picture), the newest 12,000, in the app's Caches. The rules read the scores
+/// fresh each time, so a line that is tightened later applies to these pictures too. A new build of the judges (their
+/// files' sizes change) starts the cache empty. Only pictures both judges answered are kept. Main thread only.
+final class ScoreCache {
+    static let shared = ScoreCache(file: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("filter-scores.json"))
+    static let names = ["Drawing", "Hentai", "Neutral", "Porn", "Sexy", "Revealing"]
+    static let cap = 12000
+
+    private struct Saved: Codable { let stamp: String; let keys: [String]; let values: [[Double]] }
+    private var scores: [String: [Double]] = [:]
+    private var order: [String] = [] // oldest first
+    private let file: URL?
+    private let stamp: String
+    private var saveQueued = false
+
+    /// The judges as built into this app: the sizes of the models and of the code that prepares a picture for them.
+    static let modelStamp: String = {
+        let base = Bundle.main.resourceURL?.appendingPathComponent("shared")
+        let size = { (name: String) -> Int in
+            guard let path = base?.appendingPathComponent(name).path, let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return 0 }
+            return (attrs[.size] as? NSNumber)?.intValue ?? 0
+        }
+        return ["vendor/tinyclip-vision-int8.onnx", "vendor/clip-prompts.json", "vendor/group1-shard1of1.min.js", "vendor/model.min.js", "classifier.js", "clip.js", "clip-worker.js"]
+            .map { String(size($0)) }.joined(separator: "-")
+    }()
+
+    init(file: URL?, stamp: String = ScoreCache.modelStamp) {
+        self.file = file
+        self.stamp = stamp
+        if let file, let data = try? Data(contentsOf: file), let saved = try? JSONDecoder().decode(Saved.self, from: data),
+           saved.stamp == stamp, saved.keys.count == saved.values.count {
+            for (k, v) in zip(saved.keys, saved.values) where v.count == Self.names.count && scores[k] == nil {
+                scores[k] = v
+                order.append(k)
+            }
+        }
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.save() }
+    }
+
+    /// A short hash of what names the picture: its path and the parts of its query that choose the picture and its
+    /// size (not the server it came from, nor the signature and expiry Instagram changes on every load).
+    static func key(for url: URL) -> String {
+        let volatile: Set<String> = ["oh", "oe", "ccb", "edm", "ig_cache_key"]
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let kept = items.filter { !volatile.contains($0.name) && !$0.name.hasPrefix("_nc_") }.map { "\($0.name)=\($0.value ?? "")" }.sorted()
+        let text = url.path + "?" + kept.joined(separator: "&")
+        return SHA256.hash(data: Data(text.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+    }
+
+    var count: Int { order.count }
+
+    func scores(for key: String) -> [String: Double]? {
+        guard let v = scores[key] else { return nil }
+        return Dictionary(uniqueKeysWithValues: zip(Self.names, v))
+    }
+
+    func put(_ key: String, _ s: [String: Double]) {
+        let v = Self.names.compactMap { s[$0] }
+        guard v.count == Self.names.count else { return } // both judges answered, or it is not kept
+        if scores[key] == nil { order.append(key) }
+        scores[key] = v
+        if order.count > Self.cap {
+            let drop = order.count - Self.cap
+            for k in order.prefix(drop) { scores.removeValue(forKey: k) }
+            order.removeFirst(drop)
+        }
+        guard !saveQueued, file != nil else { return }
+        saveQueued = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.save() }
+    }
+
+    /// Written off the main thread; a save lost to a crash only means those pictures are judged once more.
+    func save() {
+        saveQueued = false
+        guard let file else { return }
+        let saved = Saved(stamp: stamp, keys: order, values: order.compactMap { scores[$0] })
+        DispatchQueue.global(qos: .utility).async {
+            if let data = try? JSONEncoder().encode(saved) { try? data.write(to: file, options: .atomic) }
         }
     }
 }
@@ -175,7 +278,10 @@ final class FilterStats {
     private(set) var model: [String: Any] = [:] // backend, loadMs, avgMs: how the classifier is running here
     private var days: [String: [String: Int]]
 
-    init() { days = (UserDefaults.standard.dictionary(forKey: "filter.stats") as? [String: [String: Int]]) ?? [:] }
+    init() {
+        days = (UserDefaults.standard.dictionary(forKey: "filter.stats") as? [String: [String: Int]]) ?? [:]
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.save() }
+    }
 
     static func day(_ d: Date = Date()) -> String {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
@@ -188,7 +294,35 @@ final class FilterStats {
         let d = Self.day()
         days[d, default: [:]][safe, default: 0] += 1
         if days.count > 30 { for k in days.keys.sorted().dropLast(30) { days.removeValue(forKey: k) } }
+        // Written at most every two seconds and on leaving the app (was: on every count, several a picture).
+        guard !saveQueued else { return }
+        saveQueued = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.save() }
+    }
+    private var saveQueued = false
+
+    func save() {
+        saveQueued = false
         UserDefaults.standard.set(days, forKey: key)
+    }
+
+    /// How the filter runs, for the mini PC (sent with the heartbeat on leaving the app; Feed.swift): how long
+    /// pictures waited on screen (the wait-0 to wait-4 steps, ig-filter.js), how many were judged and how many
+    /// answered from the scores kept, restarts, pictures that could not be fetched or judged, and the judges' speed.
+    /// Timing only: never what was hidden or why, no addresses, no pictures. Those counts stay on the phone.
+    func timing() -> [String: Any] {
+        let t = today()
+        var out: [String: Any] = ["day": Self.day(), "judged": (t["judged-clean"] ?? 0) + (t["judged-flagged"] ?? 0), "kept": ScoreCache.shared.count]
+        for k in ["wait-0", "wait-1", "wait-2", "wait-3", "wait-4", "judged-again", "page-restarted", "page-restarted-home", "page-hung", "page-fresh",
+                  "judge-restarted", "judge-one-lane", "unjudged-timeout", "unjudged-unreadable", "unjudged-loading", "unjudged-bad"] {
+            if let n = t[k], n > 0 { out[k] = n }
+        }
+        for k in ["backend", "loadMs", "avgMs", "avgWaitMs", "n"] { if let v = model[k], v is String || v is NSNumber { out[k] = v } }
+        if let clip = model["clip"] as? [String: Any] {
+            for k in ["mode", "lanes", "avgMs", "loadMs", "error"] { if let v = clip[k], v is String || v is NSNumber { out["clip-" + k] = v } }
+        }
+        out["lanes"] = Classifier.shared.lanes
+        return out
     }
 
     func setModel(_ info: [String: Any]) { model = info }
@@ -209,6 +343,9 @@ final class FilterStats {
         lines.append("Accounts hidden by name or bio: \((t["hidden-account-name"] ?? 0) + (t["hidden-account-bio"] ?? 0)); avatars hidden: \(t["hidden-avatar"] ?? 0)")
         lines.append("Hidden by hand: \(t["hidden-by-hand"] ?? 0)")
         lines.append("Seen before, skipped: \(t["seen-skipped"] ?? 0)")
+        let waits = (0...4).map { t["wait-\($0)"] ?? 0 }
+        if waits.reduce(0, +) > 0 { lines.append("Pictures shown at once: \(waits[0]); after up to 0.6 s: \(waits[1]), 1.5 s: \(waits[2]), 4 s: \(waits[3]), longer: \(waits[4])") }
+        if let again = t["judged-again"], again > 0 { lines.append("Answered from pictures judged before: \(again)") }
         if let s = t["skipped-reel"], s > 0 { lines.append("Reels and stories skipped: \(s + (t["skipped-story"] ?? 0))") }
         let misses = t.filter { $0.key.hasPrefix("unjudged-") }.sorted { $0.key < $1.key }.map { "\($0.key.dropFirst(9)) \($0.value)" }
         if !misses.isEmpty { lines.append("Not judged: " + misses.joined(separator: ", ")) }
@@ -226,6 +363,22 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var queued: [(ticket: String, data: String, done: (Answer) -> Void)] = []
     private var pending: [Int: (Answer) -> Void] = [:]
     private var next = 1
+    private var lastEnded: Date?
+
+    /// How many pictures the revealing-clothing judge takes at a time (clip.js, its lanes; each is a worker with the
+    /// model in it): three on a phone with six cores and 5 GB or more (an iPhone 13 Pro and up), two with four cores
+    /// and 3 GB, else one. One, for the rest of this run of the app, after the judge's process ended twice within 90
+    /// seconds (iOS took it back for memory).
+    private(set) var lanes = Classifier.lanesFor(cores: ProcessInfo.processInfo.activeProcessorCount, memory: ProcessInfo.processInfo.physicalMemory)
+
+    static func lanesFor(cores: Int, memory: UInt64) -> Int {
+        let gb = Double(memory) / 1_073_741_824
+        if cores >= 6 && gb >= 5 { return 3 }
+        if cores >= 4 && gb >= 2.8 { return 2 }
+        return 1
+    }
+
+    private var page: URL { URL(string: "igc://local/classifier.html?lanes=\(lanes)")! }
 
     func warmUp() { DispatchQueue.main.async { _ = self.view() } }
 
@@ -244,7 +397,7 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.navigationDelegate = self
         self.web = web
         attachToWindow()
-        web.load(URLRequest(url: URL(string: "igc://local/classifier.html")!))
+        web.load(URLRequest(url: page))
         return web
     }
 
@@ -301,12 +454,20 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         else { cb(.failed("bad")) }
     }
 
-    /// The classifier's process ended (memory): start it again; what was waiting is answered as not judged.
+    /// The classifier's process ended (memory): start it again; what was waiting is answered as not judged. Twice
+    /// within 90 seconds: it comes back with one lane, which needs a third of the memory.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         ready = false
         for (_, cb) in pending { cb(.failed("timeout")) }
         pending.removeAll()
-        webView.reload()
+        FilterStats.shared.count("judge-restarted")
+        let now = Date()
+        if lanes > 1, let last = lastEnded, now.timeIntervalSince(last) < 90 {
+            lanes = 1
+            FilterStats.shared.count("judge-one-lane")
+        }
+        lastEnded = now
+        webView.load(URLRequest(url: page))
     }
 }
 

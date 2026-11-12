@@ -244,9 +244,11 @@ final class Feed {
         }
     }
 
-    func beat(_ state: String) {
+    /// A heartbeat. The one on leaving a filtered app also carries how the filter ran (`data`: FilterStats.timing,
+    /// timing only), so the mini PC can see the grey boxes in numbers; an older mini PC ignores it.
+    func beat(_ state: String, data: String? = nil) {
         work.async {
-            self.queue.add(type: "beat", at: self.now(), state: state)
+            self.queue.add(type: "beat", at: self.now(), state: state, data: data.map { String($0.prefix(2000)) })
             self.soon()
         }
     }
@@ -358,7 +360,7 @@ final class Heartbeat {
     func wentAway() {
         timer?.invalidate()
         timer = nil
-        beat("background")
+        beat("background", data: Self.timing?())
         // A little time to get the last events out before iOS suspends the app.
         var task = UIBackgroundTaskIdentifier.invalid
         let end = {
@@ -376,8 +378,11 @@ final class Heartbeat {
         guard let last = lastBeat, now().timeIntervalSince(last) < Self.interval - 1 else { return beat("active") }
     }
 
-    private func beat(_ state: String) {
+    /// How the filter ran today, as JSON (set by the app at launch; nil when nothing was judged).
+    static var timing: (() -> String?)?
+
+    private func beat(_ state: String, data: String? = nil) {
         lastBeat = now()
-        feed.beat(state)
+        feed.beat(state, data: data)
     }
 }
