@@ -37,7 +37,7 @@ const pages = {
         ${post('revpic', 'A page', '<span dir="auto">Beach day</span>', 'rev-beach.jpg')}
         ${post('byname', 'Spicy Amy 🔞', '<span dir="auto">Good morning</span>')}
         ${post('ofname', 'Kate | OnlyFans', '<span dir="auto">New week</span>')}
-        <div role="article" id="gif"><h4><a href="/friend2">Friend Two</a></h4><span dir="auto">lol</span><img id="gifimg" src="https://media.tenor.com/abc/tenor.gif" style="width:300px;height:200px"><img id="emoji" src="https://cdn.example.org/emoji.png" style="width:16px;height:16px"><a id="sharedreel" href="/reel/123456789/">a reel a friend shared</a></div>
+        <div role="article" id="gif"><h4><a href="/friend2">Friend Two</a></h4><span dir="auto">lol</span><img id="gifimg" src="https://media.tenor.com/abc/tenor.gif" style="width:300px;height:200px"><img id="emoji" src="https://cdn.example.org/emoji.png" style="width:16px;height:16px"><img id="own" src="https://www.facebook.com/captcha/tfbimage.php?x=1" style="width:200px;height:70px"><a id="sharedreel" href="/reel/123456789/">a reel a friend shared</a></div>
       </div>
     </div>
     <div role="complementary" id="rail"><div><div id="railAd"><span>Sponsored</span><a href="https://shop.example/">Shop</a></div><div id="contacts"><h3>Contacts</h3><a href="/messages/t/1">A friend</a></div></div></div>`,
@@ -71,6 +71,7 @@ try {
   const ctx = await browser.newContext();
   await ctx.route(/https:\/\/(www|m)\.facebook\.com\//, (r) => {
     const p = new URL(r.request().url()).pathname;
+    if (p.startsWith('/captcha/')) return r.fulfill({ contentType: 'image/png', body: png });
     r.fulfill({ contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>${pages[p] || '<div role="main"></div>'}</body></html>` });
   });
   await ctx.route(/fbcdn\.net|tenor\.com|example\.org/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
@@ -105,6 +106,7 @@ try {
   check("accounts: a post whose author's name carries an adult term", !(await shown('byname')) && !(await shown('ofname')));
   check('pictures from outside Facebook: not shown (they cannot be judged); the post stays', (await shown('gif')) && !(await shown('gifimg')));
   check('pictures from outside Facebook: a small icon stays', await shown('emoji'));
+  check("pictures from outside Facebook: facebook.com's own (the sign-in check's picture) is left as it was", await shown('own'));
   check('video tabs: the Video and Reels tabs are gone; a reel a friend shared stays', !(await shown('videoTab')) && !(await shown('reelsTab')) && (await shown('sharedreel')));
   check('rails: the Stories rail', !(await shown('stories')));
   check('right rail: the sponsored part is gone', !(await shown('railAd')));

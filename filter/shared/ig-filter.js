@@ -599,6 +599,9 @@
   // is now held for good: not shown, with no label, like a picture that could never be judged. Small ones (icons,
   // emoji, under the avatar size) are let go, as everywhere. If its address later becomes one of Facebook's, it is
   // judged like any other. Only the picture goes; the post and its words stay and are judged by the text rules.
+  // Not Facebook's own pages' pictures (facebook.com itself serves the sign-in check's picture, never people's
+  // photos, which come from its picture hosts): those are left as they were.
+  const isOwnPage = (u) => { try { return /(^|\.)(facebook\.com|messenger\.com)$/i.test(new URL(u, location.href).hostname); } catch { return false; } };
   function handleForeign(img, src) {
     if (imgDone.get(img) === src) return;
     imgDone.set(img, src);
@@ -616,7 +619,7 @@
   }
   function handleImg(img) {
     const src = srcOf(img);
-    if (SITE === 'facebook' && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src)) { handleForeign(img, src); return; }
+    if (SITE === 'facebook' && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src) && !isOwnPage(src)) { handleForeign(img, src); return; }
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
     imgDone.set(img, src);
     img.removeAttribute('data-igf-foreign');
