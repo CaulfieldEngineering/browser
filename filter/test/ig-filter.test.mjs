@@ -108,9 +108,10 @@ const pages = {
   // scroll it finds the first post on screen from those sizes and how far the list has scrolled, keeps `overscan`
   // posts either side, and after every change measures each post in the page again (next post's top less its own).
   // The window scrolls, and for that Instagram makes no scroll correction of its own. A post put in again is a new
-  // element. overflow-anchor:none, as in WebKit. Posts 3, 4, 9, 10, 11, 17 and 22 are flagged; post 14 is flagged too,
+  // element. The page is left as the browser serves it (its own scroll anchoring not switched off here: the
+  // iPhone's WebKit says it anchors and still let the feed jump). Posts 3, 4, 9, 10, 11, 17 and 22 are flagged; post 14 is flagged too,
   // but its first verdict only comes when the test lets it (a picture judged late, after Joe has scrolled past it).
-  '/vfeed/': `<style>html,body{overflow-anchor:none;margin:0}</style><div style="height:120px">stories</div><main role="main"><div id="vroot"><div id="vlist"></div></div></main>
+  '/vfeed/': `<style>html,body{margin:0}</style><div style="height:120px">stories</div><main role="main"><div id="vroot"><div id="vlist"></div></div></main>
    <script>
      const N = 40, EST = 100, OVER = 3, FLAG = [3, 4, 9, 10, 11, 17, 22], LATE = [14];
      const sizes = new Map(), getSize = (i) => sizes.has(i) ? sizes.get(i) : EST;
@@ -231,6 +232,8 @@ globalThis.__lateTries = 0;
 globalThis.IGFilterBridge = {
   calls: [], stats: {},
   stat(n) { this.stats[n] = (this.stats[n] || 0) + 1; },
+  diags: [],
+  diag(name, numbers) { this.diags.push([name, numbers]); },
   classifyUrl(u) {
     this.calls.push(u);
     this.callAt = this.callAt || {}; this.callAt[u.split('/').pop().split('?')[0]] = performance.now();
@@ -369,6 +372,14 @@ try {
   check('feed: nor down again', again.worst <= 2 && again.moves > 150 && again.last >= 20 && again.shown === 0, JSON.stringify(again));
   check('feed: every flagged post in the page is collapsed', await page.evaluate(() => [...document.querySelectorAll('article.vflag')].every((a) => a.getAttribute('data-igf-gone') === 'image' && a.getBoundingClientRect().height <= 1)));
   check('feed: held still is counted on the device', (await page.evaluate(() => globalThis.IGFilterBridge.stats['feed-held'] || 0)) >= 3);
+  check('feed: with the screen held, no jump is told to the mini PC', (await page.evaluate(() => globalThis.IGFilterBridge.diags.length)) === 0, JSON.stringify(await page.evaluate(() => globalThis.IGFilterBridge.diags.slice(0, 3))));
+  // A jump the filter does not hold (something above the screen grows on a page with no posts in it): told, in numbers only.
+  await page.evaluate(() => { document.querySelector('main').innerHTML = '<div id="grow" style="height:10px"></div>' + Array.from({ length: 30 }, (_, i) => '<div class="row" style="height:200px">row ' + i + '</div>').join(''); scrollTo(0, 2000); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.getElementById('grow').style.height = '500px'; document.querySelector('main').appendChild(document.createElement('i')); });
+  await page.waitForTimeout(200);
+  const told = await page.evaluate(() => globalThis.IGFilterBridge.diags);
+  check('a jump the filter does not hold is told to the mini PC (a leap down the page first, then the shift): on a profile, how far, numbers only', told.length === 2 && told[0][1].k === 2 && told[1][0] === 'jump' && told[1][1].k === 1 && told[1][1].s === 1 && Math.abs(told[1][1].d - 490) <= 2 && told.every((t) => Object.values(t[1]).every((v) => typeof v === 'number')), JSON.stringify(told));
   // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
   await go('/', 700);
   check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());
@@ -564,6 +575,23 @@ try {
     check('touch: a tap through Instagram\'s clear box hides the post at once', !(await tshown('o1')));
     check('touch: Instagram never saw that tap (no like, no navigation)', await tp.evaluate(() => window.igTaps === 0), String(await tp.evaluate(() => window.igTaps)));
     check('touch: the next post stays', await tshown('o2'));
+    // Joe, 2026-11-13: "when I tap the picture to hide it says 'no picture there'". Once Instagram had changed pages
+    // without loading (a profile opened, a story closed, Back), the whole page counted as its tab bar.
+    await tp.goto('https://www.instagram.com/hand2/'); await tp.waitForTimeout(900);
+    await tp.evaluate(() => { history.pushState({}, '', '/someone/'); });
+    await tp.waitForTimeout(200);
+    await tp.evaluate(() => { history.pushState({}, '', '/hand2/'); });
+    await tp.waitForTimeout(300);
+    check('after Instagram changes pages by itself, the page is not taken for its tab bar', await tp.evaluate(() => !document.documentElement.hasAttribute('data-igt-nav') && !!document.documentElement.getAttribute('data-igt-route')));
+    await tp.evaluate(() => { window.igTaps = 0; document.dispatchEvent(new CustomEvent('igf-pick')); });
+    { const c = await tcentre('#o1img'); await tp.touchscreen.tap(c.x, c.y); }
+    await tp.waitForTimeout(150);
+    check('touch: Hide a picture still finds the picture after Instagram has changed pages (not "No picture there")', !(await tshown('o1')) && await tp.evaluate(() => { const t = document.getElementById('igf-pick-tip'); return !!t && t.textContent === 'Hidden'; }), await tp.evaluate(() => (document.getElementById('igf-pick-tip') || {}).textContent || 'no tip'));
+    await tp.waitForTimeout(700);
+    await tp.evaluate(() => { document.dispatchEvent(new CustomEvent('igf-pick')); });
+    { const c = await tcentre('#o2 img'); await tp.touchscreen.tap(c.x, c.y); }
+    await tp.waitForTimeout(150);
+    check('touch: and the next one too (a plain picture with nothing over it)', !(await tshown('o2')));
     await tp.goto('https://www.instagram.com/stories/plainstory/444/'); await tp.waitForTimeout(900);
     await tp.evaluate(() => { window.storyTaps = 0; document.dispatchEvent(new CustomEvent('igf-pick')); });
     { const c = await tcentre('#psimg'); await tp.touchscreen.tap(c.x, c.y); }
@@ -654,6 +682,17 @@ try {
   await page.waitForTimeout(300);
   check('nor on the next picture, a change to the page or a scroll', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
   check('and no "put back at the top" line goes to the mini PC for it', (await page.evaluate(() => globalThis.IGFilterBridge.stats['note-top'] || 0)) === 0);
+
+  // The same fault, 2026-11-13, on the search page and in the account rules: after Instagram changes pages by itself,
+  // a tile that comes to the search page is still hidden and an account is still checked by its name.
+  await go('/explore/', 900);
+  await page.evaluate(() => { history.pushState({}, '', '/explore/search/'); history.pushState({}, '', '/explore/'); });
+  await page.waitForTimeout(300);
+  await page.evaluate((cdn) => { document.getElementById('grid').insertAdjacentHTML('beforeend', '<div class="_aabd"><a id="e9" href="/p/E9/" role="link"><img src="' + cdn + '/plain-e9.jpg" style="width:200px;height:200px" alt=""></a></div><a id="acct9" href="/amy_x9/"><span>amy_x9</span><span>Amy | OnlyFans</span></a><a id="acct8" href="/amy.pedals8/"><span>amy.pedals8</span><span>Amy | Fuzz boxes</span></a>'); }, CDN);
+  await page.waitForTimeout(900);
+  const shownNow = (id) => page.evaluate((i) => { let e = document.getElementById(i); if (!e) return false; for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return false; return true; }, id);
+  check('no Explore: a tile that arrives after Instagram changed pages by itself is still hidden', !(await shownNow('e9')));
+  check('accounts by name: still checked after Instagram changed pages by itself', !(await shownNow('acct9')) && await shownNow('acct8'), `${await shownNow('acct9')} ${await shownNow('acct8')}`);
 
   // ---- speed: asked while loading, nothing judged that left the page, the wait counted ----
   await page.goto('https://www.instagram.com/speed/', { waitUntil: 'commit' });

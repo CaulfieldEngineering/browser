@@ -47,6 +47,8 @@
   // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
   const css = [
     '[data-igf-hold]{visibility:hidden !important}',
+    // Instagram's feed is held still by hold() below, and only by it: the browser's own scroll anchoring is off.
+    SITE === 'instagram' ? 'html,body{overflow-anchor:none !important}' : '',
     '@keyframes igf-in{from{opacity:0}to{opacity:1}}',
     '[data-igf-in]{animation:igf-in .18s ease-out}',
     '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
@@ -184,6 +186,7 @@
   // Facebook: the first post at or below the top of the screen is kept where it was. Instagram: hold(), below.
   const POST_SEL = SITE === 'facebook' ? '[role="article"]' : 'article';
   function keepPlace(unit, change) {
+    actedAt = performance.now();
     if (inViewer() || isTile(unit)) { change(); return; }
     if (HOLD) { hold(); change(); hold(unit); return; }
     if (unit.getBoundingClientRect().top >= 0) { change(); return; }
@@ -212,19 +215,17 @@
   // at the top of the screen is noted by where it is in the page, and when it is found somewhere else without a
   // scroll, the page is scrolled by the difference, before the screen is drawn again. What is hidden is hidden exactly
   // as before; only the scroll position is kept.
-  // Not at the very top of the page (new posts there are meant to show), not in the reel and story viewers, and not
-  // where the browser holds the screen itself (Chrome on the laptop: doing it twice would move it the other way).
+  // Not at the very top of the page (new posts there are meant to show) and not in the reel and story viewers.
+  // The browser's own scroll anchoring is switched off on Instagram (overflow-anchor: none, in the style sheet above),
+  // so this is the one thing that holds the screen, everywhere. Until 2026-11-13 hold() stood aside wherever the
+  // browser said it anchors by itself (CSS.supports('overflow-anchor', 'auto')). The iPhone's WebKit now says so, and
+  // does not hold the screen through these changes (WebKit 27.2: the feed model jumps the same with it on), so on
+  // the phone hold() never ran: 0.1.107 and 0.1.113 reported no "feed-held" at all while the feed jumped (Joe: "This
+  // scrolling bug is still freakin present"). And where the browser does anchor (Chrome), the two together corrected
+  // twice. "anchor-native" counts, once a page, a browser that says it anchors, for the mini PC.
   const HOLD = SITE === 'instagram';
-  let nativeAt = 0, nativeIs = false;
-  const holdsItself = () => {
-    const now = Date.now();
-    if (now - nativeAt < 1000) return nativeIs;
-    nativeAt = now; nativeIs = false;
-    try {
-      nativeIs = !!(g.CSS && CSS.supports('overflow-anchor', 'auto')) && getComputedStyle(document.documentElement).overflowAnchor !== 'none' && (!document.body || getComputedStyle(document.body).overflowAnchor !== 'none');
-    } catch {}
-    return nativeIs;
-  };
+  try { if (HOLD && g.CSS && CSS.supports('overflow-anchor', 'auto')) stat('anchor-native'); } catch {}
+  let actedAt = 0, heldAt = 0, heldBy = 0; // when the filter last collapsed or showed something; when hold() last scrolled, and how far
   let marks = [], markSc = null; // the posts on screen, top first: {el, at: its top in the page}
   const posOf = (sc) => (sc ? sc.scrollTop : g.scrollY || 0);
   // What the feed scrolls in (the window, or a box of Instagram's) is looked up once for each list of posts, not on
@@ -252,7 +253,7 @@
   // `changed`: the post this filter has just collapsed or shown again. When it is the one at the top of the screen, the
   // next post is the one held (as before 2026-11-12), so what is under it stays where it was.
   function hold(changed) {
-    if (!HOLD || holdsItself()) return 0;
+    if (!HOLD) return 0;
     // A scroll inside the page (a post's pictures swiped sideways, a list in a sheet) is not the feed scrolling.
     if (changed && changed.type === 'scroll' && changed.target !== document && changed.target !== markSc) return 0;
     let d = 0;
@@ -264,6 +265,7 @@
       else {
         if (markSc) markSc.scrollTop += d; else { try { scrollBy({ top: d, left: 0, behavior: 'instant' }); } catch { scrollBy(0, d); } }
         state.held++;
+        heldAt = performance.now(); heldBy = d;
         stat('feed-held');
       }
     }
@@ -323,7 +325,7 @@
       unit.setAttribute('data-igf-why', why || kind);
     });
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
-    if (kind !== 'checking' && isTile(unit)) skipTile(unit); else placeholder(unit);
+    if (kind !== 'checking' && isTile(unit)) { actedAt = performance.now(); skipTile(unit); } else placeholder(unit);
     if (!isTile(unit)) setTimeout(nudge, 50);
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
@@ -892,12 +894,56 @@
   mo.observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['src', 'srcset', 'poster', 'style'] });
   // Instagram's feed held still (hold(), above): looked at whenever posts are put in or taken out, a picture finishes
   // loading (its post may grow), and on every scroll (which also notes the post now on screen).
+  // ---- a jump of the page, told to the mini PC (Joe, 2026-11-13: "This scrolling bug is still freakin present"; the
+  // phone's reports could not show a jump, where it was, or what had just happened) -------------------------------------
+  // On every page of Instagram (the feed, a profile's grid, a post), after hold() has had its turn: what is at the top
+  // third of the screen is noted by where it is in the page. Found 60 px or more from there without a scroll, the page
+  // moved under Joe ("shift"); and a scroll of 700 px or more between two scroll events is not a finger ("leap").
+  // Each sends one line of numbers (IGFilterBridge.diag, "diag:jump" in the mini PC's feed), at most 30 a page:
+  //   k 1 shift, 2 leap;  s the page: 0 feed, 1 profile, 2 post, 3 search, 4 other;  d how far it shifted;  dy and dt
+  //   the scroll since the last look and the ms it took;  y where the page is;  h the page's height;  vh the screen's;
+  //   tch and tend ms since a touch began and ended;  act ms since the filter last collapsed or showed something;
+  //   hld ms since hold() last scrolled, hpx how far;  n posts in the page;  g 1 on a grid the filter closed up;
+  //   nat 1 if the browser says it anchors.  (-1: never.)  Nothing about what is on the page or why anything is hidden.
+  const jump = { el: null, at: 0, y: 0, t: 0, n: 0 };
+  let touchAt = 0, touchEndAt = 0;
+  if (HOLD) {
+    addEventListener('touchstart', () => { touchAt = performance.now(); }, { capture: true, passive: true });
+    addEventListener('touchend', () => { touchEndAt = performance.now(); }, { capture: true, passive: true });
+  }
+  const since = (t, now) => (t ? Math.min(99999, Math.round(now - t)) : -1);
+  const surfaceNo = () => { const p = location.pathname; return p === '/' ? 0 : /^\/explore(\/|$)/.test(p) ? 3 : /\/(p|reel|tv)\//.test(p) ? 2 : /^\/[A-Za-z0-9._]+\/?(reels\/?|tagged\/?)?$/.test(p) ? 1 : 4; };
+  function watchJump(e) {
+    if (inViewer() || (e && e.type === 'scroll' && e.target !== document)) return;
+    const now = performance.now(), y = g.scrollY || 0;
+    const dy = y - jump.y, dt = now - jump.t;
+    let d = 0;
+    if (jump.el && jump.el.isConnected) d = jump.el.getBoundingClientRect().top + y - jump.at;
+    if (Math.abs(d - dy) < 2) d = 0; // something fixed to the screen, not the page
+    const ours = heldAt && now - heldAt < 60 ? heldBy : 0; // hold()'s own scroll just now moved nothing on screen
+    const shift = Math.abs(d) >= 60, leap = Math.abs(dy - ours) >= 700 && dt < 150;
+    if ((shift || leap) && jump.n < 30 && jump.t && BRIDGE.diag) {
+      jump.n++;
+      let nat = 0; try { nat = g.CSS && CSS.supports('overflow-anchor', 'auto') ? 1 : 0; } catch {}
+      try {
+        BRIDGE.diag('jump', { k: shift ? 1 : 2, s: surfaceNo(), d: Math.round(d), dy: Math.round(dy), dt: Math.round(dt), y: Math.round(y),
+          h: Math.round(document.documentElement.scrollHeight), vh: innerHeight, tch: since(touchAt, now), tend: since(touchEndAt, now),
+          act: since(actedAt, now), hld: since(heldAt, now), hpx: Math.round(heldBy), n: document.querySelectorAll(POST_SEL).length,
+          g: document.querySelector('[data-igf-grid]') ? 1 : 0, nat });
+      } catch {}
+    }
+    let el = null;
+    try { el = document.elementFromPoint(innerWidth / 2, Math.min(220, innerHeight / 3)); } catch {}
+    if (el && (el === document.documentElement || el === document.body || el.id === 'igf-pick' || el.id === 'igf-pick-tip')) el = null;
+    jump.el = el; jump.at = el ? el.getBoundingClientRect().top + y : 0; jump.y = y; jump.t = now;
+  }
   if (HOLD) {
     state.hold = hold; // ig-seen.js collapses posts too, and keeps the place through this
-    new MutationObserver(hold).observe(document, { childList: true, subtree: true });
-    document.addEventListener('load', hold, true);
-    addEventListener('scroll', hold, { capture: true, passive: true });
-    addEventListener('resize', hold, { passive: true });
+    const both = (e) => { hold(e); watchJump(e); };
+    new MutationObserver(() => both()).observe(document, { childList: true, subtree: true });
+    document.addEventListener('load', () => both(), true);
+    addEventListener('scroll', both, { capture: true, passive: true });
+    addEventListener('resize', () => both(), { passive: true });
   }
   // The first pass also judges the text already on the page (posts parsed before the observer saw them).
   const allUnits = () => document.querySelectorAll(UNITS);

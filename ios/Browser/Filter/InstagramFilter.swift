@@ -110,6 +110,15 @@ enum InstagramFilter {
                     if name.hasPrefix("note-"), Flavor.isSiteApp { Feed.shared.beat("js:" + String(name.dropFirst(5).prefix(12))) }
                 }
                 replyHandler(true, nil)
+            case "diag":
+                // The page moved under Joe without a scroll of his (ig-filter.js, watchJump): one heartbeat line
+                // "diag:<name>" with its numbers (how far, where the page was, how long since a touch and since the
+                // filter last changed the page). Numbers only; the mini PC keeps nothing else from it.
+                if Flavor.isSiteApp, let name = body["name"] as? String, let data = body["data"] as? String {
+                    FilterStats.shared.count("diag-" + name)
+                    Feed.shared.beat("diag:" + String(name.prefix(10)), data: data)
+                }
+                replyHandler(true, nil)
             case "report":
                 if let record = body["record"] as? String { HiddenByHand.shared.add(record) }
                 replyHandler(true, nil)
@@ -321,7 +330,7 @@ final class FilterStats {
         let t = today()
         var out: [String: Any] = ["day": Self.day(), "judged": (t["judged-clean"] ?? 0) + (t["judged-flagged"] ?? 0), "kept": ScoreCache.shared.count]
         for k in ["wait-0", "wait-1", "wait-2", "wait-3", "wait-4", "judged-again", "page-restarted", "page-restarted-home", "page-hung", "page-fresh",
-                  "judge-restarted", "judge-one-lane", "unjudged-timeout", "unjudged-unreadable", "unjudged-loading", "unjudged-bad", "feed-held"] {
+                  "judge-restarted", "judge-one-lane", "unjudged-timeout", "unjudged-unreadable", "unjudged-loading", "unjudged-bad", "feed-held", "anchor-native"] {
             if let n = t[k], n > 0 { out[k] = n }
         }
         for k in ["backend", "loadMs", "avgMs", "avgWaitMs", "n"] { if let v = model[k], v is String || v is NSNumber { out[k] = v } }

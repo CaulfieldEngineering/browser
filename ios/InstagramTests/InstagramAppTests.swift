@@ -142,7 +142,7 @@ final class InstagramAppTests: XCTestCase {
         let commentsSettled = try await settled(web, path: "/p/P10/comments/")
         XCTAssertTrue(commentsSettled, "the filter saw the comments page and finished settling it")
         let y = try await web.evaluateJavaScript("scrollY") as? Double
-        let seen = try await web.evaluateJavaScript("[document.documentElement.getAttribute('data-igt-nav'), document.documentElement.getAttribute('data-igt-top'), history.length, location.pathname].join(' | ')") as? String
+        let seen = try await web.evaluateJavaScript("[document.documentElement.getAttribute('data-igt-route'), document.documentElement.getAttribute('data-igt-top'), history.length, location.pathname].join(' | ')") as? String
         XCTAssertEqual(y, 0, "the comments page starts at the top (the filter saw: \(seen ?? "nothing"))")
         let focused = try await web.evaluateJavaScript("document.activeElement && document.activeElement.id") as? String
         XCTAssertNotEqual(focused, "add", "the comment box the page focused is let go")

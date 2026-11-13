@@ -179,7 +179,12 @@
     lastHref = location.href; lastLen = history.length;
     const samePage = pageOf(was) === pageOf(location.href);
     const root = document.documentElement;
-    if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
+    // What the last change of page was, for the tests (data-igt-route). Until 2026-11-13 this was written as
+    // data-igt-nav, the very attribute that marks Instagram's tab bar: once Instagram had changed pages a single time
+    // without loading, the whole page counted as "inside the tab bar". From then on Hide a picture said "No picture
+    // there" wherever Joe tapped (Joe, 2026-11-13), and everything else here and in ig-filter.js that leaves the tab
+    // bar alone (the prompts, the search page, the account rows, the Reels tab's slot) was looking at the wrong thing.
+    if (root) root.setAttribute('data-igt-route', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
     if (samePage || Date.now() - popAt < 400) { markSettled(); return; } // a hash change, or Back / Forward
     if (root) root.removeAttribute('data-igt-settled');
     const opened = location.href;

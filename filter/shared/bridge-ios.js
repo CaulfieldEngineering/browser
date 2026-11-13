@@ -9,6 +9,8 @@
     classifyData: (data) => ask({ op: 'data', data: String(data) }),
     classifyRect: (r) => ask({ op: 'rect', rect: { x: +r.x, y: +r.y, width: +r.width, height: +r.height } }),
     stat: (name) => { webkit.messageHandlers.igf.postMessage({ op: 'stat', name: String(name).slice(0, 40) }).catch(() => {}); },
+    // A jump of the page, in numbers only (ig-filter.js, watchJump), for the mini PC.
+    diag: (name, numbers) => { webkit.messageHandlers.igf.postMessage({ op: 'diag', name: String(name).slice(0, 10), data: JSON.stringify(numbers).slice(0, 1500) }).catch(() => {}); },
     warm: () => { webkit.messageHandlers.igf.postMessage({ op: 'warm' }).catch(() => {}); },
     // How many pictures the judge takes at a time on this phone (its lanes), so the page keeps that many in flight.
     width: () => webkit.messageHandlers.igf.postMessage({ op: 'width' }).then((n) => (n > 0 ? n : 1), () => 1),
