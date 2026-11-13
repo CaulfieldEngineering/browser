@@ -158,6 +158,57 @@ const pages = {
      addEventListener('scroll', update, { capture: true, passive: true });
      render(); update();
    </script>`,
+  // A profile's grid as Instagram builds it (PolarisIGVirtualGrid: rows of three, class _ac7v, in the same list as the
+  // feed's, PolarisIGVirtualList, ported as in /vfeed/): only the rows near the screen are in the page, and a row's
+  // height is where the next row starts less where it starts. 180 tiles; 27 of them flagged, some in runs, one whole row.
+  '/vgrid/': `<style>html,body{margin:0}._ac7v{display:flex;gap:4px;margin-bottom:4px}._ac7v>div{flex:1 1 0;min-width:0}</style><header style="height:260px">profile</header><main role="main"><div id="vroot"><div id="vlist"></div></div></main>
+   <script>
+     const TILES = 180, PER = 3, N = Math.ceil(TILES / PER), EST = 100, OVER = 5, FLAG = [1, 4, 7, 8, 9, 10, 11, 20, 33, 34, 35, 36, 40, 41, 50, 61, 62, 63, 64, 65, 66, 90, 91, 100, 120, 121, 122];
+     const sizes = new Map(), getSize = (i) => sizes.has(i) ? sizes.get(i) : EST;
+     const dist = (a, b) => { let e = 0; for (let r = a; r < b; r++) e += getSize(r); return e; };
+     const getIndex = (t, n) => { let e = 0; for (let r = 0; r < n; r++) if ((e += getSize(r)) > t) return r; return n; };
+     const getLastIndex = (t, n) => { let e = 0; for (let r = 0; r < n; r++) if ((e += getSize(r)) > t) { if (r + 1 < n && getSize(r + 1) === 0) continue; return r; } return n; };
+     const zeros = (a, b) => { let e = 0; for (let r = a; r < b; r++) if (getSize(r) === 0) e++; return e; };
+     const root = document.getElementById('vroot'), list = document.getElementById('vlist'), kids = new Map();
+     let state = { renderStart: 0, renderEnd: 4, visibleStart: 0, visibleEnd: 0 };
+     window.vSizes = sizes; window.vMost = 0; window.vFlag = FLAG;
+     const make = (row) => { const d = document.createElement('div'); d.className = '_ac7v'; d.dataset.row = row;
+       for (let c = 0; c < PER; c++) { const t = row * PER + c; d.insertAdjacentHTML('beforeend', '<div class="_aabd"><a data-t="' + t + '" class="' + (FLAG.includes(t) ? 'vflag' : 'vplain') + '" href="/p/T' + t + 'xxxx/" role="link"><div class="_aagu"><img src="${CDN}/' + (FLAG.includes(t) ? 'flag' : 'plain') + '-vg' + t + '.jpg" style="width:100%;aspect-ratio:3/4;display:block" alt=""></div></a></div>'); }
+       return d; };
+     const measures = []; let framed = false;
+     const flush = () => { framed = false; let f; while ((f = measures.shift())) f(); };
+     const measure = (f) => { measures.push(f); if (!framed) { framed = true; requestAnimationFrame(flush); } };
+     function render() {
+       const end = Math.min(state.renderEnd, N);
+       for (const [i, el] of kids) if (i < state.renderStart || i >= end) { el.remove(); kids.delete(i); }
+       for (let i = state.renderStart; i < end; i++) if (!kids.has(i)) {
+         const next = [...kids.keys()].filter((k) => k > i).sort((a, b) => a - b)[0];
+         const el = make(i); list.insertBefore(el, next === undefined ? null : kids.get(next)); kids.set(i, el);
+       }
+       window.vMost = Math.max(window.vMost, kids.size);
+       list.style.cssText = 'display:flex;flex-direction:column;position:relative;padding-top:' + dist(0, state.renderStart) + 'px;padding-bottom:' + dist(state.renderEnd, N) + 'px';
+       measure(() => {
+         const rs = state.renderStart;
+         for (let l = 0; l < list.children.length; l++) {
+           const c = list.children[l], e = c.getBoundingClientRect(), n = c.nextElementSibling;
+           const u = e.height === 0 ? 0 : n ? n.getBoundingClientRect().top - e.top : list.getBoundingClientRect().bottom - parseFloat(list.style.paddingBottom) - e.top;
+           if (getSize(rs + l) !== u) sizes.set(rs + l, u);
+         }
+       });
+     }
+     function update() {
+       measure(() => {
+         const scrollStart = Math.max(0, -root.getBoundingClientRect().top), viewportSize = innerHeight;
+         Promise.resolve().then(() => {
+           const l = getIndex(scrollStart, N), s = getLastIndex(scrollStart + viewportSize, N) + 1;
+           const ns = { renderEnd: s + OVER + zeros(s, N), renderStart: Math.max(0, l - OVER - zeros(0, l)), visibleEnd: s, visibleStart: l };
+           if (ns.renderEnd !== state.renderEnd || ns.renderStart !== state.renderStart || ns.visibleEnd !== state.visibleEnd || ns.visibleStart !== state.visibleStart) { state = ns; render(); }
+         });
+       });
+     }
+     addEventListener('scroll', update, { capture: true, passive: true });
+     render(); update();
+   </script>`,
   '/captions/': `<main>
     <article id="c1"><header><a href="/x/">x</a></header><div>New drop, link in bio for my content</div></article>
     <article id="c2"><header><a href="/y/">y</a></header><div>Find me on fansly</div></article>
@@ -451,6 +502,64 @@ try {
   await page.evaluate(() => { const d = document.querySelector('#r1 [style*="background-image"]'); d.style.backgroundImage = 'url("https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-r1b.jpg")'; });
   await page.waitForTimeout(400);
   check('reels tab: a background changed later is judged again', (await hiddenAs('#r1 .x1i10hfl')) === 'image');
+  // ---- a profile's grid as Instagram builds it: hidden tiles close up, and Instagram can still measure its rows ----
+  // (2026-11-13: with the rows given no box of their own, Instagram measured every row as nothing and kept the whole
+  // profile in the page from the first hidden tile.)
+  await page.goto('https://www.instagram.com/vgrid/');
+  await page.waitForFunction(() => Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1 && document.querySelectorAll('a[data-t]').length >= 6);
+  const gridWalk = (step, steps) => page.evaluate(({ step, steps }) => new Promise((done) => {
+    const out = { worst: 0, at: null, moves: 0, holes: 0, overlaps: 0, flagged: 0, looks: 0, first: null };
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 45)));
+    const box = (a) => { for (let x = a; x; x = x.parentElement) if (getComputedStyle(x).display === 'none') return null; const r = a.getBoundingClientRect(); return r.height > 1 ? r : null; };
+    const onScreen = () => [...document.querySelectorAll('a[data-t]')].find((a) => { const r = box(a); return r && (step > 0 ? r.top >= 0 : r.bottom <= innerHeight && r.bottom > 0); });
+    // What is on screen is a grid with no hole in it: lines of three side by side, a line apart, nothing on top of
+    // anything, the tiles in their order, and no flagged tile among them.
+    const look = () => {
+      const tiles = [...document.querySelectorAll('a[data-t]')].map((a) => ({ a, r: box(a) })).filter((x) => x.r && x.r.bottom > 0 && x.r.top < innerHeight);
+      if (!tiles.length) return;
+      out.looks++;
+      for (const x of tiles) if (x.a.classList.contains('vflag') && getComputedStyle(x.a.querySelector('img')).visibility !== 'hidden' && !x.a.hasAttribute('data-igf-gone')) out.flagged++;
+      const lines = new Map();
+      for (const x of tiles) { const k = Math.round(x.r.top); if (!lines.has(k)) lines.set(k, []); lines.get(k).push(x); }
+      const tops = [...lines.keys()].sort((p, q) => p - q);
+      const last = +document.querySelectorAll('a[data-t]')[document.querySelectorAll('a[data-t]').length - 1].dataset.t;
+      let prev = -1;
+      for (let i = 0; i < tops.length; i++) {
+        const line = lines.get(tops[i]).sort((p, q) => p.r.left - q.r.left);
+        const ends = line.some((x) => +x.a.dataset.t >= 177); // the grid's own last line may be short
+        if (line.length !== 3 && !ends) out.holes++;
+        for (let j = 1; j < line.length; j++) if (line[j].r.left < line[j - 1].r.right - 1) out.overlaps++;
+        if (i > 0 && Math.abs(tops[i] - tops[i - 1] - (line[0].r.height + 4)) > 2) out.holes++;
+        for (const x of line) { if (+x.a.dataset.t <= prev) out.overlaps++; prev = +x.a.dataset.t; }
+      }
+      if (out.first === null && (out.holes || out.overlaps)) out.first = { y: Math.round(scrollY), tops, n: tiles.length };
+    };
+    (async () => {
+      for (let n = 0; n < steps; n++) {
+        const el = onScreen(), before = el && el.getBoundingClientRect().top, y = scrollY;
+        scrollBy(0, step);
+        await frame();
+        if (el && el.isConnected && box(el) && scrollY !== y && !el.closest('[data-igf-gone]')) {
+          const off = Math.abs(el.getBoundingClientRect().top - before + (scrollY - y)); out.moves++;
+          if (off > out.worst) { out.worst = Math.round(off); out.at = { step: n, tile: +el.dataset.t }; }
+        }
+        look();
+      }
+      out.most = window.vMost; out.inPage = document.querySelectorAll('._ac7v').length; out.y = Math.round(scrollY);
+      out.zeros = [...window.vSizes.values()].filter((v) => v === 0).length; out.measured = window.vSizes.size;
+      done(out);
+    })();
+  }), { step, steps });
+  const gDown = await gridWalk(60, 140);
+  check('grid: on the way down nothing on screen jumps', gDown.worst <= 2 && gDown.moves > 100, JSON.stringify(gDown));
+  check('grid: what is on screen is a whole grid at every step (no hole, nothing on top of anything, in order)', gDown.holes === 0 && gDown.overlaps === 0 && gDown.looks > 100, JSON.stringify(gDown));
+  check('grid: no flagged tile is shown at any step', gDown.flagged === 0, String(gDown.flagged));
+  check('grid: Instagram still takes rows out of the page (it can measure them): never the whole profile at once', gDown.most <= 30 && gDown.inPage <= 30, JSON.stringify({ most: gDown.most, inPage: gDown.inPage }));
+  check('grid: only the rows whose three tiles are all hidden (four of them) measure as nothing', gDown.zeros <= 4 && gDown.measured >= 20, JSON.stringify({ zeros: gDown.zeros, measured: gDown.measured }));
+  const gUp = await gridWalk(-60, 150);
+  check('grid: nor on the way back up, where rows are put in again', gUp.worst <= 2 && gUp.moves > 100 && gUp.holes === 0 && gUp.overlaps === 0 && gUp.flagged === 0 && gUp.y === 0, JSON.stringify(gUp));
+  check('grid: no jump was told to the mini PC', (await page.evaluate(() => globalThis.IGFilterBridge.diags.length)) === 0, JSON.stringify(await page.evaluate(() => globalThis.IGFilterBridge.diags.slice(0, 2))));
+
   // ---- a profile's tagged grid ----
   await go('/someprofile/tagged/');
   check('tagged grid: flagged hidden, plain shown', (await hiddenAs('#t1 img')) === 'image' && (await visible('#t2 img')));

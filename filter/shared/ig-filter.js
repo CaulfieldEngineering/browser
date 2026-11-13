@@ -72,6 +72,13 @@
     '[data-igf-row]{display:contents !important}',
     '[data-igf-row]>*{margin:0 !important;width:auto !important;min-width:0 !important;max-width:none !important}',
     '[data-igf-row]>[data-igf-cell-gone]{display:none !important}',
+    // Instagram's grids (2026-11-13): each row stays a box of its own, as tall as the share of a row its tiles fill, and
+    // its tiles are set where they belong in the closed-up grid (layoutRows, below). Instagram measures its rows to
+    // know what to keep in the page; a row with no box of its own measured as nothing.
+    '[data-igf-rows]>[data-igf-r]{display:block !important;position:relative !important;box-sizing:border-box !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:visible !important;height:var(--igf-h) !important;min-height:0 !important;max-height:none !important}',
+    '[data-igf-rows]>[data-igf-r]>[data-igf-c]{position:absolute !important;box-sizing:border-box !important;margin:0 !important;left:var(--igf-x) !important;top:var(--igf-y) !important;width:var(--igf-w) !important;height:var(--igf-ht) !important;min-width:0 !important;max-width:none !important;flex:none !important}',
+    '[data-igf-rows]>[data-igf-r]>:not([data-igf-c]){display:none !important}',
+    '[data-igf-rows] [data-igf-cell-gone]{display:none !important}',
     // A reel or story still being checked holds its place in the viewer (its picture held invisible), not collapsed.
     '[data-igf-slide-hold]{visibility:hidden !important}',
     '[data-igf-tile]{pointer-events:none !important}',
@@ -157,6 +164,110 @@
   const gridObs = new MutationObserver((ms) => {
     for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.parentElement && n.parentElement.hasAttribute('data-igf-grid') && holdsTile(n)) n.setAttribute('data-igf-row', '');
   });
+  // ---- Instagram's grids: the tiles close up and every row keeps a box Instagram can measure (2026-11-13) -------------
+  // A profile's grid is Instagram's list of rows (PolarisIGVirtualGrid over PolarisIGVirtualList): only the rows near
+  // the screen are in the page, the rest is padding by the heights it measures, a row's height being where the next
+  // row starts less where it starts. The way above (one CSS grid, the rows display:contents) gave every row no box, so
+  // Instagram measured every row as nothing, took nothing out of the page again and thought the end of the grid was on
+  // screen: from the first hidden tile it kept every row of the profile in the page and kept asking for more.
+  // Here a row stays a box. With v of its c tiles still shown it is v/c of a row tall, so all the rows together are
+  // exactly as tall as the closed-up grid, and what Instagram measures and pads is true. Its tiles are placed by
+  // hand: the n-th tile still shown, counted from the top of the grid, sits in column n mod c of line floor(n / c),
+  // which for a row is a little above or below its own box (never a whole row away). How many tiles are shown before
+  // a row is read from where the row is (its top, in thirds of a row) or from a tile placed before, so nothing has to
+  // be remembered about rows that are out of the page. A row of whole tiles at a whole line is left as Instagram made
+  // it. Tiles hidden before are taken out as their row comes back, before they are judged again, so the grid does
+  // not shuffle twice. Only ever takes out: nothing here shows a tile.
+  const rowGrids = new WeakMap(), rowGridList = new Set();
+  const tileIn = (cell) => (cell.matches(TILE_SEL) ? cell : cell.querySelector(TILE_SEL));
+  const tileKey = (cell) => { const t = tileIn(cell); return t ? t.getAttribute('href') || '' : ''; };
+  function measureRows(grid, row) {
+    const rows = [...grid.children].filter(holdsTile);
+    const cells = [...row.children].filter(holdsTile);
+    if (cells.length < 2) return null;
+    const a = cells[0].getBoundingClientRect(), b = cells[1].getBoundingClientRect();
+    const i = rows.indexOf(row), other = rows[i + 1] || rows[i - 1];
+    let py = 0;
+    if (other) py = Math.abs(other.getBoundingClientRect().top - row.getBoundingClientRect().top);
+    if (!(py > 0)) { const cs = getComputedStyle(row); py = row.getBoundingClientRect().height + (parseFloat(cs.marginBottom) || 0) + (parseFloat(cs.marginTop) || 0); }
+    const cols = Math.max(...rows.map((r) => r.children.length), cells.length);
+    if (!(a.width > 0 && a.height > 0 && b.left - a.left > 0 && py > 0)) return null;
+    return { cols, px: b.left - a.left, py, w: a.width, h: a.height, width: grid.getBoundingClientRect().width, slot: new Map(), gone: new Set() };
+  }
+  function layoutRows(grid) {
+    const st = rowGrids.get(grid);
+    if (!st || !grid.isConnected) return;
+    const rows = [...grid.children].filter((r) => r.nodeType === 1 && (holdsTile(r) || r.hasAttribute('data-igf-r')));
+    if (!rows.length) return;
+    // read: each row's tiles still shown (a tile hidden before is taken out at once), and where the first row is
+    const shown = rows.map((row) => [...row.children].filter((c) => {
+      if (!holdsTile(c)) return false;
+      if (c.hasAttribute('data-igf-cell-gone')) return false;
+      if (st.gone.has(tileKey(c))) { c.setAttribute('data-igf-cell-gone', ''); actedAt = performance.now(); return false; }
+      return true;
+    }));
+    const before = new Array(rows.length).fill(null); // tiles shown before each row, from the top of the grid
+    let known = -1;
+    for (let i = 0; i < rows.length && known < 0; i++) for (let j = 0; j < shown[i].length; j++) {
+      const t = st.slot.get(tileKey(shown[i][j]));
+      if (t !== undefined) { before[i] = t - j; known = i; break; }
+    }
+    if (known < 0) { before[0] = Math.max(0, Math.round((rows[0].getBoundingClientRect().top - grid.getBoundingClientRect().top) * st.cols / st.py)); known = 0; }
+    for (let i = known - 1; i >= 0; i--) before[i] = before[i + 1] - shown[i].length;
+    for (let i = known + 1; i < rows.length; i++) before[i] = before[i - 1] + shown[i - 1].length;
+    // write
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i], vb = before[i], cells = shown[i];
+      const plain = cells.length === st.cols && ((vb % st.cols) + st.cols) % st.cols === 0 && row.children.length === st.cols;
+      if (plain) {
+        if (row.hasAttribute('data-igf-r')) { row.removeAttribute('data-igf-r'); row.style.removeProperty('--igf-h'); for (const c of row.children) c.removeAttribute('data-igf-c'); }
+      } else {
+        row.setAttribute('data-igf-r', '');
+        row.style.setProperty('--igf-h', (cells.length * st.py / st.cols) + 'px');
+        for (const c of row.children) if (!cells.includes(c)) c.removeAttribute('data-igf-c');
+      }
+      for (let j = 0; j < cells.length; j++) {
+        const c = cells[j], t = vb + j;
+        const key = tileKey(c);
+        if (key) st.slot.set(key, t);
+        if (plain) continue;
+        const col = ((t % st.cols) + st.cols) % st.cols, line = Math.floor(t / st.cols);
+        c.setAttribute('data-igf-c', '');
+        c.style.setProperty('--igf-x', (col * st.px) + 'px');
+        c.style.setProperty('--igf-y', ((line - vb / st.cols) * st.py) + 'px');
+        c.style.setProperty('--igf-w', st.w + 'px');
+        c.style.setProperty('--igf-ht', st.h + 'px');
+      }
+    }
+    if (st.slot.size > 6000) { let n = st.slot.size - 4000; for (const k of st.slot.keys()) { if (n-- <= 0) break; st.slot.delete(k); } }
+  }
+  const rowsObs = new MutationObserver((ms) => { const seen = new Set(); for (const m of ms) if (!seen.has(m.target)) { seen.add(m.target); layoutRows(m.target); } });
+  if (SITE === 'instagram') addEventListener('resize', () => {
+    for (const grid of [...rowGridList]) {
+      if (!grid.isConnected) { rowGridList.delete(grid); continue; }
+      const st = rowGrids.get(grid), w = grid.getBoundingClientRect().width;
+      if (!st || !(w > 0) || !(st.width > 0) || Math.abs(w - st.width) < 1) continue;
+      const k = w / st.width;
+      st.px *= k; st.py *= k; st.w *= k; st.h *= k; st.width = w;
+      layoutRows(grid);
+    }
+  }, { passive: true });
+  function skipTileInRows(unit, cell, row, grid) {
+    let st = rowGrids.get(grid);
+    if (!st) {
+      st = measureRows(grid, row);
+      if (!st) return false;
+      rowGrids.set(grid, st);
+      rowGridList.add(grid);
+      grid.setAttribute('data-igf-rows', '');
+      rowsObs.observe(grid, { childList: true });
+    }
+    const key = tileKey(cell);
+    if (key) st.gone.add(key);
+    cell.setAttribute('data-igf-cell-gone', '');
+    layoutRows(grid);
+    return true;
+  }
   function skipTile(unit) {
     // The cell: the nearest box (the tile or above) with a sibling that also holds a tile. Its parent is the row.
     let cell = unit;
@@ -164,6 +275,8 @@
     if (cell === unit) return;  // tiles straight in one grid: the tile's own display:none already closes it up
     const row = cell.parentElement, grid = row && row.parentElement;
     if (!grid || grid === document.body || row === document.body) { placeholder(unit); return; } // no grid found: keep the blank
+    // Instagram's rows of tiles side by side: the way above. Anything else (tiles one under another, Facebook): one grid.
+    if (SITE === 'instagram' && !grid.hasAttribute('data-igf-grid') && skipTileInRows(unit, cell, row, grid)) return;
     if (!grid.hasAttribute('data-igf-grid')) {
       const cells = [...row.children].filter(holdsTile), rows = [...grid.children].filter(holdsTile);
       const a = cells[0] && cells[0].getBoundingClientRect(), b = cells[1] && cells[1].getBoundingClientRect();
@@ -921,7 +1034,9 @@
     if (jump.el && jump.el.isConnected) d = jump.el.getBoundingClientRect().top + y - jump.at;
     if (Math.abs(d - dy) < 2) d = 0; // something fixed to the screen, not the page
     const ours = heldAt && now - heldAt < 60 ? heldBy : 0; // hold()'s own scroll just now moved nothing on screen
-    const shift = Math.abs(d) >= 60, leap = Math.abs(dy - ours) >= 700 && dt < 150;
+    // Tiles sliding into a hidden tile's place are the grid closing up, as meant, not the page jumping.
+    const closing = actedAt && now - actedAt < 250 && jump.el && jump.el.closest && jump.el.closest('[data-igf-rows], [data-igf-grid]');
+    const shift = Math.abs(d) >= 60 && !closing, leap = Math.abs(dy - ours) >= 700 && dt < 150;
     if ((shift || leap) && jump.n < 30 && jump.t && BRIDGE.diag) {
       jump.n++;
       let nat = 0; try { nat = g.CSS && CSS.supports('overflow-anchor', 'auto') ? 1 : 0; } catch {}
