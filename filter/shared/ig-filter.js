@@ -227,6 +227,16 @@
   };
   let marks = [], markSc = null; // the posts on screen, top first: {el, at: its top in the page}
   const posOf = (sc) => (sc ? sc.scrollTop : g.scrollY || 0);
+  // What the feed scrolls in (the window, or a box of Instagram's) is looked up once for each list of posts, not on
+  // every scroll: finding it reads the style of every box above the post.
+  const scOf = new WeakMap();
+  const feedScroller = (el) => {
+    const key = el.parentElement || el;
+    if (scOf.has(key)) { const sc = scOf.get(key); if (!sc || sc.isConnected) return sc; }
+    const sc = scrollerOf(el);
+    scOf.set(key, sc);
+    return sc;
+  };
   function mark() {
     marks = []; markSc = null;
     if (inViewer()) return;
@@ -234,7 +244,7 @@
     for (const el of document.querySelectorAll(POST_SEL)) {
       const r = el.getBoundingClientRect();
       if (r.bottom <= 0) continue; // scrolled past
-      if (sc === undefined) { sc = scrollerOf(el); markSc = sc; }
+      if (sc === undefined) { sc = feedScroller(el); markSc = sc; }
       marks.push({ el, at: r.top + posOf(sc) });
       if (marks.length >= 3 || r.top > innerHeight) break;
     }
@@ -243,6 +253,8 @@
   // next post is the one held (as before 2026-11-12), so what is under it stays where it was.
   function hold(changed) {
     if (!HOLD || holdsItself()) return 0;
+    // A scroll inside the page (a post's pictures swiped sideways, a list in a sheet) is not the feed scrolling.
+    if (changed && changed.type === 'scroll' && changed.target !== document && changed.target !== markSc) return 0;
     let d = 0;
     const m = changed && changed.nodeType === 1 ? marks.find((x) => x.el !== changed) : marks[0];
     if (m && m.el.isConnected && !inViewer() && (!markSc || markSc.isConnected)) {

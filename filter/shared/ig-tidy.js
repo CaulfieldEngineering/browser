@@ -142,13 +142,24 @@
   // How long a new page is kept at the top unless Joe touches it: 4 s (run 67: on a slow device WebKit scrolled a
   // focused box into view after a 1.5 s window had closed).
   const SETTLE_MS = 4000;
+  // What makes it a new page: another path, or another feed (the variant). Anything else in the address is the same
+  // page saying something about itself: swiping a post's pictures sets ?img_index=2 (Instagram's
+  // usePolarisPostSetURLSidecarIndex), and until 2026-11-12 that counted as a new page, so the post was thrown back to
+  // its top and held there for four seconds (Joe: "Swiping images just completely reloads the page").
+  const pageOf = (href) => { try { const u = new URL(href, location.href); return u.origin + u.pathname + '?' + (u.searchParams.get('variant') || ''); } catch { return String(href).split('#')[0]; } };
+  // Something Joe would see as a glitch is noted for the mini PC (one line each; the app sends it as "js:<what>").
+  const note = (what) => { try { const b = globalThis.IGFilterBridge; b && b.stat && b.stat('note-' + what); } catch {} };
+  let toppedFor = 0;
   let lastHref = location.href, lastLen = history.length, popAt = 0, userAt = 0, settleUntil = 0;
   addEventListener('popstate', () => { popAt = Date.now(); settleUntil = 0; }, true); // Back ends any settling at once
   for (const ev of ['touchstart', 'wheel', 'keydown', 'mousedown']) addEventListener(ev, () => { userAt = Date.now(); }, { capture: true, passive: true });
   const atTop = () => {
     if (Date.now() > settleUntil || userAt > settleUntil - SETTLE_MS) return;
     const root = document.documentElement;
-    if (scrollY > 0) { scrollTo(0, 0); root && root.setAttribute('data-igt-top', String(Date.now())); }
+    if (scrollY > 0) {
+      scrollTo(0, 0); root && root.setAttribute('data-igt-top', String(Date.now()));
+      if (toppedFor !== settleUntil) { toppedFor = settleUntil; note('top'); } // once for each new page
+    }
     const a = document.activeElement;
     if (a && (/^(INPUT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) {
       try { a.blur(); } catch {}
@@ -166,7 +177,7 @@
     if (location.href === lastHref) return;
     const was = lastHref, grew = history.length > lastLen;
     lastHref = location.href; lastLen = history.length;
-    const samePage = was.split('#')[0] === location.href.split('#')[0];
+    const samePage = pageOf(was) === pageOf(location.href);
     const root = document.documentElement;
     if (root) root.setAttribute('data-igt-nav', [location.pathname, grew ? 'new' : 'same', Date.now() - popAt < 400 ? 'pop' : '-', userAt > Date.now() - 2000 ? 'touched' : '-'].join(' '));
     if (samePage || Date.now() - popAt < 400) { markSettled(); return; } // a hash change, or Back / Forward
@@ -191,17 +202,17 @@
   const wantsFeed = (href) => { try { const u = new URL(href, location.href); const v = u.searchParams.get('variant'); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && (v === null || v === 'home'); } catch { return false; } };
   let feedPopAt = 0;
   addEventListener('popstate', () => { feedPopAt = Date.now(); }, true);
-  if (wantsFeed(location.href)) location.replace(FOLLOWING);
+  if (wantsFeed(location.href)) { note('feed'); location.replace(FOLLOWING); }
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
-    if (wantsFeed(a.getAttribute('href'))) { e.preventDefault(); e.stopImmediatePropagation(); location.assign(FOLLOWING); }
+    if (wantsFeed(a.getAttribute('href'))) { e.preventDefault(); e.stopImmediatePropagation(); note('feed-tap'); location.assign(FOLLOWING); }
   }, true);
   let feedHref = location.href;
   setInterval(() => {
     if (location.href === feedHref) return;
     feedHref = location.href;
-    if (wantsFeed(feedHref) && Date.now() - feedPopAt > 400) location.replace(FOLLOWING);
+    if (wantsFeed(feedHref) && Date.now() - feedPopAt > 400) { note('feed-addr'); location.replace(FOLLOWING); }
   }, 100);
 
   // Links to the app that are clicked anyway go nowhere.

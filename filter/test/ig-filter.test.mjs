@@ -630,6 +630,7 @@ try {
   await page.evaluate(() => scrollTo(0, 2000)); // a late scroll the page (or WebKit) makes by itself, about 2 s in
   await page.waitForTimeout(300);
   check('a late scroll Joe did not make is put back to the top too', await page.evaluate(() => scrollY) === 0, String(await page.evaluate(() => scrollY)));
+  check('a page put back at the top is noted for the mini PC, once for that page', (await page.evaluate(() => globalThis.IGFilterBridge.stats['note-top'] || 0)) === 1, String(await page.evaluate(() => globalThis.IGFilterBridge.stats['note-top'] || 0)));
   await page.evaluate(() => history.back());
   await page.waitForTimeout(1200);
   check('Back returns to the same place in the feed', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
@@ -642,6 +643,17 @@ try {
   check('once Joe scrolls a new page himself, it stays where he put it', await page.evaluate(() => scrollY) === 800, String(await page.evaluate(() => scrollY)));
   const settledAt = await page.waitForFunction(() => document.documentElement.getAttribute('data-igt-settled') === '/p/P10/comments/', null, { timeout: 6000 }).then(() => true, () => false);
   check('navigation settled: a new page is marked when its hold ends', settledAt);
+  // Joe, 2026-11-12: "Swiping images just completely reloads the page". Swiping a post's pictures only changes
+  // ?img_index in the address (Instagram's own code); that is the same page, and it stays where it is.
+  await page.goto('https://www.instagram.com/spa/');
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-igt-settled') === '/spa/');
+  await page.evaluate(() => { scrollTo(0, 1200); const t = new URLSearchParams(location.search); t.set('img_index', '2'); history.replaceState({ ...history.state }, '', '?' + t.toString()); });
+  await page.waitForTimeout(500);
+  check("swiping a post's pictures (the address gains ?img_index) is not a new page: nothing is put back at the top", await page.evaluate(() => scrollY) === 1200 && new URL(page.url()).search === '?img_index=2', String(await page.evaluate(() => scrollY)));
+  await page.evaluate(() => { history.replaceState({ ...history.state }, '', '?img_index=3'); document.getElementById('m').appendChild(document.createElement('div')); dispatchEvent(new Event('scroll')); });
+  await page.waitForTimeout(300);
+  check('nor on the next picture, a change to the page or a scroll', await page.evaluate(() => scrollY) === 1200, String(await page.evaluate(() => scrollY)));
+  check('and no "put back at the top" line goes to the mini PC for it', (await page.evaluate(() => globalThis.IGFilterBridge.stats['note-top'] || 0)) === 0);
 
   // ---- speed: asked while loading, nothing judged that left the page, the wait counted ----
   await page.goto('https://www.instagram.com/speed/', { waitUntil: 'commit' });

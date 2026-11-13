@@ -156,6 +156,41 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     /// or more, and still on its home feed, loads the feed fresh, so Joe lands on what is new (with "Skip posts I've
     /// seen", past what he already scrolled) instead of the feed as it was. Anywhere else (a profile, messages, a
     /// post) nothing is reloaded.
+    // MARK: - Why the page loaded (the site apps)
+
+    /// Every time a site app's page is loaded as a whole (not Instagram changing its own address, which History
+    /// already notes), one line goes to the mini PC with the reason, as a heartbeat whose state is "load:<reason>"
+    /// (Joe, 2026-11-12, on 0.1.107: "Swiping images just completely reloads the page. a lot of random glitches like
+    /// that"; the phone's reports could not say why a page had loaded again). The reasons: start (the app opened),
+    /// fresh (back after half an hour), crash and crash-home (the page's process ended), hung and hung-home (it
+    /// stopped answering), pull (pulled down to refresh), menu (Reload in the menu), retry (a page that had not
+    /// opened), following (the home feed sent to the Following feed), and what the page or Joe did: back (Back or
+    /// Forward, the edge swipe), reload (the page reloaded itself), link, form, page (the page went to another
+    /// address by itself). Also counted on the phone as "load-<reason>". Nothing about what was on the page.
+    /// Beside them: "nav:back" for every Back or Forward (also one that loads nothing), and "js:<what>" for what the
+    /// page's scripts did (ig-tidy.js: top, a new page put back at its top; feed, feed-tap, feed-addr, the home feed
+    /// sent to the Following feed, which loads the page).
+    private var loadReason: String? = "start"
+    private var loadKind: String?
+
+    private func noteLoad() {
+        let reason = loadReason ?? loadKind ?? "page"
+        loadReason = nil
+        loadKind = nil
+        guard Flavor.isSiteApp, !Self.underTest else { return }
+        FilterStats.shared.count("load-" + reason)
+        Feed.shared.beat("load:" + reason)
+    }
+
+    /// The edge swipe for Back and Forward is off on a site app's home feed (and on only there): a sideways swipe on
+    /// a picture that starts at the edge of the screen went Back or Forward instead, which loads another page.
+    /// Everywhere else (a profile, a post, messages) the swipe goes back as before.
+    private func setEdgeSwipe(_ web: WKWebView) {
+        guard Flavor.isSiteApp else { return }
+        let onHome = web.url.map(Flavor.isHome) ?? true
+        if web.allowsBackForwardNavigationGestures == onHome { web.allowsBackForwardNavigationGestures = !onHome }
+    }
+
     private func cameBack() {
         lastAnswer = Date()
         unanswered = 0
@@ -166,6 +201,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         guard left > 0, Self.isStale(leftAt: left), presentedViewController == nil, current?.blocked == nil,
               let web = webView, let url = web.url, Flavor.isHome(url) else { return }
         FilterStats.shared.count("page-fresh")
+        loadReason = "fresh"
         web.load(URLRequest(url: Flavor.home))
     }
 
@@ -176,7 +212,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         guard let tab = current, let info = tab.blocked, info.calm, let web = webView else { return }
         tab.blocked = nil
         blocked.isHidden = true
-        if let url = info.retry ?? web.url ?? tab.url { web.load(URLRequest(url: url)) }
+        if let url = info.retry ?? web.url ?? tab.url { loadReason = "retry"; web.load(URLRequest(url: url)) }
         updateBar()
     }
 
@@ -217,6 +253,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         lastAnswer = now
         unanswered = 0
         tab.url = again ? Flavor.home : (old.url ?? Flavor.home)
+        loadReason = again ? "hung-home" : "hung"
         old.stopLoading()
         tab.webView = nil
         select(tab)
@@ -289,7 +326,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         guard presentedViewController == nil else { return }
         let menu = SiteMenuViewController(.init(
             hidePick: { [weak self] in self?.startHidePick() },
-            reload: { [weak self] in self?.webView.reload() },
+            reload: { [weak self] in self?.loadReason = "menu"; self?.webView.reload() },
             pickAccount: { [weak self] account in self?.switchAccount(to: account) },
             seenChanged: { [weak self] in SeenPosts.tell(self?.webView) },
             update: newerVersion == nil ? nil : { [weak self] in self?.installUpdate() },
@@ -907,6 +944,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
                     web.stopLoading()
                     self?.showBlocked(SearchBlock.title, SearchBlock.reason, url, in: web)
                 }
+                self?.setEdgeSwipe(web)
                 self?.updateBar()
             },
             webView.observe(\.title, options: [.new]) { [weak self] web, _ in self?.tab(for: web)?.title = web.title ?? "" },
@@ -988,6 +1026,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     }
 
     @objc private func pulled() {
+        loadReason = "pull"
         webView.reload()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.webView.scrollView.refreshControl?.endRefreshing() }
     }
@@ -1030,8 +1069,21 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         if isMainFrame, navigationAction.navigationType != .backForward, let url = navigationAction.request.url,
            let following = Flavor.rewrite(url) {
             decisionHandler(.cancel)
+            if webView === self.webView, loadReason == nil { loadReason = "following" }
             webView.load(URLRequest(url: following))
             return
+        }
+        if isMainFrame, webView === self.webView {
+            switch navigationAction.navigationType {
+            case .backForward:
+                loadKind = "back"
+                // Back or Forward inside Instagram's one page loads nothing, so it is noted here, as "nav:back".
+                if Flavor.isSiteApp, !Self.underTest { FilterStats.shared.count("nav-back"); Feed.shared.beat("nav:back") }
+            case .reload: loadKind = "reload"
+            case .linkActivated: loadKind = "link"
+            case .formSubmitted, .formResubmitted: loadKind = "form"
+            default: loadKind = "page"
+            }
         }
         switch Policy.decide(request: navigationAction.request, isMainFrame: isMainFrame) {
         case .allow:
@@ -1095,6 +1147,13 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         if let tab = tab(for: webView) { close(tab) }
     }
 
+    /// A whole page has started to show: its reason goes to the mini PC (noteLoad).
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        guard webView === self.webView else { return }
+        noteLoad()
+        setEdgeSwipe(webView)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         HistoryRecorder.shared.finished(webView)
         if Flavor.isSiteApp {
@@ -1126,6 +1185,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let now = Date()
         let again = lastPageEnd.map { now.timeIntervalSince($0) < 20 } ?? false
         lastPageEnd = now
+        if webView === self.webView { loadReason = again && Flavor.isSiteApp ? "crash-home" : "crash" }
         if again, Flavor.isSiteApp {
             FilterStats.shared.count("page-restarted-home")
             webView.load(URLRequest(url: Flavor.home))

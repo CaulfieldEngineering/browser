@@ -102,7 +102,13 @@ enum InstagramFilter {
             case "width":
                 replyHandler(Classifier.shared.lanes, nil)
             case "stat":
-                if let name = body["name"] as? String { FilterStats.shared.count(name) }
+                if let name = body["name"] as? String {
+                    FilterStats.shared.count(name)
+                    // "note-<what>": something the page's scripts did that Joe would see as a glitch (ig-tidy.js: the
+                    // page put back at the top, the feed sent to the Following feed). One line to the mini PC, as a
+                    // heartbeat whose state is "js:<what>", beside the "load:<reason>" lines.
+                    if name.hasPrefix("note-"), Flavor.isSiteApp { Feed.shared.beat("js:" + String(name.dropFirst(5).prefix(12))) }
+                }
                 replyHandler(true, nil)
             case "report":
                 if let record = body["record"] as? String { HiddenByHand.shared.add(record) }
@@ -365,6 +371,29 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private var pending: [Int: (Answer) -> Void] = [:]
     private var next = 1
     private var lastEnded: Date?
+    /// The model did not load (the page answered ready: false, or the page itself did not open): the page is loaded
+    /// again after 1, 3, 8, 20 and then every 60 seconds, until it has. Before 2026-11-12 it was never tried again,
+    /// so for the rest of that run of the app nothing was judged and every picture stayed hidden; it was also why
+    /// the app test of the classifier failed now and then on a slow simulator. What waits is kept waiting (each ask
+    /// still answers "loading" after 120 s), so nothing is shown unjudged.
+    private var loadFailures = 0
+    private static let reloadAfter: [TimeInterval] = [1, 3, 8, 20]
+    private func loadAgain() {
+        ready = false
+        FilterStats.shared.count("judge-load-failed")
+        let wait = loadFailures < Self.reloadAfter.count ? Self.reloadAfter[loadFailures] : 60
+        loadFailures += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self, !self.ready, let web = self.web else { return }
+            self.attachToWindow()
+            web.load(URLRequest(url: self.page))
+        }
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { loadAgain() }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if (error as NSError).code == NSURLErrorCancelled { return } // our own reload took its place
+        loadAgain()
+    }
 
     /// How many pictures the revealing-clothing judge takes at a time (clip.js, its lanes; each is a worker with the
     /// model in it): three on a phone with six cores and 5 GB or more (an iPhone 13 Pro and up), two with four cores
@@ -444,10 +473,12 @@ final class Classifier: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard let body = message.body as? [String: Any] else { return }
         if let info = body["info"] as? [String: Any] { FilterStats.shared.setModel(info) }
         if let ok = body["ready"] as? Bool {
-            ready = ok
+            guard ok else { return loadAgain() } // what waits keeps waiting; the page is loaded again
+            ready = true
+            loadFailures = 0
             let waiting = queued
             queued.removeAll()
-            for q in waiting { ok ? send(q.data, q.done) : q.done(.failed("loading")) }
+            for q in waiting { send(q.data, q.done) }
             return
         }
         guard let id = body["id"] as? Int, let cb = pending.removeValue(forKey: id) else { return }
