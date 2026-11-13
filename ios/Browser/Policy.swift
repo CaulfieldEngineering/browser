@@ -55,6 +55,9 @@ enum Policy {
         }
         // Image and video search, always (SearchBlock.swift).
         if SearchBlock.isMediaSearch(url) { return .block(title: SearchBlock.title, reason: SearchBlock.reason) }
+        // Reddit (Reddit.swift): the Reddit app opens nothing while it is not open; r/all, r/popular, adult-named
+        // subreddits and anything off the list never open, in any app built from this code.
+        if let reddit = RedditRules.decide(url, isMainFrame: isMainFrame) { return reddit }
         // The Instagram app (Flavor.swift) opens Instagram only: a link out to another site stops here. Frames inside
         // Instagram's pages may load what they need.
         if Flavor.isSiteApp, isMainFrame, scheme == "http" || scheme == "https", !Flavor.isSiteHost(url) {
@@ -66,7 +69,7 @@ enum Policy {
     /// The native Instagram app (or Threads, Facebook) by its scheme, an App Store link, or an app-install redirect.
     static func isNativeAppLink(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
-        if ["instagram", "instagram-stories", "barcelona", "fb", "fb-messenger", "itms-apps", "itms-appss", "itms", "itmss", "intent"].contains(scheme) { return true }
+        if ["instagram", "instagram-stories", "barcelona", "fb", "fb-messenger", "reddit", "itms-apps", "itms-appss", "itms", "itmss", "intent"].contains(scheme) { return true }
         guard scheme == "http" || scheme == "https", let host = url.host?.lowercased() else { return false }
         return host == "apps.apple.com" || host == "itunes.apple.com" || host.hasSuffix(".app.link") || host.hasSuffix(".onelink.me")
     }

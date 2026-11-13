@@ -102,6 +102,13 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
+      # The Reddit app (target Reddit, Reddit.swift): BUILT, NOT OPEN. It is compiled and tested here and nowhere
+      # archived, signed or published: Reddit stays blocked (TechLockdown), there is no profile for it and no install
+      # page. Do not add a signing, archive or publish step for it without a Sunday review's yes.
+      - name: Compile the Reddit app (unsigned, never published)
+        run: |
+          xcodebuild build             -project ios/Browser.xcodeproj -scheme Reddit -configuration Release             -destination 'generic/platform=iOS'             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
       - name: Test WebKit protection, history and the feed on iPhone simulator
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if "iPhone" in x["name"]))')
@@ -120,6 +127,12 @@ jobs:
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for g in json.load(sys.stdin)["devices"].values() for x in g if "iPhone" in x["name"]]; pick=[x for x in d if x["name"]=="iPhone 13 Pro"] or [x for x in d if "Pro" in x["name"] and "Max" not in x["name"]] or d; print(pick[0]["udid"])')
           xcodebuild test -project ios/Browser.xcodeproj -scheme Facebook -configuration Debug             -destination "platform=iOS Simulator,id=$DEVICE"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      # The Reddit app's tests (ios/RedditTests): as built it opens nothing; the rules it would keep; no pictures.
+      - name: Test the Reddit app on iPhone simulator (it opens nothing)
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=[x for g in json.load(sys.stdin)["devices"].values() for x in g if "iPhone" in x["name"]]; pick=[x for x in d if x["name"]=="iPhone 13 Pro"] or [x for x in d if "Pro" in x["name"] and "Max" not in x["name"]] or d; print(pick[0]["udid"])')
+          xcodebuild test -project ios/Browser.xcodeproj -scheme Reddit -configuration Debug             -destination "platform=iOS Simulator,id=$DEVICE"             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       - name: Import signing certificate and provisioning profile
         if: steps.signing.outputs.signed == 'true'

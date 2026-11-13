@@ -51,6 +51,58 @@ final class FacebookAppTests: XCTestCase {
         XCTAssertNil(r("https://m.facebook.com/notifications/"))
     }
 
+    /// 2026-11-13, as Instagram's Reels tab and Explore went: the Video and Reels tabs are feeds Facebook chooses, so
+    /// they go to Notifications too. A reel or a video that is named (one a friend shared) still opens.
+    func testTheVideoAndReelsTabsGoToNotifications() {
+        let r = { (s: String) in Flavor.rewrite(URL(string: s)!)?.absoluteString }
+        for s in ["https://m.facebook.com/watch/", "https://www.facebook.com/watch", "https://m.facebook.com/reel/", "https://m.facebook.com/reel/?s=tab",
+                  "https://www.facebook.com/reels/", "https://m.facebook.com/watch/latest/", "https://m.facebook.com/video/"] {
+            XCTAssertEqual(r(s), "https://\(URL(string: s)!.host!)/notifications/", s)
+        }
+        for s in ["https://m.facebook.com/reel/1234567890/", "https://www.facebook.com/watch/?v=1234567890", "https://m.facebook.com/someone/videos/123/",
+                  "https://m.facebook.com/watch/somepage/", "https://m.facebook.com/marketplace/", "https://m.facebook.com/messages/"] {
+            XCTAssertNil(r(s), s)
+        }
+    }
+
+    /// The filter's files for Facebook are in the app, and the second picture host is one the app may fetch to judge.
+    func testTheFilterJudgesFacebooksPictureHosts() {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "fb-tidy", "classifier", "clip", "clip-worker"] {
+            XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
+        }
+        XCTAssertTrue(InstagramFilter.isMediaHost(URL(string: "https://scontent.xx.fbcdn.net/x.jpg")!))
+        XCTAssertTrue(InstagramFilter.isMediaHost(URL(string: "https://lookaside.fbsbx.com/x.jpg")!))
+        XCTAssertFalse(InstagramFilter.isMediaHost(URL(string: "https://media.tenor.com/x.gif")!))
+        XCTAssertFalse(InstagramFilter.isMediaHost(URL(string: "https://fbsbx.com.evil.example/x.jpg")!))
+    }
+
+    /// In the app's own web view (2026-11-13): a post whose words carry a suggestive or revealing-clothing term goes,
+    /// a post whose author's name carries an adult term goes, and a picture from outside Facebook's own picture hosts,
+    /// which cannot be judged on the phone, is not shown while its post stays.
+    func testWordsNamesAndOutsidePicturesInTheApp() async throws {
+        let vc = try app()
+        let web = try page(in: vc)
+        let html = """
+        <div role="main"><div role="feed">
+          <div role="article" id="friend"><h4><a href="/a">A friend</a></h4><span dir="auto">New pedal board</span></div>
+          <div role="article" id="words"><h4><a href="/b">Gym page</a></h4><span dir="auto">Leg day #gymgirl</span></div>
+          <div role="article" id="name"><h4><a href="/c">Kate | OnlyFans</a></h4><span dir="auto">Good morning</span></div>
+          <div role="article" id="gif"><h4><a href="/d">Friend Two</a></h4><span dir="auto">lol</span><img id="gifimg" src="https://media.tenor.com/abc/tenor.gif" style="width:300px;height:200px"></div>
+        </div></div>
+        """
+        try await idle(web)
+        web.loadHTMLString(html, baseURL: URL(string: "https://m.facebook.com/groups/pedals/")!)
+        let js = "['friend','words','name','gif'].map(i => i + ':' + (getComputedStyle(document.getElementById(i)).display === 'none' ? 'gone' : 'shown')).join(' ') + '|' + getComputedStyle(document.getElementById('gifimg')).visibility + ':' + document.getElementById('gifimg').hasAttribute('data-igf-foreign')"
+        let want = "friend:shown words:gone name:gone gif:shown|hidden:true"
+        var state = ""
+        for _ in 0..<100 {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+            if state == want { break }
+        }
+        XCTAssertEqual(state, want)
+    }
+
     /// In the app's own web view: a sponsored post and a suggestion go, a friend's post stays, with nothing on the page
     /// saying why.
     func testAdsAndSuggestionsAreGoneInTheApp() async throws {

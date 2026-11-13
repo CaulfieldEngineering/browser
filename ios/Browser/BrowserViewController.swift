@@ -928,6 +928,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         refresh.addTarget(self, action: #selector(pulled), for: .valueChanged)
         web.scrollView.refreshControl = refresh
         SearchBlock.attach(to: web)
+        RedditRules.attach(to: web) // on Reddit's pages no picture or video is ever asked for (Reddit.swift)
         InstagramFilter.attach(to: web) // suggestive posts and Reels on instagram.com are removed (Filter/)
         return web
     }

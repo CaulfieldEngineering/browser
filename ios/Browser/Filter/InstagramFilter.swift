@@ -25,7 +25,7 @@ enum InstagramFilter {
 
     /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
     private static let scripts: [WKUserScript] = {
-        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "reddit-filter"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")
@@ -43,13 +43,14 @@ enum InstagramFilter {
         let bridge = Bridge(web: web)
         ucc.removeScriptMessageHandler(forName: "igf", contentWorld: world)
         ucc.addScriptMessageHandler(bridge, contentWorld: world, name: "igf")
-        if Flavor.isSiteApp { Classifier.shared.warmUp() } // a site app opens its site at once: load the model now
+        // A site app opens its site at once: load the model now. Not the Reddit app: it shows no pictures to judge.
+        if Flavor.isSiteApp, !Flavor.isReddit { Classifier.shared.warmUp() }
     }
 
     /// Only Instagram's own image hosts are fetched for the page; nothing else can be asked for.
     static func isMediaHost(_ url: URL) -> Bool {
         guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
-        return host == "cdninstagram.com" || host.hasSuffix(".cdninstagram.com") || host == "fbcdn.net" || host.hasSuffix(".fbcdn.net")
+        return ["cdninstagram.com", "fbcdn.net", "fbsbx.com"].contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
     /// A small JPEG data: URL of an image, its long side at most 448 px.
@@ -357,6 +358,12 @@ final class FilterStats {
         if picture > 0 { lines.append("Picture line: \(sum("hidden-sexy")) suggestive, \(sum("hidden-explicit")) explicit, \(sum("hidden-combined")) combined") }
         lines.append("Revealing clothing: \(t["hidden-revealing"] ?? 0) picture, \(t["hidden-revealing-text"] ?? 0) caption")
         lines.append("Accounts hidden by name or bio: \((t["hidden-account-name"] ?? 0) + (t["hidden-account-bio"] ?? 0)); avatars hidden: \(t["hidden-avatar"] ?? 0)")
+        if Flavor.isFacebook {
+            lines.append("Facebook: \(t["hidden-fb-sponsored"] ?? 0) ads, \(t["hidden-fb-suggested"] ?? 0) suggested, \(t["hidden-fb-account-name"] ?? 0) by the author's name, \(t["hidden-fb-account"] ?? 0) pages by name or intro, \(t["hidden-foreign"] ?? 0) pictures from outside Facebook")
+        }
+        if Flavor.isReddit {
+            lines.append("Reddit: \(sum("hidden-rd-nsfw") + sum("hidden-rd-quarantined")) marked 18+ or quarantined, \(sum("hidden-rd-text")) by their words, \(sum("hidden-rd-off-list") + sum("hidden-rd-sub-nsfw")) by subreddit, \(sum("hidden-rd-page")) pages not opened")
+        }
         lines.append("Hidden by hand: \(t["hidden-by-hand"] ?? 0)")
         lines.append("Seen before, skipped: \(t["seen-skipped"] ?? 0)")
         let waits = (0...4).map { t["wait-\($0)"] ?? 0 }

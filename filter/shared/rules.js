@@ -97,6 +97,19 @@
     return false;
   }
 
+  // Facebook, by the author's name (2026-11-13, the Instagram account rule of 2026-11-05 brought to Facebook: "let's
+  // also do like a textual search. In like profile names or bios"): the name a post is headed with (its first heading
+  // link), judged like an Instagram account's name. Only the name: the post's own words are the text rules' job.
+  function authorOf(unit) {
+    if (!unit || !unit.querySelector) return '';
+    const a = unit.querySelector('h2 a, h3 a, h4 a, h2 strong, h3 strong, h4 strong, strong a');
+    return a ? (a.textContent || '').trim().slice(0, 80) : '';
+  }
+  const accountOf = (text) => {
+    const t = forName(text);
+    return accountKind(t, false) || (WORD_RE.test(t) ? 'suggestive words' : null) || (REVEALING_RE.test(t) ? 'revealing-clothing tags' : null);
+  };
+
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
     { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
@@ -111,6 +124,7 @@
     // etc."): every sponsored post, Reel, listing or right-rail ad, and the "suggested" injections, wherever they appear.
     { id: 'fb-sponsored', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && sponsored(unit) },
     { id: 'fb-suggested', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && SUGGESTED.test(headText(unit)) },
+    { id: 'fb-account-name', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && !!accountOf(authorOf(unit)) },
   ];
 
   g.IGFilterRules = {
@@ -125,10 +139,7 @@
     revealing: REVEALING,
     facebook: { sponsored, suggested: (unit) => SUGGESTED.test(headText(unit)) },
     /** The kind of term an account's name or bio carries, or null: every kind, the suggestive words, the revealing tags. */
-    account(text) {
-      const t = forName(text);
-      return accountKind(t, false) || (WORD_RE.test(t) ? 'suggestive words' : null) || (REVEALING_RE.test(t) ? 'revealing-clothing tags' : null);
-    },
+    account(text) { return accountOf(text); },
     accountKinds: () => KINDS.map((k) => k.kind).concat(PATTERNS.map((p) => p.kind)),
     /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
      *  device (why a post was hidden); it decides nothing and changes no line. */

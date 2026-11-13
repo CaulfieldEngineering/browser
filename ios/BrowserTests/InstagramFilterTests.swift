@@ -24,7 +24,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "classifier", "clip", "clip-worker"] {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "reddit-filter", "classifier", "clip", "clip-worker"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))
@@ -37,6 +37,24 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertFalse(InstagramFilter.isMediaHost(URL(string: "https://example.com/x.jpg")!))
         XCTAssertFalse(InstagramFilter.isMediaHost(URL(string: "http://scontent.cdninstagram.com/x.jpg")!))
         XCTAssertFalse(InstagramFilter.isMediaHost(URL(string: "https://cdninstagram.com.evil.example/x.jpg")!))
+        XCTAssertTrue(InstagramFilter.isMediaHost(URL(string: "https://lookaside.fbsbx.com/x.jpg")!), "Facebook's second picture host (2026-11-13)")
+    }
+
+    /// Reddit (Reddit.swift; built, not open; Reddit stays blocked on the phone by TechLockdown, which this does not
+    /// touch). In the Browser too, Reddit's own feeds and adult-named subreddits never open and nothing is on the
+    /// list, so the Browser is no easier a way in than the Reddit app; and the Reddit app is not this one.
+    func testRedditsRulesHoldInTheBrowserToo() {
+        XCTAssertFalse(Flavor.isReddit)
+        XCTAssertFalse(RedditRules.isOpen)
+        let decide = { (s: String) in Policy.decide(request: URLRequest(url: URL(string: s)!), isMainFrame: true) }
+        for s in ["https://www.reddit.com/r/all/", "https://old.reddit.com/r/popular/", "https://www.reddit.com/r/gonewild/", "https://www.reddit.com/over18?dest=x",
+                  "https://www.reddit.com/", "https://www.reddit.com/r/diypedals/"] {
+            if case .block = decide(s) {} else { XCTFail("\(s) must not open") }
+        }
+        XCTAssertEqual(decide("https://example.com/"), .allow, "other sites are untouched")
+        XCTAssertEqual(decide("https://imgur.com/"), .allow, "the media list is the Reddit app's, not the Browser's")
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://www.reddit.com/r/diypedals/")!), "only the Reddit app moves Reddit to its plain pages")
+        XCTAssertEqual(Flavor.rewrite(URL(string: "https://www.reddit.com/search?q=a&include_over_18=on")!)?.absoluteString, "https://www.reddit.com/search?q=a")
     }
 
     /// The model loads in WebKit on the phone and scores a plain picture as not suggestive.

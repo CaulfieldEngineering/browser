@@ -34,7 +34,7 @@
   const BRIDGE = g.IGFilterBridge;
   if (!RULES || !BRIDGE) return;
 
-  const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
+  const MEDIA_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net|fbsbx\.com)$/i;
   const CFG = g.IGFilterConfig || {}; // filter-config.js, also shown on the Devices dashboard
   const SMALL = CFG.smallPx || 120;                                // rendered px: avatars, icons and small story rings are not judged
   const FRAME_EVERY = (CFG.frameEverySeconds || 2) * 1000;         // between frame checks while a video plays
@@ -594,10 +594,32 @@
     el.setAttribute('data-igf-in', '');
     setTimeout(() => el.removeAttribute('data-igf-in'), 260);
   }
+  // Facebook (2026-11-13): a picture that does not come from Facebook's own picture hosts (a GIF from a GIF service, a
+  // picture a page embeds from elsewhere) cannot be fetched and judged on the phone, so it used to show unjudged. It
+  // is now held for good: not shown, with no label, like a picture that could never be judged. Small ones (icons,
+  // emoji, under the avatar size) are let go, as everywhere. If its address later becomes one of Facebook's, it is
+  // judged like any other. Only the picture goes; the post and its words stay and are judged by the text rules.
+  function handleForeign(img, src) {
+    if (imgDone.get(img) === src) return;
+    imgDone.set(img, src);
+    img.setAttribute('data-igf-hold', '');
+    const settle = () => {
+      if (srcOf(img) !== src || !img.isConnected) return;
+      const r = img.getBoundingClientRect();
+      if (r.width > 0 && r.width < SMALL && r.height < SMALL) { img.removeAttribute('data-igf-hold'); img.removeAttribute('data-igf-foreign'); return; }
+      const loaded = img.tagName !== 'IMG' || img.complete;
+      if (!loaded && r.width < SMALL && r.height < SMALL) return; // not laid out yet: its size is known when it has loaded
+      if (!img.hasAttribute('data-igf-foreign')) { img.setAttribute('data-igf-foreign', ''); stat('hidden-foreign'); }
+    };
+    requestAnimationFrame(settle);
+    if (img.tagName === 'IMG' && !img.complete) { img.addEventListener('load', settle, { once: true }); img.addEventListener('error', settle, { once: true }); }
+  }
   function handleImg(img) {
     const src = srcOf(img);
+    if (SITE === 'facebook' && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src)) { handleForeign(img, src); return; }
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
     imgDone.set(img, src);
+    img.removeAttribute('data-igf-foreign');
     const unit = unitOf(img);
     releaseIfChanged(unit.closest ? unit.closest('[data-igf-for]') || unit : unit);
     if (gone(unit)) return;

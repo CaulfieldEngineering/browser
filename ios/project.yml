@@ -129,6 +129,53 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.facebook.tests
         CODE_SIGNING_ALLOWED: NO
+  # The Reddit app (Reddit.swift; Joe, 2026-11-12: "start building a version of Facebook and one of Reddit that have
+  # similar filtering features", "For Reddit, no images allowed. And text-context filtering."): the Browser's code with
+  # REDDIT_APP set. BUILT, NOT OPEN: Reddit stays blocked (locked memory entry 4). It is compiled and tested by
+  # ios-build.yml and never archived, signed or published; there is no "Reddit AdHoc" profile and no install page.
+  Reddit:
+    type: application
+    platform: iOS
+    sources:
+      - path: Browser
+        excludes:
+          - Info.plist
+          - Assets.xcassets
+      - path: Reddit
+        excludes:
+          - Info.plist
+      - path: ../filter/shared
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.reddit
+        PRODUCT_NAME: Reddit
+        INFOPLIST_FILE: Reddit/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        DEVELOPMENT_TEAM: D56QY8C7WL
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) REDDIT_APP"
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: Reddit AdHoc
+  # The Reddit app's own tests (it opens nothing; the rules it would keep; no pictures), on the simulator.
+  RedditTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: RedditTests
+    dependencies:
+      - target: Reddit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.caulfieldengineering.reddit.tests
+        CODE_SIGNING_ALLOWED: NO
   BrowserTests:
     type: bundle.unit-test
     platform: iOS
@@ -172,3 +219,13 @@ schemes:
       config: Debug
       targets:
         - FacebookTests
+  Reddit:
+    build:
+      targets:
+        Reddit: all
+    archive:
+      config: Release
+    test:
+      config: Debug
+      targets:
+        - RedditTests
