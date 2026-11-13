@@ -7,6 +7,7 @@ import WebKit
 @MainActor
 final class AppLaunchTests: XCTestCase {
     private var hosted: [WKWebView] = []
+    override func setUp() async throws { await ColdStart.waitOut(classifier: false) } // a cold simulator, once (ColdStart.swift)
     override func tearDown() async throws {
         hosted.forEach { $0.removeFromSuperview() }
         hosted = []

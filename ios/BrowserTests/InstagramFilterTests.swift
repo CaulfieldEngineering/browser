@@ -5,6 +5,8 @@ import WebKit
 /// The Instagram filter (Joe, 2026-11-05): suggestive posts are removed on instagram.com, judged on the phone.
 @MainActor
 final class InstagramFilterTests: XCTestCase {
+    override func setUp() async throws { await ColdStart.waitOut(classifier: true) } // a cold simulator, once (ColdStart.swift)
+
     private func browser() throws -> BrowserViewController {
         try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }.compactMap { $0.rootViewController as? BrowserViewController }.first)
