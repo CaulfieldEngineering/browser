@@ -15,6 +15,7 @@ globalThis.IGFilterConfig = {
   "labels": "none",
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",
+  "suggestions": "removed everywhere: the desktop sidebar, the See all page (goes to the Following feed), carousels in the feed, on profiles and on the activity page, Similar accounts (2026-11-15)",
   "surfaces": ["feed", "post pages", "profile grids (posts, reels, tagged)", "Explore and search (grids removed)", "the reel viewer", "stories", "messages"],
   "accounts": {
     "_what": "Names, bios and captions that mark an adult or suggestive account (Joe, 2026-11-05: 'let's also do like a textual search. In like profile names or bios', 'And captions'). Names and bios also check the suggestive words and the revealing-clothing tags. The Devices dashboard shows the kinds as counts, never the words.",

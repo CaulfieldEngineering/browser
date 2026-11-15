@@ -73,6 +73,44 @@ const pages = {
     ${tile('kw1', '/p/KW1/', 'plain-kw1.jpg')}
     <video id="kwv" src="${CDN}/v.mp4" style="width:200px;height:300px"></video>
   </main>${NAV}`,
+  // "Suggested for you" (Joe, 2026-11-15: "Can we remove this sidebar from instagram"). The desktop home: the feed and,
+  // beside it in the same main area, his own account, the suggestions (a heading with See all, then rows of an avatar,
+  // a name, a line and a Follow button) and the footer.
+  '?sidebar': `<main role="main"><div id="cols" style="display:flex">
+    <div id="feedcol" style="flex:1">${seenPost('D1')}${seenPost('D2')}</div>
+    <div id="side" style="width:320px">
+      <div id="me"><a href="/joe/"><img src="${CDN}/plain-me2.jpg" style="width:44px;height:44px"></a><a href="/joe/">joe</a><div role="button">Switch</div></div>
+      <div class="x9f619"><div class="x1n2onr6" id="suggbox">
+        <div class="xh8yej3" id="sugghead"><span class="x1lliihq"><span>Suggested for you</span></span><a href="/explore/people/" id="seeall"><span>See all</span></a></div>
+        ${[['cornelius', '6 mutuals'], ['brooke', 'Suggested for you'], ['nayou', 'Suggested for you'], ['jeremy', '2 mutuals']].map(([u, line]) =>
+          `<div class="x1qjc9v5"><div class="row" id="sr-${u}" style="display:flex"><a href="/${u}/"><img src="${CDN}/plain-${u}.jpg" style="width:44px;height:44px"></a><div><a href="/${u}/"><span>${u}</span></a><span>${line}</span></div><div role="button" tabindex="0">Follow</div></div></div>`).join('')}
+      </div></div>
+      <footer id="foot"><a href="/about/">About</a> <a href="/help/">Help</a></footer>
+    </div></div></main>${NAV}`,
+  // The feed on the phone: a "Suggested for you" carousel between two posts.
+  '?feedsugg': `<main role="main">${seenPost('F1')}
+    <div id="carousel"><div><div id="carhead"><span>Suggested for you</span><a href="/explore/people/">See all</a></div>
+      <div style="display:flex">${['amy', 'bo', 'cy'].map((u) => `<div class="card" id="card-${u}"><button aria-label="Dismiss">x</button><a href="/${u}/"><img src="${CDN}/plain-c${u}.jpg" style="width:80px;height:80px"></a><a href="/${u}/">${u}</a><span>Followed by dan</span><button>Follow</button></div>`).join('')}</div></div></div>
+    ${seenPost('F2')}</main>${NAV}`,
+  // A profile with its similar-accounts button and the panel it opens.
+  '/simprofile/': `<main><header><img id="spav" src="${CDN}/plain-spav.jpg" style="width:150px;height:150px" alt="simprofile's profile picture">
+      <section><h2 id="spname">simprofile</h2><div style="display:flex"><button id="spfollow">Following</button><div role="button" id="spmsg">Message</div><div role="button" id="spchev"><svg aria-label="Similar accounts" width="16" height="16"></svg></div></div></section></header>
+    <div id="simpanel"><div><div><span id="simhead">Similar accounts</span></div><a href="/explore/people/suggested/">See all</a></div>
+      <ul>${['dd', 'ee'].map((u) => `<li id="sim-${u}"><a href="/${u}/"><img src="${CDN}/plain-s${u}.jpg" style="width:60px;height:60px"></a><a href="/${u}/">${u}</a><button>Follow</button></li>`).join('')}</ul></div>
+    <div class="_ac7v">${tile('sp1', '/p/SP1/', 'plain-sp1.jpg')}</div></main>${NAV}`,
+  // The activity page: one list, what happened (with Follow back buttons) and then suggestions at its end. Only the
+  // suggestions may go; the climb must not take the list.
+  '/accounts/activity/': `<main><div id="actlist">
+      <div id="act1"><a href="/fan1/"><img src="${CDN}/plain-f1.jpg" style="width:44px;height:44px"></a><span><a href="/fan1/">fan1</a> started following you.</span><button>Follow back</button></div>
+      <div id="act2"><a href="/fan2/"><img src="${CDN}/plain-f2.jpg" style="width:44px;height:44px"></a><span><a href="/fan2/">fan2</a> liked your post.</span></div>
+      <div><span id="acthead">Suggested for you</span></div>
+      <div id="actsugg1"><a href="/sg1/"><img src="${CDN}/plain-g1.jpg" style="width:44px;height:44px"></a><div><a href="/sg1/">sg1</a><span>Suggested for you</span></div><button>Follow</button></div>
+    </div></main>${NAV}`,
+  // The worst case: the heading straight inside the page's main area beside a post. Nothing larger than the words goes.
+  '/bareheading/': `<main role="main" id="bm"><span id="barehead">Suggested for you</span>${seenPost('B1')}<div role="button">Follow</div></main>${NAV}`,
+  // A new message: "Suggested" people to write to are not suggestions to follow, and stay.
+  '/direct/new/': `<main><div role="dialog"><input id="to" placeholder="Search"><div id="dmsugg"><span>Suggested</span><div id="dm1"><a href="/pal/">pal</a></div><div id="dm2"><a href="/pal2/">pal2</a></div></div></div></main>`,
+  '/explore/people/': `<main><h1>Suggested</h1><div id="peoplelist"><a href="/p1x/">p1x</a><button>Follow</button></div></main>`,
   '/spa/': `<main id="m"></main><script>
     // Like Instagram: one page, new "pages" by pushState, the old scroll left behind, the comment box focused by the page.
     const feed = () => { m.innerHTML = Array.from({ length: 60 }, (_, i) => '<article style="height:300px">post ' + i + ' <a href="/p/P' + i + '/comments/" class="open">comments</a></article>').join(''); };
@@ -625,6 +663,30 @@ try {
   check('captions: "of" in a sentence stays', await shown('c4'));
   const acst = await page.evaluate(() => globalThis.IGFilterBridge.stats);
   check('counts: accounts by name or bio, and avatars, on the device', true, JSON.stringify(acst));
+  // ---- no "Suggested for you" anywhere (Joe, 2026-11-15: "Can we remove this sidebar from instagram") ----
+  await go('/?variant=following&fx=sidebar', 1500);
+  check('suggestions, desktop sidebar: the panel is gone, heading, See all and every row', !(await shown('suggbox')) && !(await shown('sugghead')) && !(await shown('seeall')) && !(await shown('sr-cornelius')) && !(await shown('sr-brooke')) && !(await shown('sr-jeremy')));
+  check('suggestions, desktop sidebar: the feed beside it stays, posts and all', (await shown('feedcol')) && (await shown('D1')) && (await shown('D2')));
+  check('suggestions, desktop sidebar: his own account and the footer stay', (await shown('me')) && (await shown('foot')));
+  check('suggestions, desktop sidebar: the page is not blanked (main, the tab bar)', (await shown('cols')) && (await shown('tabbar')));
+  await go('/explore/people/', 1500);
+  check('suggestions page (See all): goes to the Following feed', /\/\?variant=following/.test(page.url()), page.url());
+  await go('/simprofile/', 1500);
+  check('suggestions, profile: the similar accounts panel is gone', !(await shown('simpanel')) && !(await shown('sim-dd')));
+  check('suggestions, profile: the button that opens it is gone', !(await shown('spchev')));
+  check('suggestions, profile: the profile stays (name, Following, Message, avatar, posts)', (await shown('spname')) && (await shown('spfollow')) && (await shown('spmsg')) && (await shown('sp1')));
+  await go('/accounts/activity/', 1500);
+  check('suggestions, activity: the list of what happened stays (Follow back too)', (await shown('actlist')) && (await shown('act1')) && (await shown('act2')));
+  check('suggestions, activity: the heading and a suggested account\'s row go', !(await shown('acthead')) && !(await shown('actsugg1')));
+  await go('/bareheading/', 1500);
+  check('suggestions, guard: a heading loose in the main area takes only its words', !(await shown('barehead')) && (await shown('bm')) && (await shown('B1')));
+  await go('/direct/new/', 1200);
+  check('suggestions: the new-message "Suggested" people stay', (await shown('dmsugg')) && (await shown('dm1')) && (await shown('to')));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go('/?variant=following&fx=feedsugg', 1500);
+  check('suggestions, phone feed: the carousel is gone, heading and cards', !(await shown('carhead')) && !(await shown('card-amy')) && !(await shown('card-cy')));
+  check('suggestions, phone feed: the posts around it and the tab bar stay', (await shown('F1')) && (await shown('F2')) && (await shown('tHome')));
+  await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the reel and story viewers skip a hidden slide ----
   const onScreenSlide = () => page.evaluate(() => { const sc = document.getElementById('sc'); const r = sc.getBoundingClientRect(); const el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); const s = el && el.closest('.slide'); return s ? s.id : ''; });
   await go('/reels/V1/', 1800);

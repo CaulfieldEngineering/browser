@@ -131,6 +131,79 @@
   new MutationObserver(() => { if (!ps && /^\/explore(\/|$)/.test(location.pathname)) ps = setTimeout(() => { ps = 0; plainSearch(); }, 60); }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style'] });
   setInterval(plainSearch, 500);
 
+  // No "Suggested for you", anywhere on Instagram (Joe, 2026-11-15, of the desktop's right-hand list of accounts with
+  // Follow buttons: "Can we remove this sidebar from instagram"). Gone: the desktop sidebar's suggestions, the
+  // suggestions page ("See all", /explore/people/, which goes to the Following feed), the suggestion carousels in the
+  // feed, on profiles and on the activity page ("Suggested for you", "Similar accounts", "Discover people"), each
+  // suggested account's row, and the profile button that opens similar accounts. Found by the heading's words and the
+  // Follow buttons under it, not by Instagram's class names. A panel is the smallest box around its heading that holds
+  // a Follow button or two profile links; it is never one that holds a post, the tab bar, a search field, the page's
+  // main area or almost the whole screen (Facebook's Friends page of 2026-11-14 went blank from a hide that climbed too
+  // far), so the most a wrong guess can take is a corner. Posts are left to the filter (a suggested post's header line
+  // is not a panel), and so is the new-message list ("Suggested" alone is not a heading here).
+  const SUGG_HEAD = /^(suggested for you|suggestions for you|suggested accounts|similar accounts|discover people|people you may know|accounts you may like|more accounts to follow)$/i;
+  const SUGG_BTN = /^(similar accounts|suggested for you|discover people|see all suggestions)$/i;
+  const SUGG_PAGE = /^\/explore\/people(\/|$)/;
+  const FOLLOW = /^follow( back)?$/i;
+  const suggCss = 'a[href^="/explore/people"]:not([data-igt-nav] a){display:none !important}';
+  const tooBig = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+  };
+  const guarded = (el) => !el || el === document.body || el === document.documentElement || el.matches('main, [role="main"], article, nav, [role="navigation"], [role="dialog"], [data-igt-nav]') ||
+    !!el.querySelector('main, [role="main"], article, nav, [role="navigation"], [data-igt-nav], input, textarea, [role="search"], video') || inNav(el) || tooBig(el);
+  const follows = (el) => [...el.querySelectorAll('button, [role="button"]')].filter((b) => FOLLOW.test((b.textContent || '').trim())).length;
+  const profileLinks = (el) => new Set([...el.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => /^\/[A-Za-z0-9._]+\/?$/.test(h) && !/^\/(explore|direct|reels?|accounts|p)\/?$/.test(h))).size;
+  // The panel a suggestions heading heads, or null when no box around it is safe to take. Either a panel that starts
+  // with its heading (the sidebar, a carousel), or one suggested account's row whose line says "Suggested for you" (one
+  // Follow button, one account, a short line). A box that holds accounts but neither starts with the heading nor is one
+  // row (say, the activity page's list with suggestions at its end) is not taken: the climb stops there.
+  const textOf = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
+  function suggPanel(head) {
+    const words = textOf(head).toLowerCase();
+    let box = head;
+    for (let i = 0; i < 8; i++) {
+      const up = box.parentElement;
+      if (!up || guarded(up)) return null;
+      box = up;
+      const f = follows(box), n = profileLinks(box);
+      if (f < 1 && n < 2) continue;
+      const t = textOf(box);
+      if (t.toLowerCase().startsWith(words)) return box;
+      if (f === 1 && n <= 1 && t.length <= 160) return box;
+      return null;
+    }
+    return null;
+  }
+  const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el)) { gone(el); note('sugg-' + what); } };
+  function noSuggestions() {
+    const root = document.documentElement;
+    if (!root) return;
+    if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss; (document.head || root).appendChild(st); }
+    if (SUGG_PAGE.test(location.pathname)) { note('sugg-page'); location.replace(FOLLOWING); return; }
+    if (!document.body) return;
+    // the headings, found by their words (a text search the browser does itself, so cheap on every page)
+    let snap;
+    try { snap = document.evaluate('//body//text()[contains(., "uggest") or contains(., "imilar accounts") or contains(., "iscover people") or contains(., "ay know") or contains(., "ay like") or contains(., "ccounts to follow")]', document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null); } catch { snap = null; }
+    for (let i = 0; snap && i < snap.snapshotLength; i++) {
+      const el = snap.snapshotItem(i).parentElement;
+      if (!el || el.closest('article, [data-igt-nav]') || !SUGG_HEAD.test((el.textContent || '').trim())) continue;
+      const panel = suggPanel(el);
+      if (panel) suggGone(panel, 'panel');
+      else if (el.children.length === 0 && !el.closest('[data-igt]')) suggGone(el, 'head'); // the words at least; the rest once it loads
+    }
+    // the button by a profile's Follow that opens its similar accounts
+    for (const b of document.querySelectorAll('button, [role="button"], a[role="link"]')) {
+      if (b.closest('article, [data-igt-nav], [data-igt]')) continue;
+      const label = b.getAttribute('aria-label') || (b.querySelector('svg[aria-label]') || { getAttribute: () => '' }).getAttribute('aria-label') || '';
+      if (SUGG_BTN.test(label.trim()) || SUGG_BTN.test((b.textContent || '').trim())) suggGone(b, 'button');
+    }
+  }
+  let sg = 0;
+  new MutationObserver(() => { if (!sg) sg = setTimeout(() => { sg = 0; noSuggestions(); }, 120); }).observe(document, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', noSuggestions, { once: true });
+  setInterval(noSuggestions, 1000);
+
   // A newly opened page starts at the top, as in the native app (Joe, 2026-11-05: "opening certain pages scrolls way
   // down instead of starting at the top"; a post's comments opened at the last comments). Instagram changes pages without
   // loading (pushState), so the old scroll position, the filter's collapsing of hidden posts, or a comment box focused by
