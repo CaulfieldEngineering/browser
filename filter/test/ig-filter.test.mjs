@@ -111,6 +111,13 @@ const pages = {
   // A new message: "Suggested" people to write to are not suggestions to follow, and stay.
   '/direct/new/': `<main><div role="dialog"><input id="to" placeholder="Search"><div id="dmsugg"><span>Suggested</span><div id="dm1"><a href="/pal/">pal</a></div><div id="dm2"><a href="/pal2/">pal2</a></div></div></div></main>`,
   '/explore/people/': `<main><h1>Suggested</h1><div id="peoplelist"><a href="/p1x/">p1x</a><button>Follow</button></div></main>`,
+  // Extra rules (fx=extra): a panel headed by a heading only the extra file names, a post with a phrase, a selector, a button.
+  '?extra': `<main role="main">${seenPost('X1')}
+    <div id="xpanel"><div><span id="xhead">Brands you might like</span></div><a href="/brand1/">brand1</a><a href="/brand2/">brand2</a></div>
+    <article id="xpaid"><header><a href="/shop9/">shop9</a><span>Paid partnership</span></header><div>post</div></article>
+    <div id="xsel">a box</div><div role="button" id="xbtn">Try Threads</div>
+    <div id="xsugg"><div><span>Suggested for you</span></div><a href="/z1/">z1</a><div role="button">Follow</div><a href="/z2/">z2</a></div>
+    ${seenPost('X2')}</main>${NAV}`,
   '/spa/': `<main id="m"></main><script>
     // Like Instagram: one page, new "pages" by pushState, the old scroll left behind, the comment box focused by the page.
     const feed = () => { m.innerHTML = Array.from({ length: 60 }, (_, i) => '<article style="height:300px">post ' + i + ' <a href="/p/P' + i + '/comments/" class="open">comments</a></article>').join(''); };
@@ -317,6 +324,7 @@ const pages = {
 };
 
 const fakeBridge = `globalThis.__igFilterRetry = [150, 300, 450];
+globalThis.__igFilterLate = 600;
 globalThis.__lateTries = 0;
 globalThis.IGFilterBridge = {
   calls: [], stats: {},
@@ -328,6 +336,7 @@ globalThis.IGFilterBridge = {
     this.callAt = this.callAt || {}; this.callAt[u.split('/').pop().split('?')[0]] = performance.now();
     return new Promise((r) => setTimeout(() => {
       if (/fail/.test(u)) return r({ _error: 'unreadable' });
+      if (/judgedown/.test(u)) return r(globalThis.__judgeBack ? { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 } : { _error: 'judge-down' }); // a judge that is down, then back
       if (/verylate/.test(u) && !globalThis.__lateOut) { globalThis.__lateGo = () => { globalThis.__lateOut = true; r({ Sexy: 0.8, Neutral: 0.2, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.1 }); }; return; } // judged when the test says
       if (/late/.test(u)) return r(++globalThis.__lateTries < 2 ? { _error: 'loading' } : { Neutral: 0.97, Sexy: 0.01, Porn: 0, Hentai: 0, Drawing: 0.02, Revealing: 0.02 });
       if (/rev/.test(u)) return r({ Neutral: 0.9, Sexy: 0.1, Porn: 0, Hentai: 0, Drawing: 0, Revealing: 0.92 });
@@ -364,6 +373,12 @@ try {
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-filter.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-tidy.js'), 'utf8') });
   await ctx.addInitScript({ content: 'globalThis.__igSeenMs = 300;' });
+  // Hide rules as data: the bundled floor, and extra rules handed in the way the extension hands in a verified file.
+  // An extra file that tries to empty a list or name an unknown "unhide" field changes nothing in the floor; a selector
+  // that names the whole page is refused by the guards.
+  await ctx.addInitScript({ content: `if (location.search.includes('fx=extra')) globalThis.__hideRulesExtra = { version: 7, sites: { 'instagram.com': { headings: ['Brands you might like', ''], phrases: ['Paid partnership'], selectors: ['main', 'body', '#xsel'], buttons: ['Try Threads'], blockPaths: ['/', '/xblocked'] , unhide: ['Suggested for you'] }, '*': { headings: [] } } };` });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'hide-rules.js'), 'utf8') });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'hide-engine.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-seen.js'), 'utf8') });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
@@ -394,6 +409,15 @@ try {
   await page.evaluate(() => { const a = document.createElement('article'); a.id = 'late2'; a.innerHTML = `<header><a href="/z/">z</a></header><img src="https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-new.jpg" width="400" height="400"><div>x</div>`; document.querySelector('main').appendChild(a); });
   await page.waitForTimeout(400);
   check('feed: a post that loads later is judged too', (await hiddenAs('#late2')) === 'image');
+  // A judge that is down for longer than the quick tries (2026-11-15, the laptop: "are we currently blocking all images
+  // on Facebook?"): the post stays hidden while nothing can judge it, and shows once the judge answers again.
+  await page.evaluate(() => { const a = document.createElement('article'); a.id = 'down1'; a.innerHTML = `<header><a href="/d/">d</a></header><img src="https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/judgedown-1.jpg" width="400" height="400"><div>x</div>`; document.querySelector('main').appendChild(a); });
+  await page.waitForTimeout(1400);
+  check('judge down: the post stays hidden, never shown unjudged', (await hiddenAs('#down1')) === 'unjudged');
+  await page.evaluate(() => { globalThis.__judgeBack = true; });
+  await page.waitForTimeout(1500);
+  check('judge back: the post is tried again and shown', await visible('#down1 img'));
+  check('judge back: counted (late-shown)', await page.evaluate(() => (globalThis.IGFilterBridge.stats['late-shown'] || 0) >= 1));
   await page.evaluate(() => { document.querySelector('#ok div').textContent += ' link in bio 🔞'; });
   await page.waitForTimeout(400);
   check('feed: a caption that loads later is judged too', (await hiddenAs('#ok')) === 'text');
@@ -682,6 +706,14 @@ try {
   check('suggestions, guard: a heading loose in the main area takes only its words', !(await shown('barehead')) && (await shown('bm')) && (await shown('B1')));
   await go('/direct/new/', 1200);
   check('suggestions: the new-message "Suggested" people stay', (await shown('dmsugg')) && (await shown('dm1')) && (await shown('to')));
+  // ---- hide rules as data: the extra (fetched) rules only add ----
+  await go('/?variant=following&fx=extra', 1800);
+  check('hide rules: a heading named only in the extra rules takes its panel', !(await shown('xpanel')) && !(await shown('xhead')));
+  check('hide rules: a phrase takes its post (collapsed, so the feed still loads)', await page.$eval('#xpaid', (e) => e.hasAttribute('data-fhr') && e.getBoundingClientRect().height <= 1));
+  check('hide rules: a selector and a button', !(await shown('xsel')) && !(await shown('xbtn')));
+  check('hide rules: the floor stays ("unhide" and empty lists in the extra file change nothing)', !(await shown('xsugg')) && await page.evaluate(() => { const l = globalThis.__hideEngine.rules.sites['instagram.com']; return l.headings.includes('Suggested for you') && l.headings.includes('Brands you might like') && !('unhide' in l) && l.blockPaths.includes('/explore/people') && !l.blockPaths.includes('/'); }));
+  check('hide rules: "main" and "body" as selectors, and "/" as a blocked path, do not blank the page', (await shown('X1')) && (await shown('X2')) && (await shown('tHome')) && /variant=following/.test(page.url()), page.url());
+  check('hide rules: the engine counts what it hid', await page.evaluate(() => globalThis.__hideEngine.hidden >= 4 && globalThis.__hideEngine.rules.extraVersion === 7));
   await page.setViewportSize({ width: 390, height: 844 });
   await go('/?variant=following&fx=feedsugg', 1500);
   check('suggestions, phone feed: the carousel is gone, heading and cards', !(await shown('carhead')) && !(await shown('card-amy')) && !(await shown('card-cy')));

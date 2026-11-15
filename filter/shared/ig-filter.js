@@ -661,9 +661,31 @@
   // "Still checking": every held picture in the post is tried again; all clean shows it, one flagged hides it for good,
   // and after the last try it stays hidden as "could not be checked".
   const retries = new WeakMap();
+  // Still not judged after the last quick try: it stays hidden (never shown unjudged), and is tried again every two
+  // minutes while it is on the page, so a judge that was down or slow for a while (2026-11-15, the laptop: "are we
+  // currently blocking all images on Facebook?") does not leave every picture hidden for good. Counted as late-*.
+  const LATE = g.__igFilterLate || (CFG.lateRetrySeconds || 120) * 1000;
+  function later(unit) {
+    setTimeout(async () => {
+      if (!unit.isConnected || unit.getAttribute('data-igf-gone') !== 'unjudged') return;
+      const imgs = [...(held.get(unit) || [])].filter((i) => i.isConnected && i.hasAttribute('data-igf-hold'));
+      if (!imgs.length) return;
+      let allClean = true;
+      for (const img of imgs) {
+        const v = await judgeUrl(srcOf(img), img);
+        if (v.flagged) { unit.setAttribute('data-igf-gone', 'checking'); hide(unit, 'image', v.why); stat('late-flagged'); return; }
+        if (v.flagged === null) allClean = false;
+      }
+      if (!allClean) { stat('late-unjudged'); later(unit); return; }
+      unit.setAttribute('data-igf-gone', 'checking');
+      for (const img of imgs) { if (img.tagName === 'VIDEO') img.removeAttribute('data-igf-hold'); else show(img); }
+      restore(unit);
+      stat('late-shown');
+    }, LATE);
+  }
   function retry(unit) {
     const n = retries.get(unit) || 0;
-    if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); if (vw) unit.setAttribute('data-igf-cover', ''); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); return; }
+    if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); if (vw) unit.setAttribute('data-igf-cover', ''); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); if (!vw) later(unit); return; }
     retries.set(unit, n + 1);
     setTimeout(async () => {
       if (kindOf(unit) !== 'checking') return;

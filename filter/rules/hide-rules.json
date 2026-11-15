@@ -1,0 +1,5 @@
+{
+  "_what": "Extra hide rules for the laptop filter, fetched by the extension (signed: run node sign-rules.mjs in the held laptop-filter folder, then commit and push both files). They can only ADD hiding; the bundled rules in filter/shared/hide-rules.js are the floor and nothing here can remove or loosen anything. Lists per site (a host suffix, or *): headings, buttons, phrases, selectors, blockPaths (see hide-rules.js).",
+  "version": 0,
+  "sites": {}
+}

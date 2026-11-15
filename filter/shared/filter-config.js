@@ -9,6 +9,7 @@ globalThis.IGFilterConfig = {
   "smallPx": 120,
   "searchAvatarPx": 44,
   "retrySeconds": [5, 20, 60],
+  "lateRetrySeconds": 120,
   "frameEverySeconds": 2,
   "judgeLanes": 2,
   "judgeInFlight": 4,
