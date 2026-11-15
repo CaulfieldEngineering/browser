@@ -369,9 +369,11 @@ jobs:
           if ls "$RUNNER_TEMP"/export-fb/*.ipa >/dev/null 2>&1; then
             FB="$OUT/facebook"; mkdir -p "$FB"
             cp "$RUNNER_TEMP"/export-fb/*.ipa "$FB/app.ipa"
-            sed -e "s#$PAGES/app.ipa#$PAGES/facebook/app.ipa#" -e "s#<string>$BUNDLE_ID</string>#<string>com.caulfieldengineering.facebook</string>#"                 -e "s#<key>title</key><string>$APP_TITLE</string>#<key>title</key><string>Facebook</string>#" "$OUT/manifest.plist" > "$FB/manifest.plist"
+            # Its icon (Joe, 2026-11-14: "Can we use the f logo"), for the install page and the install prompt.
+            cp "$GITHUB_WORKSPACE"/ios/Facebook/Assets.xcassets/AppIcon.appiconset/icon-1024.png "$FB/icon.png"
+            sed -e "s#$PAGES/app.ipa#$PAGES/facebook/app.ipa#" -e "s#<string>$BUNDLE_ID</string>#<string>com.caulfieldengineering.facebook</string>#"                 -e "s#<key>title</key><string>$APP_TITLE</string>#<key>title</key><string>Facebook</string>#"                 -e "s#<string>$PAGES/facebook/app.ipa</string>#<string>$PAGES/facebook/app.ipa</string></dict><dict><key>kind</key><string>display-image</string><key>url</key><string>$PAGES/facebook/icon.png</string></dict><dict><key>kind</key><string>full-size-image</string><key>url</key><string>$PAGES/facebook/icon.png</string>#" "$OUT/manifest.plist" > "$FB/manifest.plist"
             cp "$OUT/version.json" "$FB/version.json"
-            sed -e "s#<title>Install Browser</title>#<title>Install Facebook</title>#" -e "s#<h1>$APP_TITLE</h1>#<h1>Facebook</h1>#"                 -e "s#$PAGES/manifest.plist#$PAGES/facebook/manifest.plist#"                 -e "s#Tabs, search and picture in picture; nothing to set up.#Facebook without the News Feed or ads, filtered on the phone; nothing to set up.#" "$OUT/index.html" > "$FB/index.html"
+            sed -e "s#<title>Install Browser</title>#<title>Install Facebook</title><link rel=\"apple-touch-icon\" href=\"icon.png\" /><link rel=\"icon\" href=\"icon.png\" />#"                 -e "s#<h1>$APP_TITLE</h1>#<img src=\"icon.png\" alt=\"\" width=\"88\" height=\"88\" style=\"display:block;margin:0 auto 16px;border-radius:20px\" /><h1>Facebook</h1>#"                 -e "s#$PAGES/manifest.plist#$PAGES/facebook/manifest.plist#"                 -e "s#Tabs, search and picture in picture; nothing to set up.#Facebook without the News Feed or ads, filtered on the phone; nothing to set up.#" "$OUT/index.html" > "$FB/index.html"
           fi
           touch "$OUT/.nojekyll"
           cd "$OUT"
