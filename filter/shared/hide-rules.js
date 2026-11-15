@@ -34,6 +34,7 @@
     const out = { version: 0, sites: {} };
     if (!raw || typeof raw !== 'object') return out;
     if (Number.isFinite(raw.version)) out.version = Math.floor(raw.version);
+    out.tuning = cleanTuning(raw.tuning);
     const sites = raw.sites && typeof raw.sites === 'object' ? raw.sites : {};
     for (const host of Object.keys(sites).slice(0, LIMITS.sites)) {
       if (!(host === '*' || /^[a-z0-9.-]+\.[a-z]{2,}(\/[^\s*]*)?$/i.test(host))) continue;
@@ -47,16 +48,56 @@
     }
     return out;
   }
+  // Tuning (2026-11-15; locked memory entry 39: Claude tunes the filter's parameters while it is developed, each change
+  // logged with Joe's words). Unlike the lists above these are numbers a file may move either way, but only inside
+  // these bounds, so no file can turn a check off: frames are always sampled, a threshold never goes above 0.95, at
+  // most 6 frames in a row are asked for. Per scope (as for the lists) a file may set the same fields for some sites.
+  const TUNE = {
+    // video frames (the laptop's web filter; Instagram and Facebook use their own module)
+    videoEverySeconds: [1, 30], videoLongEverySeconds: [2, 60], videoLongAfterSeconds: [60, 7200],
+    videoConsecutive: [1, 6], videoExplicit: [0.2, 0.95], videoSexy: [0.3, 0.95], videoCombined: [0.4, 0.95], videoRevealing: [0.5, 0.95],
+  };
+  const TUNE_DEFAULT = {
+    videoEverySeconds: 3, videoLongEverySeconds: 8, videoLongAfterSeconds: 600,
+    videoConsecutive: 3, videoExplicit: 0.5, videoSexy: 0.75, videoCombined: 0.85, videoRevealing: 0.85,
+  };
+  function cleanTune(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [k, [lo, hi]] of Object.entries(TUNE)) if (Number.isFinite(raw[k])) out[k] = Math.min(hi, Math.max(lo, raw[k]));
+    return out;
+  }
+  function cleanTuning(raw) {
+    const out = { all: cleanTune(raw && raw.all), sites: {} };
+    const sites = raw && raw.sites && typeof raw.sites === 'object' ? raw.sites : {};
+    for (const scope of Object.keys(sites).slice(0, LIMITS.sites)) {
+      if (!/^[a-z0-9.-]+\.[a-z]{2,}(\/[^\s*]*)?$/i.test(scope)) continue;
+      const t = cleanTune(sites[scope]);
+      if (Object.keys(t).length) out.sites[scope.toLowerCase()] = t;
+    }
+    return out;
+  }
+  /** The tuning on a page: the defaults, then the file's own for every site, then its scopes that cover this page. */
+  function tuningFor(tuning, host, path) {
+    const t = { ...TUNE_DEFAULT, ...((tuning && tuning.all) || {}) };
+    for (const [scope, v] of Object.entries((tuning && tuning.sites) || {})) {
+      const cut = scope.indexOf('/'), h = cut < 0 ? scope : scope.slice(0, cut), p = cut < 0 ? '' : scope.slice(cut);
+      if ((host === h || host.endsWith('.' + h)) && (!p || (path || '/').toLowerCase().startsWith(p.toLowerCase()))) Object.assign(t, v);
+    }
+    return t;
+  }
+
   /** The bundled rules with the fetched ones added. Only unions: nothing in the floor can be taken out. */
   function merge(floor, extra) {
-    const out = { version: floor.version, extraVersion: (extra && extra.version) || 0, sites: {} };
+    const ex = clean(extra);
+    const out = { version: floor.version, extraVersion: (extra && extra.version) || 0, sites: {}, tuning: ex.tuning && (Object.keys(ex.tuning.all).length || Object.keys(ex.tuning.sites).length) ? ex.tuning : floor.tuning };
     const add = (rules) => {
       for (const [host, lists] of Object.entries((rules && rules.sites) || {})) {
         const d = (out.sites[host] = out.sites[host] || {});
         for (const k of LISTS) if (lists[k]) d[k] = [...new Set([...(d[k] || []), ...lists[k]])];
       }
     };
-    add(floor); add(clean(extra));
+    add(floor); add(ex);
     return out;
   }
   /** The lists that apply on a page: "*", its host and parent domains, and any of those with a path prefix it is under. */
@@ -86,5 +127,5 @@
     },
   });
 
-  globalThis.FilterHideRules = { bundled, clean, merge, forHost, LISTS };
+  globalThis.FilterHideRules = { bundled, clean, merge, forHost, LISTS, tuningFor, TUNE, TUNE_DEFAULT };
 })();
