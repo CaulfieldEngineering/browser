@@ -98,7 +98,9 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         let restored = Self.underTest ? (tabs: [Tab(url: nil)], current: 0) : TabStore.load()
         // A site app opened again after half an hour or more starts at its home (the feed, with what is new), not on
         // the profile or story it was left on; sooner than that, it comes back where it was.
-        if Flavor.isSiteApp, !Self.underTest, Self.isStale(leftAt: UserDefaults.standard.double(forKey: Self.leftAtKey)) {
+        // The Facebook app always starts at its home (2026-11-14, Joe: "I've swiped the app several times and it's
+        // stuck"): a page left blank or blocked is never brought back by closing and opening the app.
+        if Flavor.isSiteApp, !Self.underTest, Flavor.isFacebook || Self.isStale(leftAt: UserDefaults.standard.double(forKey: Self.leftAtKey)) {
             restored.tabs[restored.current].url = Flavor.home
         }
         UserDefaults.standard.removeObject(forKey: Self.leftAtKey) // read once; the next time away notes it again

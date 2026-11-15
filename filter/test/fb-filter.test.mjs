@@ -37,7 +37,8 @@ const pages = {
         ${post('revpic', 'A page', '<span dir="auto">Beach day</span>', 'rev-beach.jpg')}
         ${post('byname', 'Spicy Amy 🔞', '<span dir="auto">Good morning</span>')}
         ${post('ofname', 'Kate | OnlyFans', '<span dir="auto">New week</span>')}
-        <div role="article" id="gif"><h4><a href="/friend2">Friend Two</a></h4><span dir="auto">lol</span><img id="gifimg" src="https://media.tenor.com/abc/tenor.gif" style="width:300px;height:200px"><img id="emoji" src="https://cdn.example.org/emoji.png" style="width:16px;height:16px"><img id="own" src="https://www.facebook.com/captcha/tfbimage.php?x=1" style="width:200px;height:70px"><a id="sharedreel" href="/reel/123456789/">a reel a friend shared</a></div>
+        <div role="article" id="gif"><h4><a href="/friend2">Friend Two</a></h4><span dir="auto">lol</span><img id="gifimg" src="https://media.tenor.com/abc/tenor.gif" style="width:300px;height:200px"><img id="emoji" src="https://cdn.example.org/emoji.png" style="width:16px;height:16px"><img id="own" src="https://www.facebook.com/captcha/tfbimage.php?x=1" style="width:200px;height:70px"></div>
+        <div role="article" id="sharedreelpost"><h4><a href="/friend3">Friend Three</a></h4><a id="sharedreel" href="/reel/123456789/">a reel a friend shared</a></div>
       </div>
     </div>
     <div role="complementary" id="rail"><div><div id="railAd"><span>Sponsored</span><a href="https://shop.example/">Shop</a></div><div id="contacts"><h3>Contacts</h3><a href="/messages/t/1">A friend</a></div></div></div>`,
@@ -55,6 +56,17 @@ const pages = {
       <div role="feed">${post('apost', 'Bella', '<span dir="auto">hi</span>', 'plain-apost.jpg')}</div></div>`,
   '/pedalpage/': `<div role="main"><div><h1 id="pname2">Fuzz Pedals Co</h1><span>Hand-built pedals. DM for custom orders.</span></div>
       <div role="feed">${post('ppost', 'Fuzz Pedals Co', '<span dir="auto">New batch</span>', 'plain-ppost.jpg')}</div></div>`,
+  // m.facebook.com's Friends tab as it is drawn: no roles, the top bar and tabs and the page in plain boxes, the
+  // "People you may know" heading inside the one box that holds everything (2026-11-14: the page went blank).
+  '/friends/': `<div id="wrap"><div><div id="mtop"><a href="/">facebook</a><a id="mtabFriends" href="/friends/">Friends</a><a href="/marketplace/">Marketplace</a><a href="/notifications/">Notifications</a></div>
+      <div><span dir="auto" id="pymkHead">People you may know</span><div id="pymk1"><a href="/p1">Person One</a><a href="/p1/add">Add friend</a></div></div>
+      <div id="requests"><span dir="auto">Friend requests</span><a href="/p2">Person Two</a></div></div></div>`,
+  '/blankpage/': `<div id="blank"></div>`,
+  '/someone/reelsposts/': `<div role="main"><div role="feed">
+      <div role="article" id="reelpost"><h4><a href="/someone">Someone</a></h4><a href="/reel/555/">a reel</a></div>
+      <div role="article" id="plainpost"><h4><a href="/someone">Someone</a></h4><span dir="auto">plain post</span><a href="/someone/videos/77/">a video</a></div>
+      <div id="shelf" role="listitem"><a href="/share/r/xyz/">reel card</a></div>
+      <a id="profileReelsTab" href="/someone/reels/">Reels</a></div></div>`,
   '/profile.php': `<div role="main"><h1 id="name">A friend</h1>${post('pp', 'A friend', '<span dir="auto">Old photo</span>', 'plain-pp.jpg')}</div>`,
 };
 
@@ -107,7 +119,7 @@ try {
   check('pictures from outside Facebook: not shown (they cannot be judged); the post stays', (await shown('gif')) && !(await shown('gifimg')));
   check('pictures from outside Facebook: a small icon stays', await shown('emoji'));
   check("pictures from outside Facebook: facebook.com's own (the sign-in check's picture) is left as it was", await shown('own'));
-  check('video tabs: the Video and Reels tabs are gone; a reel a friend shared stays', !(await shown('videoTab')) && !(await shown('reelsTab')) && (await shown('sharedreel')));
+  check('reels: the Video and Reels tabs are gone, and so is a reel a friend shared (2026-11-14)', !(await shown('videoTab')) && !(await shown('reelsTab')) && !(await shown('sharedreel')));
   check('rails: the Stories rail', !(await shown('stories')));
   check('right rail: the sponsored part is gone', !(await shown('railAd')));
   check('right rail: contacts stay', await shown('contacts'));
@@ -126,12 +138,25 @@ try {
     await go(p, 900);
     check(`video tabs: ${p} goes to Notifications`, new URL(page.url()).pathname === '/notifications/', page.url());
   }
-  await go('/reel/123456789/', 600);
-  check('video tabs: a reel that is named still opens', new URL(page.url()).pathname === '/reel/123456789/' && (await shown('onereel')));
-  await go('/watch/?v=42', 600);
-  check('video tabs: a video that is named still opens', new URL(page.url()).pathname === '/watch/');
+  await go('/reel/123456789/', 900);
+  check('reels: a named reel goes to Notifications (2026-11-14, "No Reels please.")', new URL(page.url()).pathname === '/notifications/', page.url());
+  await go('/watch/?v=42', 900);
+  check('reels: /watch with a video goes to Notifications', new URL(page.url()).pathname === '/notifications/', page.url());
+  await go('/someone/reelsposts/', 1500);
+  check('reels: a post that is a reel goes; a post with an ordinary video stays', !(await shown('reelpost')) && (await shown('plainpost')));
+  check("reels: a reel card and a profile's Reels tab go", !(await shown('shelf')) && !(await shown('profileReelsTab')));
+  await page.evaluate(() => { const a = document.createElement('a'); a.id = 'lateReel'; a.href = '/reel/9/'; a.textContent = 'x'; document.body.prepend(a); a.style.display = 'block'; a.click(); });
+  await page.waitForTimeout(500);
+  check('reels: a tap on a reel does nothing', new URL(page.url()).pathname === '/someone/reelsposts/', page.url());
+
+  // ---- the Friends tab is never left blank (2026-11-14) ----
+  await go('/friends/', 1500);
+  check('friends: the top bar and tabs stay, and so does the page', (await shown('mtop')) && (await shown('mtabFriends')) && (await shown('requests')));
+  // ---- a page that is left blank goes to Notifications ----
+  await go('/blankpage/', 9500);
+  check('blank: a page with nothing to see goes to Notifications', new URL(page.url()).pathname === '/notifications/', page.url());
   const notes = await page.evaluate(() => sessionStorage.getItem('notes') || '');
-  check('reporting: what the page was made to do is said to the app (js: lines)', (notes.match(/note-fb-home /g) || []).length >= 3, notes);
+  check('reporting: what the page was made to do is said to the app (js: lines)', (notes.match(/note-fb-(home|reel) /g) || []).length >= 3, notes);
 
   // ---- a profile, Page or group by its name and intro ----
   await go('/adultpage/', 1200);

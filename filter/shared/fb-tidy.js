@@ -12,6 +12,11 @@
 //     profile, Page or group whose name or intro carries an adult term keeps only its name; and what this file does
 //     to the page is said to the app (note-fb-...), which passes it to the mini PC as a "js:" line beside the
 //     "load:" lines, with no address, the way ig-tidy.js does.
+//   - 2026-11-14, no Reels at all (Joe: "No Reels please."): a reel is not opened even when it is named or shared
+//     (/reel/<id>, /reels/, /watch with or without a video, /share/r/, a profile's or a search's Reels tab, a
+//     reels.facebook.com address); a tap on one does nothing, an address that lands on one goes to Notifications, and
+//     a post, notification, card or shelf that is a reel is taken off the page. A video that is not a reel
+//     (/<page>/videos/<id>) is left as it was. Bringing Reels back is loosening (locked memory, entry 1).
 // Profiles, Messages, Notifications, Groups, Pages, Events, Marketplace listings, search and posting stay.
 (function () {
   'use strict';
@@ -24,31 +29,47 @@
   // (/reel/<id>, /watch/?v=<id>, /<page>/videos/<id>) is not a feed and is left alone.
   const isNewsFeed = (p) => p === '/' || p === '/home.php' || p === '/index.php';
   const isVideoTab = (u) => /^\/(watch|reels?|video|videos)(\/(feed|latest|live|shows|saved|create))?$/i.test(u.pathname.replace(/\/+$/, '')) && !(u.searchParams.get('v') || u.searchParams.get('video_id'));
+  // A reel, named or not (2026-11-14, "No Reels please."): /reel, /reels and /watch anywhere in the address
+  // (a profile's /<name>/reels/, search's /search/reels/), a reel's share link /share/r/, reels.facebook.com.
+  const isReel = (u) => /(^|\.)facebook\.com$/i.test(u.hostname) && (/^reels?\./i.test(u.hostname)
+    || /^\/share\/r(\/|$)/i.test(u.pathname) || /^\/watch(\/|$)/i.test(u.pathname)
+    || u.pathname.split('/').some((p) => /^reels?$/i.test(p)));
+  const reelHref = (href) => { try { return isReel(new URL(href, location.href)); } catch { return false; } };
   const isHome = (href) => {
     try {
       const u = new URL(href, location.href);
       if (!/(^|\.)facebook\.com$/i.test(u.hostname)) return false;
-      return isNewsFeed(u.pathname) || isVideoTab(u);
+      return isNewsFeed(u.pathname) || isVideoTab(u) || isReel(u);
     } catch { return false; }
   };
+  // Never hide the page itself (2026-11-14, Joe on the Friends tab: "whatever that second button from the left in the
+  // header is has locked up the app"): m.facebook.com marks few regions, so a rail's heading could climb to a box
+  // holding the whole page, top bar and tabs included, and leave it blank. A box that holds the top bar, the tabs or a
+  // link to Notifications, or that is most of the screen tall, is never hidden as a rail.
+  const isPage = (el) => !el || el === document.body || el === document.documentElement
+    || !!el.querySelector('[role="banner"], [role="tablist"], [role="navigation"], [role="main"], a[href*="/notifications"], a[href*="/friends"], a[href*="/marketplace"]')
+    || (el.getBoundingClientRect().height > innerHeight * 0.6);
   const hide = (el) => { if (el && !el.hasAttribute('data-fbt')) { el.setAttribute('data-fbt', ''); el.style.setProperty('display', 'none', 'important'); globalThis.__fbTidy.hidden++; } };
 
   // ---- no News Feed ----
   let popAt = 0;
   addEventListener('popstate', () => { popAt = Date.now(); }, true);
-  if (isHome(location.href)) { note('fb-home'); location.replace(HOME_TO); }
+  if (reelHref(location.href)) { note('fb-reel'); location.replace(HOME_TO); }
+  else if (isHome(location.href)) { note('fb-home'); location.replace(HOME_TO); }
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
     const href = a.getAttribute('href') || '';
     if (APPLINK.test(href)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (reelHref(href)) { e.preventDefault(); e.stopImmediatePropagation(); note('fb-reel-tap'); return; }
     if (isHome(href)) { e.preventDefault(); e.stopImmediatePropagation(); note('fb-home-tap'); location.assign(HOME_TO); }
   }, true);
   let lastHref = location.href;
   setInterval(() => {
     if (location.href === lastHref) return;
     lastHref = location.href;
-    if (isHome(lastHref) && Date.now() - popAt > 400) { note('fb-home-addr'); location.replace(HOME_TO); }
+    if (reelHref(lastHref)) { note('fb-reel-addr'); location.replace(HOME_TO); }
+    else if (isHome(lastHref) && Date.now() - popAt > 400) { note('fb-home-addr'); location.replace(HOME_TO); }
   }, 100);
 
   // ---- a profile, Page or group by its name and intro ----
@@ -89,7 +110,7 @@
   }
 
   // ---- rails, suggestions, right-rail ads, app prompts ----
-  const RAIL = /^(stories|reels|reels and short videos|people you may know|suggested for you|suggested groups|suggested pages|create story)$/i;
+  const RAIL = /^(stories|reels|reels and short videos|short videos|people you may know|suggested for you|suggested groups|suggested pages|create story)$/i;
   const APPLINK = /^(fb|fb-messenger|fbauth2|itms-apps?|itms-appss?):|apps\.apple\.com|itunes\.apple\.com|\.app\.link\/|onelink\.me/i;
   const PROMPT = /^(open (the )?(facebook )?app|open in app|get the app|use the app|install( the)? app|continue in (the )?app|download facebook|switch to the app)\.?$/i;
   const RULES = globalThis.IGFilterRules && globalThis.IGFilterRules.facebook;
@@ -98,7 +119,7 @@
     if (!root) return;
     // Rails by their label: a region or list named Stories / Reels / People you may know.
     for (const el of root.querySelectorAll('[aria-label]')) {
-      if (RAIL.test((el.getAttribute('aria-label') || '').trim()) && !el.querySelector('input, textarea, [role="search"]')) hide(el);
+      if (RAIL.test((el.getAttribute('aria-label') || '').trim()) && !el.querySelector('input, textarea, [role="search"]') && !isPage(el)) hide(el);
     }
     // A section whose heading is one of those (the heading and its list).
     for (const h of root.querySelectorAll('h2, h3, h4, span[dir="auto"]')) {
@@ -106,11 +127,11 @@
       let box = h;
       for (let i = 0; i < 6 && box.parentElement && box.parentElement !== root; i++) {
         const up = box.parentElement;
-        if (up.querySelector('input, textarea, [role="search"], [role="main"] [role="feed"]') || up.matches('[role="main"], [role="navigation"], [role="banner"]')) break;
+        if (up.querySelector('input, textarea, [role="search"], [role="main"] [role="feed"]') || up.matches('[role="main"], [role="navigation"], [role="banner"]') || isPage(up)) break;
         box = up;
         if (up.querySelectorAll('a[href]').length >= 2) break;
       }
-      hide(box);
+      if (!isPage(box)) hide(box);
     }
     // The side column: any part of it that is sponsored, by the same test the filter uses for posts.
     for (const side of root.querySelectorAll('[role="complementary"]')) {
@@ -126,6 +147,18 @@
       if (a.closest('[role="article"]')) continue;
       try { const u = new URL(a.getAttribute('href') || '', location.href); if (/(^|\.)facebook\.com$/i.test(u.hostname) && isVideoTab(u)) hide(a); } catch {}
     }
+    // Reels, everywhere (2026-11-14): a post, notification or card that links to a reel goes as a whole; a tab or a
+    // menu entry for Reels goes by itself. The hidden counts go to the app like the rest.
+    for (const a of root.querySelectorAll('a[href]')) {
+      if (a.hasAttribute('data-fbt') || !reelHref(a.getAttribute('href') || '')) continue;
+      const box = a.closest('[role="article"]') || a.closest('[role="listitem"], li') || a;
+      if (box !== a && (box.matches('[role="main"], [role="feed"], [role="navigation"], [role="banner"], body') || isPage(box))) { hide(a); continue; }
+      if (!box.hasAttribute('data-fbt')) { hide(box); note('fb-reel-hide'); }
+    }
+    // A reel drawn as a video with Facebook's reel label on it, without a link.
+    for (const el of root.querySelectorAll('[aria-label]')) {
+      if (/^(reels?|reel by .*|watch reels?)$/i.test((el.getAttribute('aria-label') || '').trim())) { const b = el.closest('[role="article"], [role="listitem"], li'); hide(b && !isPage(b) ? b : el); }
+    }
     checkAccount();
     // Prompts to open or get the app.
     for (const a of root.querySelectorAll('a[href]')) if (APPLINK.test(a.getAttribute('href') || '')) hide(a);
@@ -134,6 +167,22 @@
       if (t.length < 40 && PROMPT.test(t)) hide(b.closest('[role="dialog"]') || b); // never the top bar (role=banner) itself
     }
   }
+  // A page left blank (2026-11-14): if, some seconds after the address settles, nothing on the screen can be seen,
+  // whatever the cause, Notifications is opened instead, once for each address, so the app is never stuck on a dead page.
+  let blankHref = '', blankSince = 0;
+  const seen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(el).visibility !== 'hidden'; };
+  setInterval(() => {
+    const b = document.body;
+    if (!b || document.readyState === 'loading' || isHome(location.href) || /^\/(notifications|login|checkpoint)/i.test(location.pathname)) { blankSince = 0; return; }
+    const visible = (b.innerText || '').trim().length > 2 || [...b.querySelectorAll('img, video, svg, canvas, input, a, [role="button"]')].some(seen);
+    if (visible || blankHref !== location.href) { blankHref = location.href; blankSince = visible ? 0 : Date.now(); return; }
+    if (!blankSince) { blankSince = Date.now(); return; }
+    if (Date.now() - blankSince < 6000) return;
+    blankSince = 0;
+    try { const k = 'fbt-blank:' + location.pathname; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); } catch {}
+    note('fb-blank'); location.replace(HOME_TO);
+  }, 1000);
+
   let t = 0;
   new MutationObserver(() => { if (!t) t = setTimeout(() => { t = 0; tidy(); }, 120); }).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', tidy, { once: true });

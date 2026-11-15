@@ -93,11 +93,21 @@ enum Flavor {
         return !items.contains { ($0.name == "v" || $0.name == "video_id") && !($0.value ?? "").isEmpty }
     }
 
+    /// A reel, named or not (2026-11-14, Joe: "No Reels please."): /reel, /reels or /watch anywhere in the path, a
+    /// reel's share link /share/r/, a reels. host. A video that is not a reel (/<page>/videos/<id>) is not one.
+    static func isFacebookReel(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased(), host == "facebook.com" || host.hasSuffix(".facebook.com") else { return false }
+        if host.hasPrefix("reel.") || host.hasPrefix("reels.") { return true }
+        let parts = url.path.lowercased().split(separator: "/").map(String.init)
+        if parts.first == "watch" || (parts.count >= 2 && parts[0] == "share" && parts[1] == "r") { return true }
+        return parts.contains("reel") || parts.contains("reels")
+    }
+
     /// Facebook's home (the News Feed) and its Video and Reels tabs, as Notifications instead; nil for anything else.
-    /// In every app.
-    static func facebookHome(for url: URL) -> URL? {
+    /// In every app. In the Facebook app, every reel too (isFacebookReel).
+    static func facebookHome(for url: URL, reels: Bool = isFacebook) -> URL? {
         guard let host = url.host?.lowercased(), host == "facebook.com" || host.hasSuffix(".facebook.com"),
-              ["", "/", "/home.php", "/index.php"].contains(url.path) || isFacebookVideoTab(url) else { return nil }
+              ["", "/", "/home.php", "/index.php"].contains(url.path) || isFacebookVideoTab(url) || (reels && isFacebookReel(url)) else { return nil }
         var parts = URLComponents()
         parts.scheme = "https"; parts.host = host; parts.path = "/notifications/"
         return parts.url

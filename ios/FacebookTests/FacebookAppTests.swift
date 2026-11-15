@@ -52,15 +52,19 @@ final class FacebookAppTests: XCTestCase {
     }
 
     /// 2026-11-13, as Instagram's Reels tab and Explore went: the Video and Reels tabs are feeds Facebook chooses, so
-    /// they go to Notifications too. A reel or a video that is named (one a friend shared) still opens.
+    /// they go to Notifications too. Since 2026-11-14 ("No Reels please.") so does every reel, named or shared; a video
+    /// that is not a reel still opens.
     func testTheVideoAndReelsTabsGoToNotifications() {
         let r = { (s: String) in Flavor.rewrite(URL(string: s)!)?.absoluteString }
         for s in ["https://m.facebook.com/watch/", "https://www.facebook.com/watch", "https://m.facebook.com/reel/", "https://m.facebook.com/reel/?s=tab",
-                  "https://www.facebook.com/reels/", "https://m.facebook.com/watch/latest/", "https://m.facebook.com/video/"] {
+                  "https://www.facebook.com/reels/", "https://m.facebook.com/watch/latest/", "https://m.facebook.com/video/",
+                  "https://m.facebook.com/reel/1234567890/", "https://www.facebook.com/watch/?v=1234567890", "https://m.facebook.com/watch/somepage/",
+                  "https://m.facebook.com/reel/1120422450947034/?referral_source=fb_shorts_tab&surface_type=tab",
+                  "https://www.facebook.com/share/r/abc123/", "https://m.facebook.com/someone/reels/", "https://m.facebook.com/search/reels/?q=x"] {
             XCTAssertEqual(r(s), "https://\(URL(string: s)!.host!)/notifications/", s)
         }
-        for s in ["https://m.facebook.com/reel/1234567890/", "https://www.facebook.com/watch/?v=1234567890", "https://m.facebook.com/someone/videos/123/",
-                  "https://m.facebook.com/watch/somepage/", "https://m.facebook.com/marketplace/", "https://m.facebook.com/messages/"] {
+        for s in ["https://m.facebook.com/someone/videos/123/", "https://m.facebook.com/friends/",
+                  "https://m.facebook.com/marketplace/", "https://m.facebook.com/messages/"] {
             XCTAssertNil(r(s), s)
         }
     }
