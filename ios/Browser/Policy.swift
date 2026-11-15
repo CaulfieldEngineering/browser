@@ -78,7 +78,7 @@ enum Policy {
     /// (2026-10-29). THE RULE, exactly: the scheme is itms-services, `action` is `download-manifest`, and `url` is
     /// https://caulfieldengineering.github.io/<name>/manifest.plist with <name> one of `ownInstallPages` (no port, no
     /// query, no other path). Every other itms-services link and every other app link stays blocked.
-    static let ownInstallPages: Set<String> = ["browser-install", "hq-install", "blocks-install"]
+    static let ownInstallPages: Set<String> = ["browser-install", "hq-install", "blocks-install", "practice-install"] // Practice, the guitar app (2026-11-14)
 
     static func isOwnInstall(_ url: URL) -> Bool {
         #if APPSTORE
