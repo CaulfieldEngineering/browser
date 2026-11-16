@@ -93,7 +93,7 @@ enum InstagramFilter {
                 DispatchQueue.main.async {
                     switch answer {
                     case let .scores(s): replyHandler(s, nil)
-                    case let .failed(reason): FilterStats.shared.count("unjudged-" + reason); replyHandler(["_error": reason], nil)
+                    case let .failed(reason): FilterStats.shared.count("unjudged-" + reason); FilterLog.shared.count("unjudged-" + reason); replyHandler(["_error": reason], nil)
                     }
                 }
             }
@@ -105,6 +105,7 @@ enum InstagramFilter {
             case "stat":
                 if let name = body["name"] as? String {
                     FilterStats.shared.count(name)
+                    FilterLog.shared.count(name)
                     // "note-<what>": something the page's scripts did that Joe would see as a glitch (ig-tidy.js: the
                     // page put back at the top, the feed sent to the Following feed). One line to the mini PC, as a
                     // heartbeat whose state is "js:<what>", beside the "load:<reason>" lines.
@@ -538,5 +539,51 @@ final class BundleFiles: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
     private func fail(_ task: WKURLSchemeTask) {
         task.didFailWithError(NSError(domain: NSURLErrorDomain, code: NSURLErrorFileDoesNotExist))
+    }
+}
+
+
+/// The filter log from the phone (2026-11-15; Joe: "we need to build in a full log transcript that's sent to you"):
+/// what the filter did, counted for a minute and then sent as `filter` lines in the feed (Feed.filter), one per kind
+/// with its count. Only the kind of action and the rule's name; never a picture, a page's text or an address.
+final class FilterLog {
+    static let shared = FilterLog()
+    private var counts: [String: Int] = [:]
+    private let lock = NSLock()
+    private static let iso = ISO8601DateFormatter()
+
+    static func event(for name: String) -> [String: Any]? {
+        if name.hasPrefix("hidden-") { return ["action": "hidden", "what": "post", "rule": String(name.dropFirst(7).prefix(60))] }
+        if name.hasPrefix("late-shown") { return ["action": "shown", "what": "post", "reason": "judged on a later try"] }
+        if name.hasPrefix("late-flagged") { return ["action": "hidden", "what": "post", "rule": "late-flagged"] }
+        if name.hasPrefix("unjudged-") || name.hasPrefix("late-unjudged") { return ["action": "judge", "error": String(name.prefix(60))] }
+        if name.hasPrefix("judge-restarted") || name.hasPrefix("page-restarted") || name.hasPrefix("page-hung") { return ["action": "error", "error": String(name.prefix(60))] }
+        return nil
+    }
+
+    func count(_ name: String) {
+        guard Flavor.isSiteApp, FilterLog.event(for: name) != nil else { return }
+        lock.lock()
+        let wasEmpty = counts.isEmpty
+        counts[name, default: 0] += 1
+        lock.unlock()
+        if wasEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 60) { FilterLog.shared.flush() } }
+    }
+
+    func flush() {
+        lock.lock()
+        let batch = counts
+        counts = [:]
+        lock.unlock()
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        for (name, n) in batch {
+            guard var ev = FilterLog.event(for: name) else { continue }
+            ev["n"] = n
+            ev["at"] = FilterLog.iso.string(from: Date())
+            ev["app"] = Flavor.feedApp
+            ev["site"] = Flavor.isFacebook ? "facebook.com" : Flavor.isReddit ? "reddit.com" : "instagram.com"
+            ev["version"] = version
+            if let d = try? JSONSerialization.data(withJSONObject: ev), let s = String(data: d, encoding: .utf8) { Feed.shared.filter(s) }
+        }
     }
 }

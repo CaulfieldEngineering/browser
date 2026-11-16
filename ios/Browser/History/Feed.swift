@@ -253,6 +253,15 @@ final class Feed {
         }
     }
 
+    /// What the filter did, for the filter log on the mini PC (2026-11-15; devices README "The filter log"): one
+    /// event as JSON (action, what, rule, reason, error, n, app, version), never a picture, a page's text or an address.
+    func filter(_ json: String) {
+        work.async {
+            self.queue.add(type: "filter", at: self.now(), data: String(json.prefix(2000)))
+            self.soon()
+        }
+    }
+
     /// Send now if nothing is on its way (the app came to the front, or a test).
     func flush() { work.async { self.send() } }
 

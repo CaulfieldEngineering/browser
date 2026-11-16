@@ -23,6 +23,7 @@
       for (const [k, v] of [['height', '1px'], ['min-height', '0'], ['overflow', 'hidden'], ['opacity', '0'], ['margin', '0'], ['padding', '0'], ['border', '0']]) el.style.setProperty(k, v, 'important');
     } else el.style.setProperty('display', 'none', 'important');
     state.hidden++;
+    try { const b = globalThis.IGFilterBridge; b && b.stat && b.stat('rule-hidden'); } catch {}
     return true;
   };
   const textOf = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
