@@ -44,14 +44,45 @@
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
   try { BRIDGE.warm && BRIDGE.warm(); } catch {}
 
+  // ---- calm (Joe, 2026-11-15: "our instagram feed filter just isn't cutting it. Its infuriatingly glitchy and is gonna
+  // give me epilepsy") ----------------------------------------------------------------------------------------------
+  // How a held picture looks and how a judged one comes in, as numbers that can be tuned without a new build: the
+  // signed rules data on the laptop (hide-rules.js TUNE, handed in as __igFilterTune), filter-config.js "calm"
+  // elsewhere. None of them can show anything: a held picture is invisible whatever they say.
+  //   holdShade             0 to 0.3: the grey drawn behind a held picture (0: the page's own colour)
+  //   revealFadeMs          0 to 300: the one short fade of a picture judged clean that waited on screen (0: none)
+  //   revealFadesPerSecond  0 to 20: at most this many fades a second; the rest just appear
+  //   motionOff             1: never fade (the phone's Reduce Motion setting does the same by itself)
+  const CALM = CFG.calm || {};
+  const num = (...xs) => { for (const x of xs) if (typeof x === 'number' && Number.isFinite(x)) return x; return 0; };
+  function tune() {
+    const t = g.__igFilterTune || {};
+    return {
+      holdShade: Math.min(0.3, Math.max(0, num(t.holdShade, CALM.holdShade, 0.12))),
+      fadeMs: Math.min(300, Math.max(0, num(t.revealFadeMs, CALM.revealFadeMs, 140))),
+      fadesPerSecond: Math.min(20, Math.max(0, num(t.revealFadesPerSecond, CALM.revealFadesPerSecond, 4))),
+      motionOff: num(t.motionOff, CALM.motionOff, 0) >= 1,
+    };
+  }
+  let reduceMotion = false;
+  try { const mq = matchMedia('(prefers-reduced-motion: reduce)'); reduceMotion = mq.matches; mq.addEventListener && mq.addEventListener('change', () => { reduceMotion = mq.matches; }); } catch {}
+
   // ---- styles: held media is invisible; a hidden post is gone, a hidden grid tile is blank, nothing answers a tap ------
-  const css = [
+  // A post hidden for good collapses (below); one still being checked, or never judged, does NOT: it keeps its height,
+  // its pictures held invisible over a plain grey, so nothing under it moves while it is checked and nothing bounces
+  // when it is shown or removed. One removed while it is on screen goes blank in place (data-igf-defer) and closes up
+  // once it is off screen, so the feed never jumps under the eyes.
+  const GONE = '[data-igf-gone]:not([data-igf-gone="checking"]):not([data-igf-gone="unjudged"]):not([data-igf-defer])';
+  const cssText = (T) => [
     '[data-igf-hold]{visibility:hidden !important}',
+    T.holdShade > 0 ? '[data-igf-shade]{background-color:rgba(128,128,128,' + T.holdShade + ') !important}' : '',
+    '[data-igf-defer]{visibility:hidden !important;pointer-events:none !important}',
     // Instagram's feed is held still by hold() below, and only by it: the browser's own scroll anchoring is off.
     SITE === 'instagram' ? 'html,body{overflow-anchor:none !important}' : '',
     '@keyframes igf-in{from{opacity:0}to{opacity:1}}',
-    '[data-igf-in]{animation:igf-in .18s ease-out}',
-    '[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
+    T.fadeMs > 0 && !T.motionOff ? '[data-igf-in]{animation:igf-in ' + T.fadeMs + 'ms ease-out 1}' : '',
+    '@media (prefers-reduced-motion: reduce){[data-igf-in]{animation:none !important}}',
+    GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
     // In the reel and story viewers a hidden slide is covered, not removed (Joe, 2026-11-12: "A lot of times when it
     // blocks a slide too it completely shuts down the app. Like grey box."): the viewer measures its slides, so a slide
     // taken out of the layout left it blank and stuck. The slide keeps its box; its pictures and videos are invisible.
@@ -63,7 +94,7 @@
     // A hidden feed post keeps one invisible pixel in the page instead of none (Joe, 2026-11-08: "my feed seems to stop
     // after a few scrolls down - presumably it stops once something gets blocked"): Instagram loads the next posts when
     // the last ones come into view, and a post with display:none never comes into view.
-    'article[data-igf-gone]:not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
+    'article' + GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
     // A grid whose blocked tile was taken out: its rows give their tiles to one grid so the rest close up (Joe,
     // 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"). Anything else in it
     // (a spinner, a row not marked yet) spans the full width, as before.
@@ -83,13 +114,14 @@
     '[data-igf-slide-hold]{visibility:hidden !important}',
     '[data-igf-tile]{pointer-events:none !important}',
     '[data-igf-tile]>:not(.igf-ph){display:none !important}',
-    '.igf-ph{display:block !important;width:100%;background:transparent;pointer-events:none}',
+    '.igf-ph{display:block !important;width:100%;background:' + (T.holdShade > 0 ? 'rgba(128,128,128,' + T.holdShade + ')' : 'transparent') + ';pointer-events:none}',
     // An avatar judged suggestive: a plain circle the same size, the picture moved out of sight (no icon, no word).
     'img[data-igf-avatar]{object-position:-99999px -99999px !important;background:rgba(128,128,128,.28) !important;border-radius:50% !important;visibility:visible !important}',
     // A profile flagged by its name or bio: no posts, reels or tagged grids.
     'html[data-igf-account] main a[href*="/p/"],html[data-igf-account] main a[href*="/reel/"],html[data-igf-account] main a[href*="/tv/"]{display:none !important}',
     '[data-igf-bio]{display:none !important}',
   ].join('');
+  let css = cssText(tune());
   const addStyle = () => {
     const parent = document.head || document.documentElement;
     if (!parent || document.getElementById('igf-style')) return; // at document start there may be no <html> yet
@@ -99,6 +131,8 @@
     parent.appendChild(s);
   };
   addStyle();
+  // New tuning handed in (the laptop's signed rules arrive after the page started): the style sheet follows.
+  state.retune = () => { css = cssText(tune()); const s = document.getElementById('igf-style'); if (s && s.textContent !== css) s.textContent = css; };
 
   const isMediaUrl = (u) => { try { return MEDIA_HOST.test(new URL(u, location.href).hostname); } catch { return false; } };
   const onDirect = () => SITE === 'instagram' ? location.pathname.startsWith('/direct')
@@ -422,24 +456,47 @@
     stat('skipped-reel');
   }
 
+  // A post removed while it is on the screen goes blank where it is and closes up once it has left the screen (2026-11-15:
+  // a post collapsing under the eyes moved everything below it, the feed's worst jolt). Off screen, it closes up at
+  // once, and hold() keeps what is on screen still. Only feed posts; tiles and the viewers have their own ways.
+  const deferIO = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((es) => {
+      for (const e of es) {
+        if (e.isIntersecting || !e.target.hasAttribute('data-igf-defer')) continue;
+        deferIO.unobserve(e.target);
+        keepPlace(e.target, () => e.target.removeAttribute('data-igf-defer'));
+      }
+    })
+    : null;
+  // (on screen: more than a sliver of it, 60 px, is in sight)
+  const inView = (el) => { const r = el.getBoundingClientRect(); return r.height > 1 && r.bottom > 60 && r.top < innerHeight - 60; };
+  // Posts hidden for good, by their id, so the same post put in the page again (Instagram's list takes posts out and
+  // puts them back as new elements; React re-renders) is hidden again before it is drawn, never shown and taken out.
+  const goneById = new Map(); // id -> [kind, why]
+  const pending = (k) => k === 'checking' || k === 'unjudged';
   /** Hides a post. kind: 'text', 'image', 'video' (for good) or 'checking' (to be tried again). */
   function hide(unit, kind, why) {
     if (!unit) return;
     const was = kindOf(unit);
-    if (was && was !== 'checking') return;      // already hidden for good
-    if (was === 'checking' && kind === 'checking') return;
+    if (was && !pending(was)) return;      // already hidden for good
+    if (pending(was) && kind === 'checking') return;
     const viewer = inViewer() && !isTile(unit);
     const wasOnScreen = viewer && onScreen(unit);
+    // (not a picture Joe hid by hand: that one goes at once, as he asked)
+    const defer = kind !== 'checking' && why !== 'by-hand' && !viewer && !isTile(unit) && unit.tagName === 'ARTICLE' && deferIO && inView(unit) && !onDirect();
     keepPlace(unit, () => {
       if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
       if (viewer && kind !== 'checking') unit.setAttribute('data-igf-cover', ''); // covered, never taken out of the viewer
       if (viewer) unit.setAttribute('data-igf-for', mediaKey(unit));
+      if (defer) unit.setAttribute('data-igf-defer', '');
       unit.setAttribute('data-igf-gone', kind);
       unit.setAttribute('data-igf-why', why || kind);
     });
+    if (defer) deferIO.observe(unit);
+    if (kind !== 'checking' && !viewer) { const id = idOf(unit, null); if (id) { goneById.set(id, [kind, why || kind]); if (goneById.size > 4000) goneById.delete(goneById.keys().next().value); } }
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
     if (kind !== 'checking' && isTile(unit)) { actedAt = performance.now(); skipTile(unit); } else placeholder(unit);
-    if (!isTile(unit)) setTimeout(nudge, 50);
+    if (!isTile(unit) && kind !== 'checking') setTimeout(nudge, 50); // only a post that closed up changes what Instagram measures
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
   }
@@ -456,7 +513,7 @@
     if (ph) ph.remove();
     stat('restored');
   }
-  const gone = (el) => { const u = el.closest && el.closest('[data-igf-gone]'); return !!u && kindOf(u) !== 'checking'; };
+  const gone = (el) => { const u = el.closest && el.closest('[data-igf-gone]'); return !!u && !pending(kindOf(u)); };
   // The viewers reuse their boxes: after a hidden story or reel, Instagram puts the next one's picture into the same
   // elements. A slide hidden for one picture is let go when its picture changes, and the new one is judged on its own
   // (held until then), so the next story is neither stuck blank nor shown unjudged.
@@ -557,11 +614,16 @@
   function judgeUrl(url, el) {
     const key = keyOf(url);
     if (verdicts.has(key)) { const w = waitingByKey.get(key); if (w && el) w.els.add(el); return verdicts.get(key); }
-    const p = queued(url, el).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); } return v; });
+    const p = queued(url, el).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); known.set(key, v); if (known.size > 4000) known.delete(known.keys().next().value); } return v; });
     verdicts.set(key, p);
     if (verdicts.size > 4000) verdicts.delete(verdicts.keys().next().value);
     return p;
   }
+  // The verdicts already in, readable at once (2026-11-15): a picture put in the page again (a new element for the same
+  // picture, after a re-render or a scroll back) takes its verdict before it is drawn: a clean one is never held
+  // again, a flagged one's post is hidden before it shows. Only pictures actually judged are here, never one that
+  // could not be.
+  const known = new Map(); // url key -> verdict
 
   const held = new WeakMap(); // unit -> Set of imgs held in it
   function holdIn(unit, img) { let s = held.get(unit); if (!s) held.set(unit, (s = new Set())); s.add(img); }
@@ -583,16 +645,37 @@
   const waitIO = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting && !onScreenAt.has(e.target)) onScreenAt.set(e.target, Date.now()); })
     : null;
+  // The fade (2026-11-15) is the one short one, once per picture: never again for the same picture in a new element, at
+  // most revealFadesPerSecond a second, never with Reduce Motion on or motionOff tuned.
+  const faded = new Set(); // url keys that have had their fade
+  let fadeTimes = [];
+  function unshade(el) { const p = el.parentElement; if (p && p.hasAttribute('data-igf-shade') && !p.querySelector('[data-igf-hold]')) p.removeAttribute('data-igf-shade'); }
+  function shade(el) {
+    // The grey goes on the picture's own box (its parent, when that is the picture's size), never on a whole post.
+    const p = el.parentElement;
+    if (!p || p === document.body || p.matches('article, [role="article"], main')) return;
+    const a = el.getBoundingClientRect(), b = p.getBoundingClientRect();
+    if (a.width > 0 && Math.abs(a.width - b.width) <= 4 && Math.abs(a.height - b.height) <= 4) p.setAttribute('data-igf-shade', '');
+  }
   function show(el) {
     el.removeAttribute('data-igf-hold');
+    unshade(el);
     if (waitIO) waitIO.unobserve(el);
     const at = onScreenAt.get(el);
     onScreenAt.delete(el);
     const ms = at ? Date.now() - at : 0;
     stat('wait-' + (ms < 150 ? 0 : ms < 600 ? 1 : ms < 1500 ? 2 : ms < 4000 ? 3 : 4));
     if (ms < 120 || !el.isConnected) return;
+    const T = tune(), key = keyOf(srcOf(el) || '');
+    if (!T.fadeMs || T.motionOff || reduceMotion || faded.has(key)) return;
+    const now = performance.now();
+    fadeTimes = fadeTimes.filter((t) => now - t < 1000);
+    if (fadeTimes.length >= T.fadesPerSecond) return;
+    fadeTimes.push(now);
+    faded.add(key);
+    if (faded.size > 4000) faded.delete(faded.values().next().value);
     el.setAttribute('data-igf-in', '');
-    setTimeout(() => el.removeAttribute('data-igf-in'), 260);
+    setTimeout(() => el.removeAttribute('data-igf-in'), T.fadeMs + 80);
   }
   // Facebook (2026-11-13): a picture that does not come from Facebook's own picture hosts (a GIF from a GIF service, a
   // picture a page embeds from elsewhere) cannot be fetched and judged on the phone, so it used to show unjudged. It
@@ -628,21 +711,31 @@
     if (gone(unit)) return;
     if (byHand.size) { const id = idOf(unit, img); if (id && byHand.has(id)) { hide(unit, 'image', 'by-hand'); return; } }
     if (checkText(unit)) return;
+    // Judged before (the same picture in a new element): its verdict now, before the page is drawn.
+    const k = known.get(keyOf(src));
+    if (k) {
+      if (k.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', k.why); img.removeAttribute('data-igf-hold'); return; }
+      if (k.flagged) { hide(unit, 'image', k.why); return; }
+      img.removeAttribute('data-igf-hold');
+      stat('cached-clean');
+      return;
+    }
     img.setAttribute('data-igf-hold', '');
+    if (tune().holdShade > 0) shade(img);
     holdIn(unit, img);
     if (waitIO) waitIO.observe(img);
     const go = async () => {
       const r = img.getBoundingClientRect();
       // On search and Explore pages every picture is judged, small avatars too (only small ones are kept there).
       const small = /^\/explore(\/|$)/.test(location.pathname) ? 0 : SMALL;
-      if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < small && r.height < small) { img.removeAttribute('data-igf-hold'); return; }
+      if ((img.tagName !== 'IMG' || img.complete) && r.width > 0 && r.width < small && r.height < small) { img.removeAttribute('data-igf-hold'); unshade(img); return; }
       const v = await judgeUrl(src, img);
       if (srcOf(img) !== src) { handleImg(img); return; } // changed meanwhile (a srcset's other size): the new one is judged on its own
       if (!img.isConnected) return;
       const u = unitOf(img);
       // An account's avatar (search results, lists, a profile's header): only the picture goes, the row stays, so
       // he can still find people (Joe, 2026-11-05: "let's block the picture but keep the line").
-      if (v.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); stat('hidden-avatar'); return; }
+      if (v.flagged && SITE === 'instagram' && isAvatar(img)) { img.setAttribute('data-igf-avatar', v.why); img.removeAttribute('data-igf-hold'); unshade(img); stat('hidden-avatar'); return; }
       if (v.flagged) hide(u, 'image', v.why);
       else if (v.flagged === false) show(img);
       else hide(u, 'checking', v.why);
@@ -674,7 +767,7 @@
       let allClean = true;
       for (const img of imgs) {
         const v = await judgeUrl(srcOf(img), img);
-        if (v.flagged) { unit.setAttribute('data-igf-gone', 'checking'); hide(unit, 'image', v.why); stat('late-flagged'); return; }
+        if (v.flagged) { hide(unit, 'image', v.why); stat('late-flagged'); return; }
         if (v.flagged === null) allClean = false;
       }
       if (!allClean) { stat('late-unjudged'); later(unit); return; }
@@ -686,6 +779,8 @@
   }
   function retry(unit) {
     const n = retries.get(unit) || 0;
+    // Still not judged: it stays exactly as it was while checked (its pictures held, its height kept), never shown and
+    // never collapsed, so a verdict later either reveals it once or removes it once.
     if (n >= RETRY.length) { const vw = inViewer() && unit.hasAttribute('data-igf-slide-hold'), was = vw && onScreen(unit); unit.removeAttribute('data-igf-slide-hold'); if (vw) unit.setAttribute('data-igf-cover', ''); unit.setAttribute('data-igf-gone', 'unjudged'); state.removed++; if (vw) skipPast(unit, was); stat('hidden-' + (unit.getAttribute('data-igf-why') || 'unjudged')); if (!vw) later(unit); return; }
     retries.set(unit, n + 1);
     setTimeout(async () => {
@@ -712,6 +807,7 @@
   // ---- videos -------------------------------------------------------------------------------------------------------
   const vids = new Set();
   const vidState = new WeakMap();
+  const passedVideos = new Set(); // poster keys of videos whose poster and first frame passed
   function frameData(v) {
     try {
       if (v.readyState < 2 || !v.videoWidth) return null;
@@ -739,6 +835,15 @@
     vids.add(v);
     const unit = unitOf(v);
     if (gone(unit) || checkText(unit)) return;
+    // The same video in a new element (a re-render, a scroll back): its poster judged clean and its first frame passed
+    // before, so it is not held again (2026-11-15: every video blinked out and back as the feed re-rendered). Its frames
+    // are still checked while it plays.
+    const pk = v.getAttribute('poster');
+    if (pk && isMediaUrl(pk)) {
+      const kp = known.get(keyOf(new URL(pk, location.href).href));
+      if (kp && kp.flagged) { hide(unit, 'video', kp.why); return; }
+      if (kp && kp.flagged === false && passedVideos.has(keyOf(new URL(pk, location.href).href))) { stat('cached-clean'); return; }
+    }
     v.setAttribute('data-igf-hold', '');
     const wasMuted = v.muted;
     try { v.muted = true; } catch {} // no sound from a video not yet judged
@@ -756,6 +861,7 @@
       while (Date.now() < until && v.readyState < 2) await new Promise((r) => setTimeout(r, 150));
       const first = await judgeFrame(v, true);
       if (first === 'flagged') return;
+      if (poster && isMediaUrl(poster)) { passedVideos.add(keyOf(new URL(poster, location.href).href)); if (passedVideos.size > 2000) passedVideos.delete(passedVideos.values().next().value); }
       release();
       if (!wasMuted && v.muted && !gone(v)) { try { v.muted = false; } catch {} }
     })();
@@ -898,7 +1004,8 @@
     root.appendChild(shield); // outside Instagram's own tree, so its re-renders leave it alone
     root.setAttribute('data-igf-picking', '');
     pick = { shield, timer: setTimeout(() => endPick(''), 20000) };
-    for (const v of document.querySelectorAll('video')) { try { if (!v.paused && onScreen(v)) { v.pause(); setTimeout(() => { if (!gone(v)) { try { v.play(); } catch {} } }, 400); } } catch {} }
+    // (Until 2026-11-15 every playing video was paused and played again 400 ms later here, a visible stutter; videos now
+    // just keep playing under the layer.)
   }
   document.addEventListener('igf-pick', startPick);
   // The two-finger tap that opens the app's menu (Joe, 2026-11-12: "when I two finger tap in a story it closes the
@@ -1031,6 +1138,19 @@
     if (unit) textQueue.add(unit);
     if (!textTimer) textTimer = setTimeout(() => { textTimer = 0; for (const u of textQueue) checkText(u); textQueue.clear(); }, 120);
   }
+  // A post put in the page (new, or the same post again as a new element) is settled before the page is drawn: one
+  // hidden before by its id is hidden again at once, and its words are read now rather than a moment later, so a post
+  // the text rules take is never drawn and then taken out (2026-11-15).
+  function settle(n) {
+    if (!n.querySelectorAll) return;
+    const units = n.matches && n.matches(UNITS) ? [n] : [];
+    for (const u of n.querySelectorAll(UNITS)) units.push(u);
+    for (const u of units) {
+      if (kindOf(u)) continue;
+      if (goneById.size) { const id = idOf(u, null), was = id && goneById.get(id); if (was) { hide(u, was[0], was[1]); continue; } }
+      try { checkText(u); } catch {}
+    }
+  }
   const mo = new MutationObserver((list) => {
     for (const m of list) {
       if (m.type === 'attributes') {
@@ -1047,7 +1167,7 @@
         }
         continue;
       }
-      for (const n of m.addedNodes) { if (n.nodeType === 1) { scan(n); queueText(n); } else if (n.nodeType === 3) queueText(n); }
+      for (const n of m.addedNodes) { if (n.nodeType === 1) { settle(n); scan(n); queueText(n); } else if (n.nodeType === 3) queueText(n); }
       if (m.type === 'characterData') queueText(m.target);
     }
     if (!document.getElementById('igf-style')) addStyle();

@@ -13,6 +13,7 @@ globalThis.IGFilterConfig = {
   "frameEverySeconds": 2,
   "judgeLanes": 2,
   "judgeInFlight": 4,
+  "calm": { "_what": "How held pictures look and judged ones come in (Joe, 2026-11-15: 'Its infuriatingly glitchy and is gonna give me epilepsy'). None of these can show anything: a held picture is invisible whatever they say. On the laptop the signed rules data's tuning overrides them.", "holdShade": 0.12, "revealFadeMs": 140, "revealFadesPerSecond": 4, "motionOff": 0 },
   "labels": "none",
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",

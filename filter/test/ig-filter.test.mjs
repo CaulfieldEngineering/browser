@@ -394,14 +394,22 @@ try {
   check('feed: a small avatar is not held', await visible('#avatar'));
   check('filter done: the first whole-page pass is marked', await page.evaluate(() => Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1));
   check('feed: a flagged picture hides its post', (await hiddenAs('#img')) === 'image');
-  check('feed: a hidden post collapses entirely, with no words', await page.$eval('#img', (e) => e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0' && !e.querySelector('.igf-ph')));
+  // 2026-11-15 ("infuriatingly glitchy"): a post removed while it is on screen goes blank where it is, nothing under it
+  // moves; it closes up once it is off the screen.
+  check('feed: a post removed on screen goes blank in place, with no words (nothing under it moves)', await page.$eval('#img', (e) => e.hasAttribute('data-igf-defer') && getComputedStyle(e).visibility === 'hidden' && e.getBoundingClientRect().height > 300 && !e.querySelector('.igf-ph')));
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(300);
+  check('feed: off the screen, the hidden post collapses entirely', await page.$eval('#img', (e) => !e.hasAttribute('data-igf-defer') && e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0'));
   // Joe, 2026-11-08: the feed stopped loading after a hidden post; a post with display:none never comes into view.
   check('feed: a hidden post still comes into view (one invisible pixel, not display:none), so the next posts load', await page.$eval('#img', (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height === 1));
+  await page.evaluate(() => scrollTo(0, 0));
   check('feed: nothing on the page says why (no labels)', !/Hidden|suggestive|caption/i.test(await page.evaluate(() => document.body.innerText)));
   check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && await page.$eval('#txt', gone1px));
-  check('feed: a picture not judged yet is hidden while it is checked', (await hiddenAs('#fail')) === 'checking' && await page.$eval('#fail', gone1px));
+  // 2026-11-15: while it is checked a post keeps its height (its picture held invisible), so nothing jumps when it is
+  // shown or removed.
+  check('feed: a picture not judged yet is held while it is checked; the post keeps its height', ['checking', 'unjudged'].includes(await hiddenAs('#fail')) && await page.$eval('#fail', (e) => e.getBoundingClientRect().height > 300 && getComputedStyle(e.querySelector('img')).visibility === 'hidden'));
   await page.waitForTimeout(1500);
-  check('feed: still not judged after the last try: stays hidden', (await hiddenAs('#fail')) === 'unjudged');
+  check('feed: still not judged after the last try: stays hidden (its picture never shown, the post not collapsed)', (await hiddenAs('#fail')) === 'unjudged' && await page.$eval('#fail img', (e) => getComputedStyle(e).visibility === 'hidden'));
   check('feed: judged clean on a later try: shown again', await visible('#late img'));
   check('feed: no reveal control on the page', (await page.$$eval('.igf-ph *', (l) => l.length)) === 0);
   const stats = await page.evaluate(() => globalThis.IGFilterBridge.stats);

@@ -79,11 +79,29 @@
   }
   let t = 0;
   const soon = () => { if (!t) t = setTimeout(() => { t = 0; apply(); }, 150); };
-  new MutationObserver(soon).observe(document, { childList: true, subtree: true });
+  // What the selectors name is hidden as it is put in the page, before it is drawn (2026-11-15: a panel drawn and taken
+  // out a moment later is a flicker); the words-based rules follow a moment later, as before.
+  const now = (ms) => {
+    const sels = lists.selectors || [];
+    if (sels.length) for (const m of ms) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      for (const sel of sels) { try { if (n.matches(sel)) hide(n); for (const el of n.querySelectorAll(sel)) hide(el); } catch {} }
+    }
+    soon();
+  };
+  new MutationObserver(now).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', apply, { once: true });
   setInterval(apply, 1500);
   // The fetched rules (signed, checked by the extension's service worker), added to the floor.
-  const take = (extra) => { if (!extra) return; state.rules = HR.merge(HR.bundled, extra); globalThis.__igFilterLate = HR.tuningFor(state.rules.tuning, host, location.pathname).judgeLateRetrySeconds * 1000; lists = HR.forHost(state.rules, host, location.pathname); listsFor = location.pathname; apply(); };
+  const take = (extra) => {
+    if (!extra) return;
+    state.rules = HR.merge(HR.bundled, extra);
+    const t = HR.tuningFor(state.rules.tuning, host, location.pathname);
+    globalThis.__igFilterLate = t.judgeLateRetrySeconds * 1000;
+    globalThis.__igFilterTune = t; // ig-filter.js reads its calm numbers from here and redraws its style sheet
+    try { const f = globalThis.__igFilter; f && f.retune && f.retune(); } catch {}
+    lists = HR.forHost(state.rules, host, location.pathname); listsFor = location.pathname; apply();
+  };
   try {
     if (globalThis.chrome && chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ wf: 'hideRules' }, (r) => { void chrome.runtime.lastError; take(r && r.rules); });
   } catch {}

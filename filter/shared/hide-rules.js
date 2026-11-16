@@ -58,11 +58,16 @@
     videoConsecutive: [1, 6], videoExplicit: [0.2, 0.95], videoSexy: [0.3, 0.95], videoCombined: [0.4, 0.95], videoRevealing: [0.5, 0.95],
     // a picture the judge could not answer for stays hidden and is asked again this often (never shown unjudged)
     judgeLateRetrySeconds: [30, 600],
+    // calm (2026-11-15; Joe: "Its infuriatingly glitchy and is gonna give me epilepsy"): how a held picture looks and how
+    // a judged one comes in on Instagram and Facebook (ig-filter.js). Looks only: a held picture is invisible whatever
+    // these say, so none of them can show anything.
+    holdShade: [0, 0.3], revealFadeMs: [0, 300], revealFadesPerSecond: [0, 20], motionOff: [0, 1],
   };
   const TUNE_DEFAULT = {
     videoEverySeconds: 3, videoLongEverySeconds: 8, videoLongAfterSeconds: 600,
     videoConsecutive: 3, videoExplicit: 0.5, videoSexy: 0.75, videoCombined: 0.85, videoRevealing: 0.85,
     judgeLateRetrySeconds: 120,
+    holdShade: 0.12, revealFadeMs: 140, revealFadesPerSecond: 4, motionOff: 0,
   };
   function cleanTune(raw) {
     const out = {};

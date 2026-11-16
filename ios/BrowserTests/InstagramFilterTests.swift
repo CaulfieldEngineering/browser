@@ -165,7 +165,9 @@ final class InstagramFilterTests: XCTestCase {
         // Discreet (Joe, 2026-11-05: "i'd prefer not to label the pictures"): the post collapses, with no words on the page.
         // Since 2026-11-08 a hidden feed post keeps one invisible pixel, not display:none, so the feed keeps loading past it
         // (Joe: "my feed seems to stop after a few scrolls down").
-        let shown = try? await web.evaluateJavaScript("(document.getElementById('hot').getBoundingClientRect().height <= 1 && getComputedStyle(document.getElementById('hot')).opacity === '0' ? 'collapsed' : 'shown') + '|' + document.body.innerText") as? String
+        // Since 2026-11-15 a post removed while it is on screen goes blank where it is (nothing under it moves) and closes
+        // up once it is off screen (Joe: "Its infuriatingly glitchy and is gonna give me epilepsy"); either is hidden.
+        let shown = try? await web.evaluateJavaScript("(() => { const e = document.getElementById('hot'), cs = getComputedStyle(e); return (e.getBoundingClientRect().height <= 1 && cs.opacity === '0') || (e.hasAttribute('data-igf-defer') && cs.visibility === 'hidden') ? 'collapsed' : 'shown'; })() + '|' + document.body.innerText") as? String
         XCTAssertEqual(shown?.components(separatedBy: "|").first, "collapsed", "a hidden post collapses")
         XCTAssertFalse(shown?.contains("Hidden") ?? true, "nothing on the page says why")
         let seen = try? await web.evaluateJavaScript("typeof window.IGFilterRules + typeof window.__igFilter") as? String
