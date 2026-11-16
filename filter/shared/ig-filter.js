@@ -142,8 +142,13 @@
   // Feed and post pages: <article>. Grids (profile, Explore, search, the Reels tab of a profile): the tile's link.
   // Reels and stories: the largest ancestor that holds this one video. Messages: the media itself, so a thread stays.
   const FB_TILE = 'a[href*="/marketplace/item/"]';
+  // A work surface (filter-config.js "work"; Joe, 2026-11-16: "Yeah we need to make sure that our filters do not
+  // interfere with work"): Ads Manager, Business Suite, his Page's own views. A picture judged suggestive there goes by
+  // itself, never the settings card, panel or post around it (2026-11-15: whole Ads Manager cards went because they held
+  // a video preview); and no ad or suggestion rule runs. Judged as everywhere; not judged yet, still hidden.
+  const onWork = () => !!(RULES.work && RULES.work.on(location.href));
   function unitOf(el) {
-    if (onDirect()) return el;
+    if (onDirect() || onWork()) return el;
     if (SITE === 'facebook') {
       // A feed or group post, a Reel, a story card; a Marketplace listing's tile.
       const post = el.closest('[role="article"]') || el.closest('[data-pagelet^="FeedUnit"]');
@@ -543,7 +548,7 @@
     textSeen.set(unit, t.length);
     const hit = RULES.first('text', t, unit);
     if (hit) { hide(unit, 'text', hit === 'revealing-text' ? 'revealing-text' : 'text'); return true; }
-    const u = RULES.first('unit', unit, { path: location.pathname, site: SITE });
+    const u = RULES.first('unit', unit, { path: location.pathname, site: SITE, work: onWork() });
     if (u) { hide(unit, 'text', u); return true; }
     return false;
   }

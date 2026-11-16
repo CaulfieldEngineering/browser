@@ -75,6 +75,16 @@ Joe, 2026-11-12: "start building a version of Facebook and one of Reddit that ha
 - **Not brought over, on purpose:** Instagram's `hold()` (the feed held still). It was built for Instagram's list, which takes posts out of the page and puts them back, and on 2026-11-13 it was still being proven on the phone. Facebook keeps the simpler place-keeping it has had since 2026-11-08 (a hidden post there is taken out whole, so the jump Instagram had does not arise the same way). Bring it over once it is proven on Instagram.
 - Tests: `node filter/test/fb-filter.test.mjs`; `ios/FacebookTests`. The fixtures are shaped like Facebook's pages; none of this is proven against his signed-in Facebook.
 
+### Work surfaces (2026-11-16)
+
+Joe, 2026-11-16: "Yeah we need to make sure that our filters do not interfere with work" (he could not find Ads Manager from his Page, and on 2026-11-15 the laptop filter had hidden whole Ads Manager cards). `filter-config.js` `work` lists his work tools as plain scopes: Ads Manager, Business Suite, Events Manager, Commerce, billing, account quality, developers.facebook.com, his Page's own address and professional dashboard, his Instagram profile and insights, YouTube Studio, Google Ads and Analytics, WordPress admin (`*/wp-admin`, wordpress.com's admin pages). Every part of the filter checks it first (`IGFilterRules.work.on`, rules.js), on every device:
+
+- On a work surface nothing is sent elsewhere (`Flavor.isWorkSurface` on the phone, `fb-tidy.js` and `hide-engine.js` in the page: Ads Manager's own `/` used to go to Notifications), no ad, suggestion, rail or hide rule runs, and a picture or video judged suggestive goes **by itself**, never the card, panel or post around it (`unitOf` in `ig-filter.js` and the laptop's `web-filter.js`).
+- Pictures there are judged by the same judges at the same lines, and one not yet judged stays hidden. Instagram's suggestions still go everywhere (`ig-tidy.js` is unchanged).
+- A post headed by one of `work.pages` (his Page, "Wonderland Audio") is never taken as an ad or a suggestion anywhere, so his ad and its comments show in the feed; its pictures are still judged.
+- The personal feeds can never be a scope: facebook.com, instagram.com and messenger.com need a path, and no feed, Reels, Explore, Stories, group, search, messages or home path is taken, whether from this file or the laptop's signed rules data (`work`, add-only).
+- Test: `node filter/test/work.test.mjs`; `testWorkSurfacesAreNotSentToNotifications` in `ios/BrowserTests`.
+
 ## The Reddit app: built, not open (2026-11-13)
 
 Joe, 2026-11-12: "Can you please start building a version of Facebook and one of Reddit that have similar filtering features? iOS app and all. I know we have Reddit blocked but I'll make a case for it on Sunday." Then: "For Reddit, no images allowed. And text-context filtering."

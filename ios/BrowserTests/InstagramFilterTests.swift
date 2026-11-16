@@ -258,6 +258,18 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertNil(Flavor.rewrite(URL(string: "https://example.com/")!))
     }
 
+    /// Work tools are left as they are (Joe, 2026-11-16: "Yeah we need to make sure that our filters do not interfere
+    /// with work"): Ads Manager's and Business Suite's own "/" are not Facebook's home. The feed still goes.
+    func testWorkSurfacesAreNotSentToNotifications() {
+        XCTAssertFalse(Flavor.workScopes.isEmpty, "the work list is read from filter-config.js")
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://adsmanager.facebook.com/")!))
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://business.facebook.com/")!))
+        XCTAssertNil(Flavor.rewrite(URL(string: "https://www.facebook.com/professional_dashboard/")!))
+        XCTAssertTrue(Flavor.isWorkSurface(URL(string: "https://business.facebook.com/latest/inbox/all")!))
+        XCTAssertFalse(Flavor.isWorkSurface(URL(string: "https://www.facebook.com/")!), "the feed is never a work surface")
+        XCTAssertEqual(Flavor.rewrite(URL(string: "https://www.facebook.com/")!)?.absoluteString, "https://www.facebook.com/notifications/")
+    }
+
     /// The tab bar on the search page keeps its tabs: Home, Search, Messages, Profile, and no Reels tab (Joe,
     /// 2026-11-05: "Something funny with the bottom bar when I open search", "Also the reels button can go away").
     func testTheTabBarKeepsItsTabsOnTheSearchPage() async throws {

@@ -103,9 +103,42 @@ enum Flavor {
         return parts.contains("reel") || parts.contains("reels")
     }
 
+    /// Joe's work tools (filter-config.js "work", read from the bundled file so the phone and the page share one list;
+    /// Joe, 2026-11-16: "Yeah we need to make sure that our filters do not interfere with work"). A work surface is never
+    /// sent to Notifications: Ads Manager's and Business Suite's own "/" went there. Pictures there are still judged by
+    /// the page filter. The personal feeds can never be on it (rules.js keeps them out; this only reads the scopes).
+    static let workScopes: [(host: String, path: String)] = {
+        guard let url = Bundle.main.url(forResource: "filter-config", withExtension: "js", subdirectory: "shared"),
+              let src = try? String(contentsOf: url, encoding: .utf8),
+              let start = src.range(of: "IGFilterConfig = ")?.upperBound else { return [] }
+        var body = String(src[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.hasSuffix(";") { body.removeLast() }
+        guard let data = body.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let work = obj["work"] as? [String: Any], let list = work["surfaces"] as? [String] else { return [] }
+        return list.compactMap { raw in
+            let s = raw.lowercased()
+            guard let cut = s.firstIndex(of: "/") else { return (s, "") }
+            var p = String(s[cut...]); while p.hasSuffix("/") { p.removeLast() }
+            let h = String(s[..<cut])
+            // the same guard as rules.js, in short: a personal-feed host needs a path, and "/" alone is never one
+            if p.count < 3 && (h == "*" || ["facebook.com", "instagram.com", "messenger.com"].contains { h == $0 || h.hasSuffix("." + $0) }) { return nil }
+            return (h, p)
+        }
+    }()
+
+    static func isWorkSurface(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        var path = url.path.lowercased(); while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+        return workScopes.contains { w in
+            (w.host == "*" || host == w.host || host.hasSuffix("." + w.host)) && (w.path.isEmpty || path == w.path || path.hasPrefix(w.path + "/"))
+        }
+    }
+
     /// Facebook's home (the News Feed) and its Video and Reels tabs, as Notifications instead; nil for anything else.
-    /// In every app. In the Facebook app, every reel too (isFacebookReel).
+    /// In every app. In the Facebook app, every reel too (isFacebookReel). Never a work surface.
     static func facebookHome(for url: URL, reels: Bool = isFacebook) -> URL? {
+        if isWorkSurface(url) { return nil }
         guard let host = url.host?.lowercased(), host == "facebook.com" || host.hasSuffix(".facebook.com"),
               ["", "/", "/home.php", "/index.php"].contains(url.path) || isFacebookVideoTab(url) || (reels && isFacebookReel(url)) else { return nil }
         var parts = URLComponents()

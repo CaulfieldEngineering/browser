@@ -35,6 +35,10 @@
     if (!raw || typeof raw !== 'object') return out;
     if (Number.isFinite(raw.version)) out.version = Math.floor(raw.version);
     out.tuning = cleanTuning(raw.tuning);
+    // Work surfaces (2026-11-16; Joe: "Yeah we need to make sure that our filters do not interfere with work"): more
+    // scopes for filter-config.js "work", as plain strings. rules.js checks each with the guard that keeps every personal
+    // feed out, and a work surface still has its pictures judged at the usual lines, so this list changes no line.
+    if (Array.isArray(raw.work)) { const w = raw.work.filter((x) => str(x, LIMITS.text)).slice(0, LIMITS.perList).map((x) => x.trim().toLowerCase()); if (w.length) out.work = w; }
     const sites = raw.sites && typeof raw.sites === 'object' ? raw.sites : {};
     for (const host of Object.keys(sites).slice(0, LIMITS.sites)) {
       if (!(host === '*' || /^[a-z0-9.-]+\.[a-z]{2,}(\/[^\s*]*)?$/i.test(host))) continue;
@@ -98,7 +102,7 @@
   /** The bundled rules with the fetched ones added. Only unions: nothing in the floor can be taken out. */
   function merge(floor, extra) {
     const ex = clean(extra);
-    const out = { version: floor.version, extraVersion: (extra && extra.version) || 0, sites: {}, tuning: ex.tuning && (Object.keys(ex.tuning.all).length || Object.keys(ex.tuning.sites).length) ? ex.tuning : floor.tuning };
+    const out = { version: floor.version, extraVersion: (extra && extra.version) || 0, sites: {}, work: [...new Set([...(floor.work || []), ...(ex.work || [])])], tuning: ex.tuning && (Object.keys(ex.tuning.all).length || Object.keys(ex.tuning.sites).length) ? ex.tuning : floor.tuning };
     const add = (rules) => {
       for (const [host, lists] of Object.entries((rules && rules.sites) || {})) {
         const d = (out.sites[host] = out.sites[host] || {});

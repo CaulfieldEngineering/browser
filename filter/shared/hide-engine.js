@@ -53,8 +53,13 @@
     for (let i = 0; i < Math.min(snap.snapshotLength, 500); i++) { const p = snap.snapshotItem(i).parentElement; if (p) out.add(p); }
     return [...out];
   }
+  // A work surface (filter-config.js "work", checked first; Joe, 2026-11-16: "Yeah we need to make sure that our filters
+  // do not interfere with work"): no hide rule runs there and nothing is sent elsewhere. Asked on every pass, since
+  // these sites change pages without loading.
+  const IR = globalThis.IGFilterRules;
+  const onWork = () => !!(IR && IR.work && IR.work.on(location.href));
   function apply() {
-    if (!document.body) return;
+    if (!document.body || onWork()) return;
     if (listsFor !== location.pathname) { listsFor = location.pathname; lists = HR.forHost(state.rules, host, listsFor); } // pages change without loading
     const L = lists;
     if (L.blockPaths && L.blockPaths.some((p) => location.pathname.startsWith(p))) { location.replace(location.origin + '/'); return; }
@@ -82,7 +87,7 @@
   // What the selectors name is hidden as it is put in the page, before it is drawn (2026-11-15: a panel drawn and taken
   // out a moment later is a flicker); the words-based rules follow a moment later, as before.
   const now = (ms) => {
-    const sels = lists.selectors || [];
+    const sels = onWork() ? [] : lists.selectors || [];
     if (sels.length) for (const m of ms) for (const n of m.addedNodes) {
       if (n.nodeType !== 1) continue;
       for (const sel of sels) { try { if (n.matches(sel)) hide(n); for (const el of n.querySelectorAll(sel)) hide(el); } catch {} }
@@ -96,6 +101,7 @@
   const take = (extra) => {
     if (!extra) return;
     state.rules = HR.merge(HR.bundled, extra);
+    try { if (IR && IR.work && state.rules.work && state.rules.work.length) IR.work.add(state.rules.work); } catch {}
     const t = HR.tuningFor(state.rules.tuning, host, location.pathname);
     globalThis.__igFilterLate = t.judgeLateRetrySeconds * 1000;
     globalThis.__igFilterTune = t; // ig-filter.js reads its calm numbers from here and redraws its style sheet

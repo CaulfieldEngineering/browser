@@ -14,6 +14,21 @@ globalThis.IGFilterConfig = {
   "judgeLanes": 2,
   "judgeInFlight": 4,
   "calm": { "_what": "How held pictures look and judged ones come in (Joe, 2026-11-15: 'Its infuriatingly glitchy and is gonna give me epilepsy'). None of these can show anything: a held picture is invisible whatever they say. On the laptop the signed rules data's tuning overrides them.", "holdShade": 0.12, "revealFadeMs": 140, "revealFadesPerSecond": 4, "motionOff": 0 },
+  "work": {
+    "_what": "Joe's work tools (Joe, 2026-11-16: 'Yeah we need to make sure that our filters do not interfere with work'). Checked first, by address, on every device. On a work surface the filter takes off nothing but a picture or video it judged suggestive, and only that picture (never the card, panel or post around it); no ad, suggestion, rail, feed or page rule and no redirect runs there. Pictures are judged by the same judges at the same lines as everywhere, and one not yet judged stays hidden. A post by one of 'pages' (his own Page) is never taken as an ad or a suggestion anywhere, so his ad and its comments show; its pictures are still judged. A scope is a host suffix, or a host suffix with a path prefix (a whole path segment), or '*' with a path. The personal feeds can never be one: facebook.com, instagram.com and messenger.com need a path, and no feed, Reels, Explore, Stories, search, messages or home path is taken (rules.js). Adding a scope here or by the signed rules data is tuning (locked memory entry 39); it never changes a line.",
+    "surfaces": [
+      "adsmanager.facebook.com", "business.facebook.com", "developers.facebook.com",
+      "facebook.com/adsmanager", "facebook.com/ads/manager", "facebook.com/ad_center", "facebook.com/latest",
+      "facebook.com/professional_dashboard", "facebook.com/billing_hub", "facebook.com/business", "facebook.com/business-support-home",
+      "facebook.com/events_manager", "facebook.com/events_manager2", "facebook.com/commerce_manager", "facebook.com/accountquality",
+      "facebook.com/pages/creation", "facebook.com/wonderlandaudiofx",
+      "instagram.com/wonderlandaudio", "instagram.com/accounts/insights", "instagram.com/accounts/professional_dashboard", "instagram.com/professional_dashboard",
+      "studio.youtube.com", "ads.google.com", "analytics.google.com", "tagmanager.google.com", "business.google.com", "search.google.com/search-console",
+      "wordpress.com/home", "wordpress.com/sites", "wordpress.com/posts", "wordpress.com/pages", "wordpress.com/media", "wordpress.com/stats", "wordpress.com/plugins", "wordpress.com/settings", "wordpress.com/domains",
+      "*/wp-admin"
+    ],
+    "pages": ["Wonderland Audio"]
+  },
   "labels": "none",
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",

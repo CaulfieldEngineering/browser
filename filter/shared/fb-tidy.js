@@ -25,6 +25,12 @@
   const CFG = (globalThis.IGFilterConfig && globalThis.IGFilterConfig.facebook) || {};
   const HOME_TO = CFG.homeGoesTo || '/notifications/';
   const note = (what) => { try { const b = globalThis.IGFilterBridge; b && b.stat && b.stat('note-' + what); } catch {} };
+  // Work surfaces first (filter-config.js "work"; Joe, 2026-11-16: "Yeah we need to make sure that our filters do not
+  // interfere with work"): Ads Manager, Business Suite, Events Manager, Commerce, billing, his Page's own views. This file
+  // does nothing to such a page and never sends one elsewhere (Ads Manager's own "/" used to go to Notifications); its
+  // pictures are still judged by the filter. Reels links stay closed everywhere.
+  const WORK = globalThis.IGFilterRules && globalThis.IGFilterRules.work;
+  const onWork = (href) => !!(WORK && WORK.on(href || location.href));
   // The feeds Facebook chooses: the News Feed (home) and the Video and Reels tabs. A reel or a video that is named
   // (/reel/<id>, /watch/?v=<id>, /<page>/videos/<id>) is not a feed and is left alone.
   const isNewsFeed = (p) => p === '/' || p === '/home.php' || p === '/index.php';
@@ -38,7 +44,7 @@
   const isHome = (href) => {
     try {
       const u = new URL(href, location.href);
-      if (!/(^|\.)facebook\.com$/i.test(u.hostname)) return false;
+      if (!/(^|\.)facebook\.com$/i.test(u.hostname) || onWork(u.href)) return false;
       return isNewsFeed(u.pathname) || isVideoTab(u) || isReel(u);
     } catch { return false; }
   };
@@ -54,7 +60,8 @@
   // ---- no News Feed ----
   let popAt = 0;
   addEventListener('popstate', () => { popAt = Date.now(); }, true);
-  if (reelHref(location.href)) { note('fb-reel'); location.replace(HOME_TO); }
+  if (onWork()) { /* a work surface: left as it is */ }
+  else if (reelHref(location.href)) { note('fb-reel'); location.replace(HOME_TO); }
   else if (isHome(location.href)) { note('fb-home'); location.replace(HOME_TO); }
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
@@ -68,6 +75,7 @@
   setInterval(() => {
     if (location.href === lastHref) return;
     lastHref = location.href;
+    if (onWork(lastHref)) return;
     if (reelHref(lastHref)) { note('fb-reel-addr'); location.replace(HOME_TO); }
     else if (isHome(lastHref) && Date.now() - popAt > 400) { note('fb-home-addr'); location.replace(HOME_TO); }
   }, 100);
@@ -116,7 +124,7 @@
   const RULES = globalThis.IGFilterRules && globalThis.IGFilterRules.facebook;
   function tidy() {
     const root = document.body;
-    if (!root) return;
+    if (!root || onWork()) return;
     // Rails by their label: a region or list named Stories / Reels / People you may know.
     for (const el of root.querySelectorAll('[aria-label]')) {
       if (RAIL.test((el.getAttribute('aria-label') || '').trim()) && !el.querySelector('input, textarea, [role="search"]') && !isPage(el)) hide(el);
@@ -173,7 +181,7 @@
   const seen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(el).visibility !== 'hidden'; };
   setInterval(() => {
     const b = document.body;
-    if (!b || document.readyState === 'loading' || isHome(location.href) || /^\/(notifications|login|checkpoint)/i.test(location.pathname)) { blankSince = 0; return; }
+    if (!b || document.readyState === 'loading' || onWork() || isHome(location.href) || /^\/(notifications|login|checkpoint)/i.test(location.pathname)) { blankSince = 0; return; }
     const visible = (b.innerText || '').trim().length > 2 || [...b.querySelectorAll('img, video, svg, canvas, input, a, [role="button"]')].some(seen);
     if (visible || blankHref !== location.href) { blankHref = location.href; blankSince = visible ? 0 : Date.now(); return; }
     if (!blankSince) { blankSince = Date.now(); return; }

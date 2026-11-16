@@ -9,7 +9,7 @@
 // A rule: { id, kind, test }.
 //   kind 'text'  : test(text, unit) -> true to remove. text = the post's visible text (caption, hashtags, alt text).
 //   kind 'image' : test(scores) -> true to remove. scores = the classifier's {Drawing, Hentai, Neutral, Porn, Sexy}, 0..1.
-//   kind 'unit'  : test(unit, ctx) -> true to remove. For rules that read the post's structure (none yet).
+//   kind 'unit'  : test(unit, ctx) -> true to remove. For rules that read the post's structure. ctx: {path, site, work}.
 // No rule can show a post another removed; a removed post stays removed until the page reloads.
 (function () {
   const g = typeof globalThis !== 'undefined' ? globalThis : window;
@@ -110,6 +110,40 @@
     return accountKind(t, false) || (WORD_RE.test(t) ? 'suggestive words' : null) || (REVEALING_RE.test(t) ? 'revealing-clothing tags' : null);
   };
 
+  // ---- work surfaces (Joe, 2026-11-16: "Yeah we need to make sure that our filters do not interfere with work") ----
+  // filter-config.js "work": the addresses of his work tools, checked first by every part of the filter on every
+  // device. On one, only a picture or video judged suggestive is taken off, and only that element; the ad, suggestion,
+  // rail, feed and page rules and the redirects stay out. A post by one of his own Pages is never an ad or a suggestion.
+  // Scopes are plain data: a host suffix, a host suffix with a path prefix, or "*" with a path. The personal feeds can
+  // never be a scope (PERSONAL below), whatever a file says, so this list can never turn the feed filtering off.
+  const WORK_CFG = CFG.work || {};
+  const PERSONAL = /^((www|m|mobile|web|touch|mbasic|l|lm)\.)?(facebook|instagram|messenger)\.com$/;
+  const FEEDISH = /^\/(reels?|watch|explore|stories|home|index|search|direct|messages|marketplace|friends|groups|notifications|videos?|share|feeds?|p|tv|gaming|live|\?|$)(\/|\.|$)/;
+  function workScope(raw) {
+    if (typeof raw !== 'string') return null;
+    const s = raw.trim().toLowerCase();
+    if (!s || s.length > 120 || /\s/.test(s)) return null;
+    const cut = s.indexOf('/'), host = cut < 0 ? s : s.slice(0, cut), path = cut < 0 ? '' : s.replace(/\/+$/, '').slice(cut);
+    if (!(host === '*' || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host))) return null;
+    if (/^(reels?|stories)\./.test(host)) return null;
+    if ((host === '*' || PERSONAL.test(host)) && (path.length < 3 || FEEDISH.test(path))) return null; // never a feed
+    return { host, path };
+  }
+  const workScopes = [];
+  const addWork = (list) => { for (const raw of Array.isArray(list) ? list.slice(0, 200) : []) { const w = workScope(raw); if (w && !workScopes.some((x) => x.host === w.host && x.path === w.path)) workScopes.push(w); } };
+  addWork(WORK_CFG.surfaces);
+  const OWN_PAGES = (Array.isArray(WORK_CFG.pages) ? WORK_CFG.pages : []).filter((p) => typeof p === 'string' && p.trim().length >= 3).map((p) => p.trim().toLowerCase());
+  function onWork(href) {
+    let u;
+    try { u = new URL(href, g.location ? g.location.href : undefined); } catch { return false; }
+    if (!/^https?:$/.test(u.protocol)) return false;
+    const host = u.hostname.toLowerCase(), path = (u.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+    return workScopes.some((w) => (w.host === '*' || host === w.host || host.endsWith('.' + w.host))
+      && (!w.path || path === w.path || path.startsWith(w.path + '/')));
+  }
+  /** A post headed by one of his own Pages (his ad, his posts). Never taken as an ad or a suggestion. */
+  const ownPost = (unit) => { if (!OWN_PAGES.length) return false; const a = authorOf(unit).toLowerCase(); return !!a && OWN_PAGES.includes(a); };
+
   const rules = [
     { id: 'suggestive-text', kind: 'text', test: (text) => WORD_RE.test(text) || PHRASES.some((r) => r.test(text)) },
     { id: 'revealing-text', kind: 'text', test: (text) => REVEALING_RE.test(text) },
@@ -122,8 +156,8 @@
     { id: 'revealing-image', kind: 'image', test: (s) => !!s && (s.Revealing || 0) >= REVEALING },
     // Facebook (the Facebook app and facebook.com; Joe, 2026-11-05: "let's start by hiding the default feed, any ads
     // etc."): every sponsored post, Reel, listing or right-rail ad, and the "suggested" injections, wherever they appear.
-    { id: 'fb-sponsored', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && sponsored(unit) },
-    { id: 'fb-suggested', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && SUGGESTED.test(headText(unit)) },
+    { id: 'fb-sponsored', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && !ctx.work && !ownPost(unit) && sponsored(unit) },
+    { id: 'fb-suggested', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && !ctx.work && !ownPost(unit) && SUGGESTED.test(headText(unit)) },
     { id: 'fb-account-name', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && !!accountOf(authorOf(unit)) },
   ];
 
@@ -137,7 +171,10 @@
     },
     thresholds: IMAGE,
     revealing: REVEALING,
-    facebook: { sponsored, suggested: (unit) => SUGGESTED.test(headText(unit)) },
+    facebook: { sponsored: (unit) => !ownPost(unit) && sponsored(unit), suggested: (unit) => !ownPost(unit) && SUGGESTED.test(headText(unit)) },
+    /** Work surfaces (filter-config.js "work"): on(href) is true on one; add(list) takes more scopes (the laptop's
+     *  signed rules data), each checked by the same guard, so no list can name a personal feed. */
+    work: { on: onWork, add: addWork, ownPost, scope: workScope, scopes: () => workScopes.map((w) => w.host + w.path) },
     /** The kind of term an account's name or bio carries, or null: every kind, the suggestive words, the revealing tags. */
     account(text) { return accountOf(text); },
     accountKinds: () => KINDS.map((k) => k.kind).concat(PATTERNS.map((p) => p.kind)),
