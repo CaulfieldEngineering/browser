@@ -664,7 +664,8 @@
   // Still not judged after the last quick try: it stays hidden (never shown unjudged), and is tried again every two
   // minutes while it is on the page, so a judge that was down or slow for a while (2026-11-15, the laptop: "are we
   // currently blocking all images on Facebook?") does not leave every picture hidden for good. Counted as late-*.
-  const LATE = g.__igFilterLate || (CFG.lateRetrySeconds || 120) * 1000;
+  // the interval can be tuned in the rules data (judgeLateRetrySeconds); the laptop hands it in as __igFilterLate
+  const LATE = () => g.__igFilterLate || (CFG.lateRetrySeconds || 120) * 1000;
   function later(unit) {
     setTimeout(async () => {
       if (!unit.isConnected || unit.getAttribute('data-igf-gone') !== 'unjudged') return;
@@ -681,7 +682,7 @@
       for (const img of imgs) { if (img.tagName === 'VIDEO') img.removeAttribute('data-igf-hold'); else show(img); }
       restore(unit);
       stat('late-shown');
-    }, LATE);
+    }, LATE());
   }
   function retry(unit) {
     const n = retries.get(unit) || 0;

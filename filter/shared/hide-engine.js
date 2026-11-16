@@ -82,7 +82,7 @@
   document.addEventListener('DOMContentLoaded', apply, { once: true });
   setInterval(apply, 1500);
   // The fetched rules (signed, checked by the extension's service worker), added to the floor.
-  const take = (extra) => { if (!extra) return; state.rules = HR.merge(HR.bundled, extra); lists = HR.forHost(state.rules, host, location.pathname); listsFor = location.pathname; apply(); };
+  const take = (extra) => { if (!extra) return; state.rules = HR.merge(HR.bundled, extra); globalThis.__igFilterLate = HR.tuningFor(state.rules.tuning, host, location.pathname).judgeLateRetrySeconds * 1000; lists = HR.forHost(state.rules, host, location.pathname); listsFor = location.pathname; apply(); };
   try {
     if (globalThis.chrome && chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ wf: 'hideRules' }, (r) => { void chrome.runtime.lastError; take(r && r.rules); });
   } catch {}

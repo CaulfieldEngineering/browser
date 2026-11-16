@@ -56,10 +56,13 @@
     // video frames (the laptop's web filter; Instagram and Facebook use their own module)
     videoEverySeconds: [1, 30], videoLongEverySeconds: [2, 60], videoLongAfterSeconds: [60, 7200],
     videoConsecutive: [1, 6], videoExplicit: [0.2, 0.95], videoSexy: [0.3, 0.95], videoCombined: [0.4, 0.95], videoRevealing: [0.5, 0.95],
+    // a picture the judge could not answer for stays hidden and is asked again this often (never shown unjudged)
+    judgeLateRetrySeconds: [30, 600],
   };
   const TUNE_DEFAULT = {
     videoEverySeconds: 3, videoLongEverySeconds: 8, videoLongAfterSeconds: 600,
     videoConsecutive: 3, videoExplicit: 0.5, videoSexy: 0.75, videoCombined: 0.85, videoRevealing: 0.85,
+    judgeLateRetrySeconds: 120,
   };
   function cleanTune(raw) {
     const out = {};
