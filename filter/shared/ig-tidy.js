@@ -2,7 +2,10 @@
 // "Open app" / "Open Instagram" buttons, "Get the app" and "See this in the app" banners and sheets, and links to the
 // App Store or the instagram:// scheme. A sheet that offers "Not now" is answered "Not now". On instagram.com only, in
 // the filter's own content world; the app's Policy also ignores any link that would open the native app.
-(function () {
+// Started by the filter config gate where there is one (the laptop: FilterGate runs it once the signed config is read),
+// at once everywhere else. FilterFeature(name) says whether a feature is on for this page; with no gate, always.
+(function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
+  const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== "function" || f(name, href); };
   'use strict';
   if (globalThis.__igTidy || !/(^|\.)instagram\.com$/i.test(location.hostname)) return;
   globalThis.__igTidy = { hidden: 0 };
@@ -26,7 +29,7 @@
       if (!bar || bar.hasAttribute('data-igt-nav')) continue;
       bar.setAttribute('data-igt-nav', '');
     }
-    for (const bar of document.querySelectorAll('[data-igt-nav]')) {
+    if (F('ig.noReelsTab')) for (const bar of document.querySelectorAll('[data-igt-nav]')) {
       for (const reels of bar.querySelectorAll('a[href="/reels/"], a[href^="/reels/?"]')) {
         // The tab's own slot: the reels link's ancestor that sits in the same row as the other tabs' slots.
         let slot = reels;
@@ -47,7 +50,7 @@
   }
   const hide = (el) => { if (!el || inNav(el)) return; el = bannerOf(el); if (el.hasAttribute('data-igt') || inNav(el)) return; el.setAttribute('data-igt', ''); el.style.setProperty('display', 'none', 'important'); globalThis.__igTidy.hidden++; };
   function tidy(root) {
-    if (!root || !root.querySelectorAll) return;
+    if (!root || !root.querySelectorAll || !F('ig.appPrompts')) return;
     for (const a of root.querySelectorAll('a[href]')) if (APPLINK.test(a.getAttribute('href') || '')) hide(a);
     for (const b of root.querySelectorAll('a, button, [role="button"]')) {
       const t = (b.textContent || '').trim();
@@ -76,7 +79,7 @@
     '@media (min-width: 768px) and (hover: hover){a[href="/explore/"],a[href^="/explore/?"]{display:none !important}}';
   const markExplore = () => {
     const root = document.documentElement;
-    if (!root) return;
+    if (!root || !F('ig.noExplore')) return;
     if (!document.getElementById('igt-style')) { const st = document.createElement('style'); st.id = 'igt-style'; st.textContent = exploreCss; (document.head || root).appendChild(st); }
     if (/^\/explore(\/|$)/.test(location.pathname)) root.setAttribute('data-igt-explore', ''); else root.removeAttribute('data-igt-explore');
   };
@@ -109,7 +112,7 @@
   }
   function plainSearch() {
     markNav();
-    if (!/^\/explore(\/|$)/.test(location.pathname) || !document.body) return;
+    if (!/^\/explore(\/|$)/.test(location.pathname) || !document.body || !F('ig.plainSearch')) return;
     for (const v of document.querySelectorAll('video')) gone(v.closest('a') || v);
     for (const img of document.querySelectorAll('img, [style*="background-image"]')) {
       const r = img.getBoundingClientRect();
@@ -121,7 +124,7 @@
       if (!t || t.length > 30) continue;
       if (SECTION.test(t)) gone(sectionOf(el));
     }
-    for (const tab of document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] button')) {
+    if (F('ig.searchTabs')) for (const tab of document.querySelectorAll('[role="tab"], [role="tablist"] a, [role="tablist"] button')) {
       if (TABS.test((tab.textContent || '').trim())) gone(tab);
     }
   }
@@ -178,7 +181,7 @@
   const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el)) { gone(el); note('sugg-' + what); } };
   function noSuggestions() {
     const root = document.documentElement;
-    if (!root) return;
+    if (!root || !F('ig.noSuggestions')) return;
     if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss; (document.head || root).appendChild(st); }
     if (SUGG_PAGE.test(location.pathname)) { note('sugg-page'); location.replace(FOLLOWING); return; }
     if (!document.body) return;
@@ -262,6 +265,7 @@
     if (root) root.removeAttribute('data-igt-settled');
     const opened = location.href;
     setTimeout(() => { if (location.href === opened) markSettled(); }, SETTLE_MS + 20);
+    if (!F('ig.pageTop')) return; // a new page put back at its top, where the config's ig.pageTop is on
     settleUntil = Date.now() + SETTLE_MS;
     if (root) root.setAttribute('data-igt-settle', String(settleUntil)); // when the putting-back ends (the app tests wait on it)
     for (const ms of [0, 60, 200, 450, 800, 1200, 1500, 2500, SETTLE_MS]) setTimeout(atTop, ms);
@@ -277,7 +281,7 @@
   // them, go through the filter like every other post.
   const FOLLOWING = '/?variant=following';
   // "variant=home" is Instagram's own suggested feed (where it goes after a story closes; seen 2026-11-10): as if none.
-  const wantsFeed = (href) => { try { const u = new URL(href, location.href); const v = u.searchParams.get('variant'); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && (v === null || v === 'home'); } catch { return false; } };
+  const wantsFeed = (href) => { if (!F('ig.followingFeed')) return false; try { const u = new URL(href, location.href); const v = u.searchParams.get('variant'); return /(^|\.)instagram\.com$/i.test(u.hostname) && u.pathname === '/' && (v === null || v === 'home'); } catch { return false; } };
   let feedPopAt = 0;
   addEventListener('popstate', () => { feedPopAt = Date.now(); }, true);
   if (wantsFeed(location.href)) { note('feed'); location.replace(FOLLOWING); }
@@ -296,6 +300,6 @@
   // Links to the app that are clicked anyway go nowhere.
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
-    if (a && APPLINK.test(a.getAttribute('href') || '')) { e.preventDefault(); e.stopPropagation(); }
+    if (a && F('ig.appPrompts') && APPLINK.test(a.getAttribute('href') || '')) { e.preventDefault(); e.stopPropagation(); }
   }, true);
-})();
+});

@@ -20,7 +20,10 @@
 // again at 5, 20 and 60 seconds: it fills in quietly once judged clean, and stays hidden if flagged or never judged.
 // The reason is counted on the device (IGFilterBridge.stat), never shown on the page. Videos are judged by their
 // poster, a drawn frame, then every two seconds while they play. Feed, Reels, messages, profiles and posting stay.
-(function () {
+// Started by the filter config gate where there is one (the laptop: FilterGate runs it once the signed config is read),
+// at once everywhere else. FilterFeature(name) says whether a feature is on for this page; with no gate, always.
+(function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
+  const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== "function" || f(name, href); };
   'use strict';
   const g = globalThis;
   if (g.__igFilter) return;
@@ -57,6 +60,7 @@
   const num = (...xs) => { for (const x of xs) if (typeof x === 'number' && Number.isFinite(x)) return x; return 0; };
   function tune() {
     const t = g.__igFilterTune || {};
+    if (!F('ig.calm')) return { holdShade: 0, fadeMs: 0, fadesPerSecond: 0, motionOff: true }; // the config's "calm" off
     return {
       holdShade: Math.min(0.3, Math.max(0, num(t.holdShade, CALM.holdShade, 0.12))),
       fadeMs: Math.min(300, Math.max(0, num(t.revealFadeMs, CALM.revealFadeMs, 140))),
@@ -707,7 +711,8 @@
   }
   function handleImg(img) {
     const src = srcOf(img);
-    if (SITE === 'facebook' && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src) && !isOwnPage(src)) { handleForeign(img, src); return; }
+    if (SITE === 'facebook' && F('fb.foreignPictures') && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src) && !isOwnPage(src)) { handleForeign(img, src); return; }
+    if (!F('pictures') && !F('revealing')) return; // neither picture judge is on for this page (the config)
     if (!src || !isMediaUrl(src) || imgDone.get(img) === src) return;
     imgDone.set(img, src);
     img.removeAttribute('data-igf-foreign');
@@ -840,6 +845,7 @@
     vids.add(v);
     const unit = unitOf(v);
     if (gone(unit) || checkText(unit)) return;
+    if (!F('pictures') && !F('revealing')) return; // neither picture judge is on for this page (the config)
     // The same video in a new element (a re-render, a scroll back): its poster judged clean and its first frame passed
     // before, so it is not held again (2026-11-15: every video blinked out and back as the feed re-rendered). Its frames
     // are still checked while it plays.
@@ -849,9 +855,11 @@
       if (kp && kp.flagged) { hide(unit, 'video', kp.why); return; }
       if (kp && kp.flagged === false && passedVideos.has(keyOf(new URL(pk, location.href).href))) { stat('cached-clean'); return; }
     }
-    v.setAttribute('data-igf-hold', '');
+    // Held (invisible, muted) until its poster and first frame are judged, where the config's video.holdFirstFrame is on.
+    const holdIt = F('video.holdFirstFrame');
+    if (holdIt) v.setAttribute('data-igf-hold', '');
     const wasMuted = v.muted;
-    try { v.muted = true; } catch {} // no sound from a video not yet judged
+    if (holdIt) { try { v.muted = true; } catch {} } // no sound from a video not yet judged
     const release = () => { if (!gone(v)) { v.removeAttribute('data-igf-hold'); } };
     (async () => {
       const poster = v.getAttribute('poster');
@@ -861,6 +869,7 @@
         // Not judged yet: the reel waits as "still checking" (held, tried again), never shown unjudged.
         if (pv.flagged === null) { const u = unitOf(v); holdIn(u, v); hide(u, 'checking', pv.why); return; }
       }
+      if (!holdIt) return;
       // A first frame, drawn here while the video is still invisible (works when the frame is not cross-origin).
       const until = Date.now() + 4000;
       while (Date.now() < until && v.readyState < 2) await new Promise((r) => setTimeout(r, 150));
@@ -873,6 +882,7 @@
   }
   // While playing: a frame every two seconds (drawn here, or from the screen through the bridge).
   setInterval(() => {
+    if (!F('video.frames')) return; // frames while playing, where the config's video.frames is on
     for (const v of vids) {
       if (!v.isConnected) { vids.delete(v); continue; }
       if (gone(v) || v.paused || v.hasAttribute('data-igf-hold')) continue;
@@ -1109,7 +1119,7 @@
     keep(header);
   }
   let accountsNow = () => {};
-  if (SITE === 'instagram') {
+  if (SITE === 'instagram' && F('ig.accounts')) {
     let accRuns = 0, accTimer = 0;
     const accounts = accountsNow = () => {
       accTimer = 0;
@@ -1250,4 +1260,4 @@
   // Instagram builds its pages late; a second look catches text the observer batched away.
   setTimeout(() => { for (const u of allUnits()) checkText(u); accountsNow(); passDone(); }, 1500);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
-})();
+});

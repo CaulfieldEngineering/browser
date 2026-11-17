@@ -14,12 +14,16 @@
 //   phrases:    an element whose own text contains this (4+ characters, any case) goes, with its list item or post
 //   selectors:  CSS selectors; what they match goes
 //   blockPaths: a path starting with this ("/explore/people") goes to the site's home instead (never "/" itself)
+//   redirects:  "FROM -> TO": a path starting with FROM goes to TO on the same site; FROM ending in "$" is that path
+//               exactly ("/$ -> /notifications/"). TO is a path on the site, never another site. (2026-11-17)
+// On the laptop from 1.6.3 the whole set comes from the signed filter config (filter/config/), which replaces these
+// lists rather than adding to them (fromConfig below); the bundled lists here are what the iPhone builds carry.
 // Nothing that would take the page's main area, its navigation, a search field, a dialog or nearly the whole screen is
 // ever hidden (hide-engine.js), so a bad rule can take a corner at most.
 (function () {
   'use strict';
   const LIMITS = { sites: 60, perList: 200, text: 120, selector: 300 };
-  const LISTS = ['headings', 'buttons', 'phrases', 'selectors', 'blockPaths'];
+  const LISTS = ['headings', 'buttons', 'phrases', 'selectors', 'blockPaths', 'redirects'];
   const str = (v, max) => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
   const okSelector = (s) => { if (typeof document === 'undefined' || !document.createDocumentFragment) return true; try { document.createDocumentFragment().querySelector(s); return true; } catch { return false; } };
   const ok = {
@@ -28,7 +32,14 @@
     phrases: (s) => str(s, LIMITS.text) && s.trim().length >= 4,
     selectors: (s) => str(s, LIMITS.selector) && !/[{}]/.test(s) && okSelector(s),
     blockPaths: (s) => str(s, LIMITS.text) && /^\/[^\s]+/.test(s) && s !== '/',
+    redirects: (s) => str(s, LIMITS.text * 2) && !!redirectOf(s),
   };
+  /** "FROM -> TO" as { from, exact, to }, or null. Both are paths on the same site. */
+  function redirectOf(s) {
+    const m = String(s).match(/^\s*(\/\S*?)(\$?)\s*->\s*(\/\S*)\s*$/);
+    if (!m || m[3].startsWith('//')) return null;
+    return { from: m[1], exact: m[2] === '$', to: m[3] };
+  }
   /** A rules object reduced to what is allowed: known lists of valid strings, within limits. Anything else is dropped. */
   function clean(raw) {
     const out = { version: 0, sites: {} };
@@ -139,5 +150,12 @@
     },
   });
 
-  globalThis.FilterHideRules = { bundled, clean, merge, forHost, LISTS, tuningFor, TUNE, TUNE_DEFAULT };
+  /** The whole set from the filter config (1.6.3 on the laptop): cleaned the same way, NOT merged with the bundled lists,
+   *  so the config can take a rule away as well as add one. */
+  function fromConfig(hideRules, tuning) {
+    const out = clean({ ...(hideRules || {}), tuning });
+    return { ...out, extraVersion: 0 };
+  }
+
+  globalThis.FilterHideRules = { bundled, clean, merge, forHost, fromConfig, redirectOf, LISTS, tuningFor, TUNE, TUNE_DEFAULT };
 })();

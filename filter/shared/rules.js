@@ -11,7 +11,10 @@
 //   kind 'image' : test(scores) -> true to remove. scores = the classifier's {Drawing, Hentai, Neutral, Porn, Sexy}, 0..1.
 //   kind 'unit'  : test(unit, ctx) -> true to remove. For rules that read the post's structure. ctx: {path, site, work}.
 // No rule can show a post another removed; a removed post stays removed until the page reloads.
-(function () {
+// Started by the filter config gate where there is one (the laptop: FilterGate runs it once the signed config is read),
+// at once everywhere else. FilterFeature(name) says whether a feature is on for this page; with no gate, always.
+(function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
+  const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== "function" || f(name, href); };
   const g = typeof globalThis !== 'undefined' ? globalThis : window;
   if (g.IGFilterRules) return;
 
@@ -161,12 +164,42 @@
     { id: 'fb-account-name', kind: 'unit', test: (unit, ctx) => ctx.site === 'facebook' && !!accountOf(authorOf(unit)) },
   ];
 
+  // Each rule answers to a feature of the filter config (2026-11-17; Joe: "any change to the filter is just a change to
+  // the back-end"). Where there is a config gate (the laptop), a rule runs only where its feature is on for the page;
+  // elsewhere every rule runs, as before. Text rules can also come as data (the config's textRules: words and patterns,
+  // per site), so a new hand-curated rule needs no new build.
+  const FEATURE = {
+    'suggestive-image': 'pictures', 'revealing-image': 'revealing',
+    'suggestive-text': 'captions', 'revealing-text': 'captions', 'account-terms-text': 'captions',
+    'fb-sponsored': 'fb.ads', 'fb-suggested': 'fb.suggested', 'fb-account-name': 'fb.authorNames',
+  };
+  const ruleOn = (r) => F(r.feature || FEATURE[r.id] || r.id);
+  /** Text rules from data: [{ id, words: [...], patterns: [...], feature }]. Whole words, any case; a pattern is a
+   *  regular expression's source (data, not code), tried case-blind. A bad pattern is dropped, never thrown. */
+  function addTextRules(list) {
+    for (const d of Array.isArray(list) ? list.slice(0, 100) : []) {
+      if (!d || typeof d.id !== 'string' || rules.some((r) => r.id === d.id)) continue;
+      const words = (Array.isArray(d.words) ? d.words : []).filter((w) => typeof w === 'string' && w.trim()).slice(0, 500);
+      const pats = [];
+      for (const p of Array.isArray(d.patterns) ? d.patterns.slice(0, 100) : []) { try { pats.push(new RegExp(p, 'iu')); } catch {} }
+      const re = words.length ? termRe(words) : null;
+      if (!re && !pats.length) continue;
+      rules.push({ id: d.id, kind: 'text', feature: typeof d.feature === 'string' ? d.feature : 'textRules', test: (text) => !!(re && re.test(text)) || pats.some((x) => x.test(text)) });
+    }
+  }
+
   g.IGFilterRules = {
     version: 1,
     rules,
-    /** The id of the first rule of `kind` that removes, or null. */
+    addTextRules,
+    /** The id of the first rule of `kind` that removes, or null. Only rules whose feature is on for this page. */
     first(kind, ...args) {
-      for (const r of rules) if (r.kind === kind) { try { if (r.test(...args)) return r.id; } catch (e) { /* a broken rule removes nothing */ } }
+      for (const r of rules) if (r.kind === kind && ruleOn(r)) { try { if (r.test(...args)) return r.id; } catch (e) { /* a broken rule removes nothing */ } }
+      return null;
+    },
+    /** The built-in rules of `kind`, whatever their feature (the laptop's open-web alt-text check has a feature of its own). */
+    firstAny(kind, ...args) {
+      for (const r of rules) if (r.kind === kind && !r.feature) { try { if (r.test(...args)) return r.id; } catch (e) {} }
       return null;
     },
     thresholds: IMAGE,
@@ -183,11 +216,12 @@
     explain(s) {
       if (!s) return null;
       const ex = (s.Porn || 0) + (s.Hentai || 0);
+      if (!F('pictures')) return (s.Revealing || 0) >= REVEALING && F('revealing') ? 'revealing' : null;
       if (ex >= IMAGE.explicit) return 'explicit';
       if ((s.Sexy || 0) >= IMAGE.sexy) return 'sexy';
       if (ex + (s.Sexy || 0) >= IMAGE.combined) return 'combined';
-      if ((s.Revealing || 0) >= REVEALING) return 'revealing';
+      if ((s.Revealing || 0) >= REVEALING && F('revealing')) return 'revealing';
       return null;
     },
   };
-})();
+});

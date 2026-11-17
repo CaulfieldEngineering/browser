@@ -18,7 +18,10 @@
 //     a post, notification, card or shelf that is a reel is taken off the page. A video that is not a reel
 //     (/<page>/videos/<id>) is left as it was. Bringing Reels back is loosening (locked memory, entry 1).
 // Profiles, Messages, Notifications, Groups, Pages, Events, Marketplace listings, search and posting stay.
-(function () {
+// Started by the filter config gate where there is one (the laptop: FilterGate runs it once the signed config is read),
+// at once everywhere else. FilterFeature(name) says whether a feature is on for this page; with no gate, always.
+(function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
+  const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== "function" || f(name, href); };
   'use strict';
   if (globalThis.__fbTidy || !/(^|\.)(facebook\.com|messenger\.com)$/i.test(location.hostname)) return;
   globalThis.__fbTidy = { hidden: 0 };
@@ -40,12 +43,12 @@
   const isReel = (u) => /(^|\.)facebook\.com$/i.test(u.hostname) && (/^reels?\./i.test(u.hostname)
     || /^\/share\/r(\/|$)/i.test(u.pathname) || /^\/watch(\/|$)/i.test(u.pathname)
     || u.pathname.split('/').some((p) => /^reels?$/i.test(p)));
-  const reelHref = (href) => { try { return isReel(new URL(href, location.href)); } catch { return false; } };
+  const reelHref = (href) => { if (!F('fb.noReels')) return false; try { return isReel(new URL(href, location.href)); } catch { return false; } };
   const isHome = (href) => {
     try {
       const u = new URL(href, location.href);
       if (!/(^|\.)facebook\.com$/i.test(u.hostname) || onWork(u.href)) return false;
-      return isNewsFeed(u.pathname) || isVideoTab(u) || isReel(u);
+      return (F('fb.noFeed') && isNewsFeed(u.pathname)) || (F('fb.videoTab') && isVideoTab(u)) || (F('fb.noReels') && isReel(u));
     } catch { return false; }
   };
   // Never hide the page itself (2026-11-14, Joe on the Friends tab: "whatever that second button from the left in the
@@ -67,7 +70,7 @@
     const a = e.target && e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
     const href = a.getAttribute('href') || '';
-    if (APPLINK.test(href)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+    if (F('fb.appPrompts') && APPLINK.test(href)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
     if (reelHref(href)) { e.preventDefault(); e.stopImmediatePropagation(); note('fb-reel-tap'); return; }
     if (isHome(href)) { e.preventDefault(); e.stopImmediatePropagation(); note('fb-home-tap'); location.assign(HOME_TO); }
   }, true);
@@ -95,7 +98,7 @@
   function checkAccount() {
     const root = document.documentElement;
     const R = globalThis.IGFilterRules;
-    if (!root || !R || !R.account) return;
+    if (!root || !R || !R.account || !F('fb.adultProfiles')) return;
     if (accountPath && accountPath !== location.pathname) { accountPath = ''; accountSeen = ''; root.removeAttribute('data-fbt-account'); }
     if (accountPath || /^\/(notifications|messages|marketplace|search|settings|friends|events|bookmarks)(\/|$)/i.test(location.pathname)) return;
     const h1 = document.querySelector('[role="main"] h1');
@@ -119,6 +122,8 @@
 
   // ---- rails, suggestions, right-rail ads, app prompts ----
   const RAIL = /^(stories|reels|reels and short videos|short videos|people you may know|suggested for you|suggested groups|suggested pages|create story)$/i;
+  // Which feature of the config each rail answers to: Stories (fb.storiesRail), Reels (fb.noReels), suggestions (fb.suggested).
+  const railOn = (t) => { t = (t || '').trim(); if (!RAIL.test(t)) return false; return /stor/i.test(t) ? F('fb.storiesRail') : /reel|short/i.test(t) ? F('fb.noReels') : F('fb.suggested'); };
   const APPLINK = /^(fb|fb-messenger|fbauth2|itms-apps?|itms-appss?):|apps\.apple\.com|itunes\.apple\.com|\.app\.link\/|onelink\.me/i;
   const PROMPT = /^(open (the )?(facebook )?app|open in app|get the app|use the app|install( the)? app|continue in (the )?app|download facebook|switch to the app)\.?$/i;
   const RULES = globalThis.IGFilterRules && globalThis.IGFilterRules.facebook;
@@ -127,11 +132,11 @@
     if (!root || onWork()) return;
     // Rails by their label: a region or list named Stories / Reels / People you may know.
     for (const el of root.querySelectorAll('[aria-label]')) {
-      if (RAIL.test((el.getAttribute('aria-label') || '').trim()) && !el.querySelector('input, textarea, [role="search"]') && !isPage(el)) hide(el);
+      if (railOn(el.getAttribute('aria-label')) && !el.querySelector('input, textarea, [role="search"]') && !isPage(el)) hide(el);
     }
     // A section whose heading is one of those (the heading and its list).
     for (const h of root.querySelectorAll('h2, h3, h4, span[dir="auto"]')) {
-      if (h.children.length > 1 || !RAIL.test((h.textContent || '').trim())) continue;
+      if (h.children.length > 1 || !railOn(h.textContent)) continue;
       let box = h;
       for (let i = 0; i < 6 && box.parentElement && box.parentElement !== root; i++) {
         const up = box.parentElement;
@@ -142,7 +147,7 @@
       if (!isPage(box)) hide(box);
     }
     // The side column: any part of it that is sponsored, by the same test the filter uses for posts.
-    for (const side of root.querySelectorAll('[role="complementary"]')) {
+    if (F('fb.ads')) for (const side of root.querySelectorAll('[role="complementary"]')) {
       for (const part of side.children.length === 1 ? side.firstElementChild.children : side.children) {
         if (RULES && RULES.sponsored(part)) hide(part);
         else if (/^\s*Sponsored\b/.test(part.innerText || '')) hide(part);
@@ -151,7 +156,7 @@
     // The home page's feed, should the address change slip past the redirect for a moment.
     if (isHome(location.href)) for (const f of root.querySelectorAll('[role="feed"]')) hide(f);
     // The Video and Reels tabs' own links (the tab bar's and the menu's): gone, like Instagram's Reels tab.
-    for (const a of root.querySelectorAll('a[href*="/watch"], a[href*="/reel"], a[href*="/video"]')) {
+    if (F('fb.videoTab')) for (const a of root.querySelectorAll('a[href*="/watch"], a[href*="/reel"], a[href*="/video"]')) {
       if (a.closest('[role="article"]')) continue;
       try { const u = new URL(a.getAttribute('href') || '', location.href); if (/(^|\.)facebook\.com$/i.test(u.hostname) && isVideoTab(u)) hide(a); } catch {}
     }
@@ -164,11 +169,12 @@
       if (!box.hasAttribute('data-fbt')) { hide(box); note('fb-reel-hide'); }
     }
     // A reel drawn as a video with Facebook's reel label on it, without a link.
-    for (const el of root.querySelectorAll('[aria-label]')) {
+    if (F('fb.noReels')) for (const el of root.querySelectorAll('[aria-label]')) {
       if (/^(reels?|reel by .*|watch reels?)$/i.test((el.getAttribute('aria-label') || '').trim())) { const b = el.closest('[role="article"], [role="listitem"], li'); hide(b && !isPage(b) ? b : el); }
     }
     checkAccount();
     // Prompts to open or get the app.
+    if (!F('fb.appPrompts')) return;
     for (const a of root.querySelectorAll('a[href]')) if (APPLINK.test(a.getAttribute('href') || '')) hide(a);
     for (const b of root.querySelectorAll('a, button, [role="button"]')) {
       const t = (b.textContent || '').trim();
@@ -181,7 +187,7 @@
   const seen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < innerHeight && getComputedStyle(el).visibility !== 'hidden'; };
   setInterval(() => {
     const b = document.body;
-    if (!b || document.readyState === 'loading' || onWork() || isHome(location.href) || /^\/(notifications|login|checkpoint)/i.test(location.pathname)) { blankSince = 0; return; }
+    if (!b || !F('fb.blankRescue') || document.readyState === 'loading' || onWork() || isHome(location.href) || /^\/(notifications|login|checkpoint)/i.test(location.pathname)) { blankSince = 0; return; }
     const visible = (b.innerText || '').trim().length > 2 || [...b.querySelectorAll('img, video, svg, canvas, input, a, [role="button"]')].some(seen);
     if (visible || blankHref !== location.href) { blankHref = location.href; blankSince = visible ? 0 : Date.now(); return; }
     if (!blankSince) { blankSince = Date.now(); return; }
@@ -195,4 +201,4 @@
   new MutationObserver(() => { if (!t) t = setTimeout(() => { t = 0; tidy(); }, 120); }).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', tidy, { once: true });
   setInterval(tidy, 1000);
-})();
+});

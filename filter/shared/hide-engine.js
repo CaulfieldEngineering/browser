@@ -1,7 +1,10 @@
 // Applies the hide rules (hide-rules.js: the bundled floor, plus any signed rules the extension fetched) on every site
 // the filter runs on. One generic way of hiding, so a new rule is data, not code. Never on the filter's skip list
 // (Claude, Blocks, Tailscale, Joe's own tools). It only ever hides; nothing here shows anything another part hid.
-(function () {
+// Started by the filter config gate where there is one (the laptop: FilterGate runs it once the signed config is read),
+// at once everywhere else. FilterFeature(name) says whether a feature is on for this page; with no gate, always.
+(function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
+  const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== "function" || f(name, href); };
   'use strict';
   if (globalThis.__hideEngine || !globalThis.FilterHideRules) return;
   const HR = globalThis.FilterHideRules;
@@ -9,7 +12,11 @@
   const W = globalThis.WebFilterRules;
   // The web filter's skip list also names Instagram and Facebook (they have their own module); the hide rules run there.
   if (!host || (W && W.skip && W.skip(host) && !/(^|\.)(instagram\.com|facebook\.com|messenger\.com)$/.test(host))) return;
-  const state = (globalThis.__hideEngine = { hidden: 0, rules: HR.merge(HR.bundled, null) });
+  // On the laptop from 1.6.3 the config gate hands in the whole set (the signed filter config's hideRules, which may
+  // take a rule away); the engine itself is the feature hideRules. Elsewhere the bundled rules plus any extra, as before.
+  if (!F('hideRules')) return;
+  const fromGate = globalThis.__filterHideRules;
+  const state = (globalThis.__hideEngine = { hidden: 0, rules: fromGate || HR.merge(HR.bundled, null) });
   let lists = HR.forHost(state.rules, host, location.pathname), listsFor = location.pathname;
 
   // Never hidden: the page itself, its main area, its navigation, a search field, a dialog, nearly the whole screen.
@@ -63,6 +70,10 @@
     if (listsFor !== location.pathname) { listsFor = location.pathname; lists = HR.forHost(state.rules, host, listsFor); } // pages change without loading
     const L = lists;
     if (L.blockPaths && L.blockPaths.some((p) => location.pathname.startsWith(p))) { location.replace(location.origin + '/'); return; }
+    for (const r of (L.redirects || []).map(HR.redirectOf).filter(Boolean)) {
+      const p = location.pathname, hit = r.exact ? p === r.from : p.startsWith(r.from);
+      if (hit && location.pathname + location.search !== r.to) { try { const b = globalThis.IGFilterBridge; b && b.stat && b.stat('rule-redirect'); } catch {} location.replace(location.origin + r.to); return; }
+    }
     for (const sel of L.selectors || []) { try { for (const el of document.querySelectorAll(sel)) hide(el); } catch {} }
     for (const h of (L.headings || []).map((s) => s.toLowerCase())) {
       for (const el of holding(h)) {
@@ -96,6 +107,7 @@
   };
   new MutationObserver(now).observe(document, { childList: true, subtree: true });
   document.addEventListener('DOMContentLoaded', apply, { once: true });
+  if (document.readyState !== 'loading') setTimeout(apply, 0); // started after the page loaded (the laptop's config gate)
   setInterval(apply, 1500);
   // The fetched rules (signed, checked by the extension's service worker), added to the floor.
   const take = (extra) => {
@@ -108,8 +120,9 @@
     try { const f = globalThis.__igFilter; f && f.retune && f.retune(); } catch {}
     lists = HR.forHost(state.rules, host, location.pathname); listsFor = location.pathname; apply();
   };
-  try {
+  if (!fromGate) try {
     if (globalThis.chrome && chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ wf: 'hideRules' }, (r) => { void chrome.runtime.lastError; take(r && r.rules); });
   } catch {}
+  else { try { if (IR && IR.work && fromGate.work && fromGate.work.length) IR.work.add(fromGate.work); } catch {} }
   if (globalThis.__hideRulesExtra) take(globalThis.__hideRulesExtra); // tests, and any other device that hands them in
-})();
+});

@@ -1,0 +1,77 @@
+{
+  "_what": "The laptop filter's whole behaviour (Filter 1.6.3 and later), as data. Signed on the mini PC (the admin panel's Publish config, or node sign-config.mjs in the held laptop-filter folder) and fetched by the extension every 5 minutes from the mini PC and from this repo; no change here needs a new extension or a Chrome Web Store review. Every feature is named in filter/shared/filter-features.js. This default is what Joe asked for (vault AI/Notes 'Laptop filter, what he asked for and what we added, 2026-11-17'): everything agents added without his asking is off here, not deleted from the engine. The suggestive-picture and revealing-clothing removal are locked (locked memory entries 23 to 28, 46): turning them off or narrowing them needs a decisions entry.",
+  "kind": "filter-config",
+  "schema": 1,
+  "note": "Default config, 2026-11-17: only what Joe asked for.",
+  "decisions": {},
+  "features": {
+    "pictures": { "on": true, "sites": ["*"] },
+    "revealing": { "on": true, "sites": ["*"] },
+    "pictures.hold": { "on": true, "sites": ["*"], "_why": "Kept on: it is how the locked removal works (a picture is never seen before it is judged). Off shows pictures while they are judged." },
+    "pictures.unjudgedHidden": { "on": true, "sites": ["*"], "_why": "Kept on with pictures.hold: a picture never judged is never shown." },
+    "pictures.takeTile": { "on": false },
+    "pictures.strictPages": { "on": false },
+    "pictures.altText": { "on": false },
+    "video.poster": { "on": true, "sites": ["*"] },
+    "video.holdFirstFrame": { "on": true, "sites": ["instagram.com", "facebook.com"] },
+    "video.frames": { "on": true, "sites": ["instagram.com", "facebook.com"] },
+    "hideRules": { "on": true, "sites": ["*"] },
+    "textRules": { "on": true, "sites": ["*"] },
+    "blockSites": { "on": true, "sites": ["*"] },
+    "work": { "on": true, "sites": ["*"] },
+    "captions": { "on": true, "sites": ["instagram.com"] },
+    "ig.accounts": { "on": true, "sites": ["instagram.com"] },
+    "ig.noExplore": { "on": true, "sites": ["instagram.com"] },
+    "ig.plainSearch": { "on": true, "sites": ["instagram.com"] },
+    "ig.searchTabs": { "on": false },
+    "ig.noReelsTab": { "on": true, "sites": ["instagram.com"] },
+    "ig.followingFeed": { "on": true, "sites": ["instagram.com"] },
+    "ig.noSuggestions": { "on": true, "sites": ["instagram.com"] },
+    "ig.appPrompts": { "on": false },
+    "ig.pageTop": { "on": true, "sites": ["instagram.com"] },
+    "ig.calm": { "on": true, "sites": ["instagram.com", "facebook.com"] },
+    "fb.noFeed": { "on": true, "sites": ["facebook.com"] },
+    "fb.ads": { "on": true, "sites": ["facebook.com", "messenger.com"] },
+    "fb.suggested": { "on": true, "sites": ["facebook.com"] },
+    "fb.noReels": { "on": true, "sites": ["facebook.com"] },
+    "fb.storiesRail": { "on": false },
+    "fb.videoTab": { "on": false },
+    "fb.authorNames": { "on": false },
+    "fb.adultProfiles": { "on": false },
+    "fb.appPrompts": { "on": false },
+    "fb.foreignPictures": { "on": false },
+    "fb.blankRescue": { "on": true, "sites": ["facebook.com"] },
+    "youtube": { "on": false, "sites": ["youtube.com"], "_why": "Off until Joe turns it on (2026-11-17: 'I eventually want *some* of youtube in there'). YouTube is also kept out of the extension by the laptop's policy for now." }
+  },
+  "settings": {
+    "IGFilterConfig": {
+      "suggestive": { "explicit": 0.3, "sexy": 0.45, "combined": 0.6 },
+      "revealing": 0.6
+    },
+    "WebFilterConfig": {
+      "skipHosts": ["claude.ai", "anthropic.com", "claude.com", "tailscale.com", "tailscale.io", "ts.net", "localhost", "127.0.0.1", "techlockdown.com", "forfeit.app", "github.com", "githubusercontent.com", "caulfieldengineering.com", "wonderlandaudio.com", "instagram.com", "facebook.com", "messenger.com"],
+      "strict": { "explicit": 0.2, "sexy": 0.3, "combined": 0.45 }
+    }
+  },
+  "tuning": { "all": {}, "sites": {} },
+  "hideRules": {
+    "sites": {
+      "instagram.com": {
+        "headings": ["Suggested for you", "Suggestions for you", "Suggested accounts", "Similar accounts", "Discover people", "People you may know"],
+        "buttons": ["Similar accounts", "Discover people"],
+        "selectors": ["a[href^=\"/explore/people\"]"],
+        "blockPaths": ["/explore/people"]
+      }
+    }
+  },
+  "textRules": [],
+  "blockSites": [],
+  "youtube": {
+    "_what": "Joe's spec, 2026-11-17: sexual content only, from titles, channel names, descriptions, captions or transcripts and thumbnails; never true crime, violence or adult topics; never stops or removes a video he clicked to play. Any key of YouTubeRules.DEFAULTS (filter/shared/youtube-filter.js) can be set here.",
+    "thumbnails": { "judge": true, "hold": false, "line": { "explicit": 0.3, "sexy": 0.45, "combined": 0.6 } },
+    "captions": { "on": true },
+    "transcript": { "on": true },
+    "surfaces": { "home": true, "search": true, "sidebar": true, "shelves": true, "endScreen": true },
+    "onSexualWatch": "mark-channel"
+  }
+}
