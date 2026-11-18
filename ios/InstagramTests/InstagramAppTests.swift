@@ -215,4 +215,23 @@ final class InstagramAppTests: XCTestCase {
         XCTAssertEqual(Policy.decide(request: URLRequest(url: URL(string: "https://www.instagram.com/p/abc/")!), isMainFrame: true), .allow)
         if case .block = Policy.decide(request: URLRequest(url: URL(string: "https://example.com/")!), isMainFrame: true) {} else { XCTFail("other sites stay out") }
     }
+
+    /// An update in an app with no bars of ours (Joe, 2026-11-18, of a green dot alone in the top-right corner of
+    /// Instagram's Notifications page: "what's this green little dot on the IG app"). The ••• dot is the Browser's; here
+    /// the update is the capsule, low on the screen, clear of the site's own header.
+    func testAnUpdateShowsTheCapsuleAndNoDotAlone() throws {
+        let vc = try app().0
+        UserDefaults.standard.removeObject(forKey: "updateDismissedBuild")
+        defer { vc.showUpdate(version: "0", build: 0); UserDefaults.standard.removeObject(forKey: "updateDismissedBuild") }
+        vc.showUpdate(version: "0.1.999999", build: 999_999)
+        vc.view.layoutIfNeeded()
+        XCTAssertFalse(BrowserViewController.showsMoreDot)
+        XCTAssertTrue(vc.moreDot.isHidden, "no dot without a ••• button under it")
+        XCTAssertFalse(vc.updateButton.isHidden, "the capsule shows the update")
+        let capsule = vc.updateButton.convert(vc.updateButton.bounds, to: vc.view)
+        XCTAssertGreaterThan(capsule.minY, vc.view.bounds.midY, "the capsule sits low, clear of the site's header")
+        vc.showUpdate(version: "0", build: 0)
+        XCTAssertTrue(vc.moreDot.isHidden)
+        XCTAssertTrue(vc.updateButton.isHidden, "no update, no capsule")
+    }
 }

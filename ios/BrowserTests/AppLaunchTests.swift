@@ -64,4 +64,26 @@ final class AppLaunchTests: XCTestCase {
         XCTAssertEqual(controls, true)
         XCTAssertTrue(web.configuration.allowsPictureInPictureMediaPlayback)
     }
+
+    /// In the Browser a newer build puts the green dot on the ••• button, inside it; with no update there is no dot.
+    func testAnUpdatePutsTheDotOnTheMoreButton() async throws {
+        let vc = try await browser()
+        UserDefaults.standard.removeObject(forKey: "updateDismissedBuild")
+        defer { vc.showUpdate(version: "0", build: 0); UserDefaults.standard.removeObject(forKey: "updateDismissedBuild") }
+        vc.showUpdate(version: "0.1.999999", build: 999_999)
+        vc.view.layoutIfNeeded()
+        XCTAssertTrue(BrowserViewController.showsMoreDot)
+        XCTAssertFalse(vc.moreDot.isHidden)
+        XCTAssertFalse(vc.updateButton.isHidden)
+        let more = try XCTUnwrap(vc.view.subviewsDeep.compactMap { $0 as? UIButton }.first { $0.accessibilityLabel == "More" })
+        XCTAssertFalse(more.isHidden || more.window == nil, "the dot has its ••• under it")
+        let dot = vc.moreDot.convert(vc.moreDot.bounds, to: vc.view)
+        XCTAssertTrue(more.convert(more.bounds, to: vc.view).contains(dot), "the dot sits on the ••• button")
+        vc.showUpdate(version: "0", build: 0)
+        XCTAssertTrue(vc.moreDot.isHidden, "no update, no dot")
+    }
+}
+
+private extension UIView {
+    var subviewsDeep: [UIView] { subviews + subviews.flatMap(\.subviewsDeep) }
 }

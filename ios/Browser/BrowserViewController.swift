@@ -33,7 +33,13 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
     private let field = UITextField()
     private let shareInField = UIButton(type: .system)
     private let more = UIButton(type: .system)
-    private let moreDot = UIView()
+    /// The green dot on ••• when the install page has a newer build. Internal for the tests.
+    let moreDot = UIView()
+    /// Only the Browser has a ••• button. The site apps (Instagram, Facebook, Reddit) have no bars of ours, so there the
+    /// dot sat alone in the top-right corner over the site's own header with nothing under it (Joe, 2026-11-18, on
+    /// Instagram's Notifications page: "what's this green little dot on the IG app"). Their update is the capsule and
+    /// the line in the two-finger menu.
+    static let showsMoreDot = !Flavor.isSiteApp
     private let cancel = UIButton(type: .system)
     private let progress = UIProgressView(progressViewStyle: .bar)
     /// The page card: the web view, the start page and the blocked page, rounded at the bottom.
@@ -50,7 +56,7 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
 
     /// Shown above the toolbar, and in the ••• menu, when the install page has a newer build (Joe, 2026-10-29: "As
     /// always let's build in an updater or link into the app"). It asks iOS to install from the install page's manifest.
-    private let updateButton = UIButton(type: .system)
+    let updateButton = UIButton(type: .system)
     /// The little x beside it (Joe, 2026-11-11, the capsule sitting on a checkout button: "Can we get a little x next
     /// to the update button"). It puts that version's capsule away; the menu's line and dot stay, and the next
     /// version shows the capsule again.
@@ -397,17 +403,20 @@ final class BrowserViewController: UIViewController, WKNavigationDelegate, WKUID
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let data, let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let build = info["build"] as? Int, let version = info["version"] as? String else { return }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.newerVersion = build > Self.myBuild ? version : nil
-                self.newerBuild = build
-                self.updateButton.configuration?.title = "Update to \(version)"
-                let dismissed = UserDefaults.standard.integer(forKey: Self.dismissedBuildKey) >= build
-                self.updateButton.isHidden = self.newerVersion == nil || dismissed
-                self.updateClose.isHidden = self.updateButton.isHidden
-                self.moreDot.isHidden = self.newerVersion == nil
-            }
+            DispatchQueue.main.async { self?.showUpdate(version: version, build: build) }
         }.resume()
+    }
+
+    /// What the install page's version.json says, shown: the capsule (unless put away for that build), the menu's line,
+    /// and in the Browser the dot on •••. Internal for the tests.
+    func showUpdate(version: String, build: Int) {
+        newerVersion = build > Self.myBuild ? version : nil
+        newerBuild = build
+        updateButton.configuration?.title = "Update to \(version)"
+        let dismissed = UserDefaults.standard.integer(forKey: Self.dismissedBuildKey) >= build
+        updateButton.isHidden = newerVersion == nil || dismissed
+        updateClose.isHidden = updateButton.isHidden
+        moreDot.isHidden = !Self.showsMoreDot || newerVersion == nil
     }
 
     private func installUpdate() {
