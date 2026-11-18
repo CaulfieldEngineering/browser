@@ -179,10 +179,64 @@
     return null;
   }
   const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el)) { gone(el); note('sugg-' + what); } };
+  // One suggested account at a time (Joe, 2026-11-18, the third ask: "still waiting on you to block this element in
+  // instagram via our extension", of a column of accounts on the Following feed, each "N mutuals" and a blue Follow).
+  // A list as wide and as tall as the screen is never taken as a panel (the guard above, so the page cannot go blank),
+  // so until then its heading went and its rows stayed. Now each row goes by itself: the largest box around one Follow
+  // (exactly "Follow", never "Follow back" or "Following") that holds no other Follow, stays a short row, links one
+  // account and carries a suggestion line ("3 mutuals", "Followed by ...", "Suggested for you", "New to Instagram").
+  // Never in a post, a profile's header or the tab bar, and never the box of a dialog or the main area. A list left
+  // with only hidden rows on a page with no post (a page of suggestions only) gets one plain line instead, drawn by a
+  // style rule (no element of ours in Instagram's list): "Suggestions are hidden".
+  const SUGG_LINE = /^(\d[\d.,]*\s?[km]?\s+mutuals?|followed by \S.{0,80}|suggested for you|new to instagram)$/i;
+  const ROW_STOP = 'main, [role="main"], article, header, nav, [role="navigation"], [role="dialog"], [data-igt-nav], body, html';
+  const suggNoteCss = '[data-igt-sugg-note]::before{content:"Suggestions are hidden";display:block;padding:24px 16px;text-align:center;font:14px/1.4 -apple-system,system-ui,sans-serif;color:#737373}';
+  const followsIn = (el) => { let n = 0; for (const b of el.querySelectorAll('button, [role="button"], a, div, span')) if (!b.firstElementChild && textOf(b) === 'Follow') n++; return n; };
+  function suggRow(ctl) {
+    let row = ctl;
+    for (let i = 0; i < 8; i++) {
+      const up = row.parentElement;
+      if (!up || up.matches(ROW_STOP) || followsIn(up) > 1 || textOf(up).length > 220 || up.querySelector('input, textarea, video, article')) break;
+      row = up;
+    }
+    if (row === ctl || profileLinks(row) < 1) return null;
+    for (const el of row.querySelectorAll('span, div')) { const t = textOf(el); if (t.length < 100 && SUGG_LINE.test(t)) return row; }
+    return null;
+  }
+  function noSuggRows() {
+    let snap;
+    try { snap = document.evaluate('//body//text()[normalize-space(.)="Follow"]', document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null); } catch { return; }
+    for (let i = 0; i < Math.min(snap.snapshotLength, 400); i++) {
+      const t = snap.snapshotItem(i).parentElement;
+      if (!t || t.closest('article, header, [data-igt-nav], nav, [role="navigation"], [data-igt], [data-igf-gone]')) continue;
+      const ctl = t.closest('button, [role="button"], a') || t;
+      const row = suggRow(ctl);
+      if (!row || guarded(row)) continue;
+      row.setAttribute('data-igt-row', '');
+      suggGone(row, 'row');
+    }
+    // The note: only on a page with no post to show, for a list with nothing left in it but hidden rows, on the nearest
+    // box around it that is still shown (the panel around the list may have gone too, once it was small enough).
+    const old = document.querySelector('[data-igt-sugg-note]');
+    const posts = !!document.querySelector('main article:not([data-igf-gone])');
+    if (old && (posts || old.closest('[data-igt]'))) old.removeAttribute('data-igt-sugg-note');
+    else if (old) return;
+    if (posts) return;
+    const lists = new Set([...document.querySelectorAll('[data-igt-row]')].map((r) => r.parentElement).filter(Boolean));
+    for (const list of lists) {
+      const kids = [...list.children];
+      if (kids.filter((k) => k.hasAttribute('data-igt-row')).length < 3 || !kids.every((k) => k.hasAttribute('data-igt') || !textOf(k))) continue;
+      let at = list;
+      while (at && at.closest('[data-igt]')) at = at.closest('[data-igt]').parentElement;
+      if (!at || at === document.body || at === document.documentElement || inNav(at)) continue;
+      at.setAttribute('data-igt-sugg-note', ''); note('sugg-note');
+      break;
+    }
+  }
   function noSuggestions() {
     const root = document.documentElement;
     if (!root || !F('ig.noSuggestions')) return;
-    if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss; (document.head || root).appendChild(st); }
+    if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss + suggNoteCss; (document.head || root).appendChild(st); }
     if (SUGG_PAGE.test(location.pathname)) { note('sugg-page'); location.replace(FOLLOWING); return; }
     if (!document.body) return;
     // the headings, found by their words (a text search the browser does itself, so cheap on every page)
@@ -201,6 +255,7 @@
       const label = b.getAttribute('aria-label') || (b.querySelector('svg[aria-label]') || { getAttribute: () => '' }).getAttribute('aria-label') || '';
       if (SUGG_BTN.test(label.trim()) || SUGG_BTN.test((b.textContent || '').trim())) suggGone(b, 'button');
     }
+    noSuggRows();
   }
   let sg = 0;
   new MutationObserver(() => { if (!sg) sg = setTimeout(() => { sg = 0; noSuggestions(); }, 120); }).observe(document, { childList: true, subtree: true });

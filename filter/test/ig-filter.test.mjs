@@ -36,6 +36,18 @@ const reelViewer = (names, start) => `<main><div id="sc" style="height:600px;ove
   <script>document.getElementById('sc').scrollTop = ${start} * 600;</script></main>`;
 // The Following feed with posts that carry their own links (/p/<id>/), tall enough that two fit on the screen at once.
 const seenPost = (id) => `<article id="${id}" style="height:340px"><header><a href="/acct${id}/">acct${id}</a></header><a href="/p/${id}xxxx/"><time>1h</time></a><div>post ${id}</div></article>`;
+const JOE_ROWS = [['raven', 'RAVEN', '3 mutuals'], ['mikeperry', 'Mike Perry', '9 mutuals'], ['lilith', 'Lilith', '1 mutual'], ['vanswarpedtourfl', 'vanswarpedtourfl', '7 mutuals'],
+  ['joeymonaco', 'Joey Monaco', '3 mutuals'], ['quinn', 'Quinn', '6 mutuals'], ['mobadr', 'Mo Badr', '15 mutuals'], ['tonycamposeo', 'Tony Camposeo', '7 mutuals'],
+  ['hunter', 'H U N T E R', '9 mutuals'], ['hrlikes', 'H.R.Likes', '11 mutuals'], ['andrewbozymowski', 'Andrew Bozymowski', '12 mutuals'], ['alyssafoster', 'alyssafoster', 'Followed by quinn + 2 more']];
+const joeRow = ([u, name, line], i) => `<div class="x1dm5mii" id="jr-${u}"><div class="x9f619 x78zum5" style="display:flex;align-items:center;padding:8px 16px">
+  <div class="x1i10hfl"><a href="/${u}/" role="link" tabindex="0"><img alt="${u}'s profile picture" src="${CDN}/plain-j${u}.jpg" style="width:56px;height:56px;border-radius:50%"></a></div>
+  <div style="flex:1;padding:0 12px"><div><a href="/${u}/" role="link"><span class="x1lliihq" dir="auto">${name}</span></a></div>
+    <div style="display:flex;align-items:center"><span class="facepile">${[1, 2, 3].map((k) => `<img alt="" src="${CDN}/plain-m${k}${u}.jpg" style="width:14px;height:14px;border-radius:50%">`).join('')}</span><span class="x1lliihq" dir="auto">${line}</span></div></div>
+  <div>${i % 2 ? `<button class="_acan _acap _acas" type="button"><div class="_ap3a">Follow</div></button>` : `<div role="button" tabindex="0" style="color:#4150f7;font-weight:600">Follow</div>`}</div>
+</div></div>`;
+const joeList = (head, posts) => `<main role="main"><div id="joecol" style="max-width:630px;margin:0 auto">
+  ${posts ? seenPost('JF1') + seenPost('JF2') : ''}
+  <div id="joelist">${head ? '<div style="padding:16px"><span id="joehead">Suggested for you</span></div>' : ''}<div id="joerows">${JOE_ROWS.map(joeRow).join('')}</div></div></div></main>${NAV}`;
 const pages = {
   '?seen': `<main role="main">${['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8'].map(seenPost).join('')}</main>`,
   // The recording of 2026-11-10: the same four posts added to the bottom again, twice.
@@ -111,6 +123,21 @@ const pages = {
   // A new message: "Suggested" people to write to are not suggestions to follow, and stay.
   '/direct/new/': `<main><div role="dialog"><input id="to" placeholder="Search"><div id="dmsugg"><span>Suggested</span><div id="dm1"><a href="/pal/">pal</a></div><div id="dm2"><a href="/pal2/">pal2</a></div></div></div></main>`,
   '/explore/people/': `<main><h1>Suggested</h1><div id="peoplelist"><a href="/p1x/">p1x</a><button>Follow</button></div></main>`,
+  // Joe's list of 2026-11-18 ("still waiting on you to block this element in instagram via our extension"; laptop
+  // Chrome, Filter 1.6.3 with config 1, on /?variant=following): a column of suggested accounts filling the main area,
+  // each row an avatar, a name, a line of stacked mutual avatars and "N mutuals", and a blue Follow (a role=button div,
+  // or a button). The list is as wide and as tall as the screen, so the guard that keeps the page from going blank
+  // refused it as a panel: the heading went, the rows stayed. Only suggestions on the page (no post).
+  '?joelist': joeList(true, false),
+  // The same rows after the posts of the Following feed (the list in a feed that has posts), with no heading at all.
+  '?joefeed': joeList(false, true),
+  // What must stay: the profile of someone he does not follow (its Follow and its mutuals line are in the header), and
+  // its Followers list (rows with Follow, but no suggestion line).
+  '/mutualprofile/': `<main><header><img id="mpav" src="${CDN}/plain-mpav.jpg" style="width:150px;height:150px" alt="mutualprofile's profile picture">
+      <section><h2 id="mpname">mutualprofile</h2><div style="display:flex"><button id="mpfollow">Follow</button><div role="button" id="mpmsg">Message</div></div>
+      <div id="mpmutual"><span>12 mutuals</span></div><div id="mpbio">Builds fuzz pedals.</div></section></header>
+    <div class="_ac7v">${tile('mp1', '/p/MP1/', 'plain-mp1.jpg')}</div>
+    <div role="dialog" id="fdlg"><div><h1>Followers</h1></div><div id="flist">${['fa', 'fb', 'fc'].map((u) => `<div id="fl-${u}" style="display:flex"><a href="/${u}/"><img alt="${u}'s profile picture" src="${CDN}/plain-fl${u}.jpg" style="width:44px;height:44px"></a><div><a href="/${u}/">${u}</a><span>Full Name ${u}</span></div><button>Follow</button></div>`).join('')}</div></div></main>${NAV}`,
   // Extra rules (fx=extra): a panel headed by a heading only the extra file names, a post with a phrase, a selector, a button.
   '?extra': `<main role="main">${seenPost('X1')}
     <div id="xpanel"><div><span id="xhead">Brands you might like</span></div><a href="/brand1/">brand1</a><a href="/brand2/">brand2</a></div>
@@ -726,6 +753,23 @@ try {
   await go('/?variant=following&fx=feedsugg', 1500);
   check('suggestions, phone feed: the carousel is gone, heading and cards', !(await shown('carhead')) && !(await shown('card-amy')) && !(await shown('card-cy')));
   check('suggestions, phone feed: the posts around it and the tab bar stay', (await shown('F1')) && (await shown('F2')) && (await shown('tHome')));
+  // Joe's list of 2026-11-18, at the laptop window's width (556 px): the list is as big as the screen.
+  await page.setViewportSize({ width: 556, height: 900 });
+  await go('/?variant=following&fx=joelist', 1800);
+  const joeLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden'; }), JOE_ROWS.map((r) => r[0]));
+  check("suggestions, Joe's list (2026-11-18): every row is gone, Follow as a div or a button, mutuals or Followed by", joeLeft.length === 0, joeLeft.join(','));
+  check("suggestions, Joe's list: the heading is gone", !(await shown('joehead')));
+  const note = await page.evaluate(() => { const n = document.querySelector('[data-igt-sugg-note]'); if (!n) return null; const s = getComputedStyle(n, '::before'); const r = n.getBoundingClientRect(); return { text: s.content, h: r.height, w: r.width }; });
+  check("suggestions, Joe's list: a page of only suggestions is not blank, one plain line says so", !!note && /Suggestions are hidden/.test(note.text) && note.h > 10 && note.h < 120, JSON.stringify(note));
+  check("suggestions, Joe's list: the page and the tab bar stay (main, the column)", (await shown('joecol')) && (await shown('tHome')) && (await shown('tProfile')));
+  check("suggestions, Joe's list: the tab bar's avatar and links are untouched", await page.evaluate(() => !document.querySelector('#tabbar [data-igt], #tabbar[data-igt]')));
+  await go('/?variant=following&fx=joefeed', 1800);
+  const feedLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && e.getBoundingClientRect().height > 0; }), JOE_ROWS.map((r) => r[0]));
+  check("suggestions, Joe's rows after the Following feed's posts, no heading: every row goes", feedLeft.length === 0, feedLeft.join(','));
+  check("suggestions, Joe's rows after posts: the posts stay, and no note (it is not a page of suggestions)", (await shown('JF1')) && (await shown('JF2')) && !(await page.$('[data-igt-sugg-note]')));
+  await go('/mutualprofile/', 1500);
+  check('suggestions, guard: a profile he does not follow keeps its header (Follow, Message, its mutuals line, bio) and posts', (await shown('mpname')) && (await shown('mpfollow')) && (await shown('mpmsg')) && (await shown('mpmutual')) && (await shown('mpbio')) && (await shown('mp1')));
+  check('suggestions, guard: a Followers list (Follow buttons, no suggestion line) stays', (await shown('fdlg')) && (await shown('fl-fa')) && (await shown('fl-fb')) && (await shown('fl-fc')));
   await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the reel and story viewers skip a hidden slide ----
   const onScreenSlide = () => page.evaluate(() => { const sc = document.getElementById('sc'); const r = sc.getBoundingClientRect(); const el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); const s = el && el.closest('.slide'); return s ? s.id : ''; });
