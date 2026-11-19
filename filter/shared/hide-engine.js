@@ -23,8 +23,18 @@
   const tooBig = (el) => { const r = el.getBoundingClientRect(); return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9; };
   const PROTECT = 'main, [role="main"], nav, [role="navigation"], [data-igt-nav], input, textarea, [role="search"], [role="dialog"]';
   const guarded = (el) => !el || el === document.body || el === document.documentElement || el.matches(PROTECT) || !!el.querySelector(PROTECT) || !!el.closest('[data-igt-nav], nav, [role="navigation"]') || tooBig(el);
-  const hide = (el) => {
+  // On Instagram a hide rule blanks in place through the core's guard (docs/instagram-filter-design.md): the box is
+  // kept, and a profile's own controls, a post, a dialog, the navigation and a field he types in are never taken.
+  const CORE = /(^|\.)instagram\.com$/.test(host) ? globalThis.IGCore : null;
+  const hide = (el, kind) => {
     if (!el || el.hasAttribute('data-fhr') || guarded(el)) return false;
+    if (CORE) {
+      // (a phrase rule takes the post that says it: a content rule; everything else is the page's furniture)
+      if (el.hasAttribute('data-igx') || el.closest('svg') || !CORE.blank(el, 'hide-rule', kind || 'structure')) return false;
+      el.setAttribute('data-fhr', ''); state.hidden++;
+      try { const b = globalThis.IGFilterBridge; b && b.stat && b.stat('rule-hidden'); } catch {}
+      return true;
+    }
     el.setAttribute('data-fhr', '');
     if (el.matches('article')) { // a post: one invisible pixel, so a feed still loads what comes after it
       for (const [k, v] of [['height', '1px'], ['min-height', '0'], ['overflow', 'hidden'], ['opacity', '0'], ['margin', '0'], ['padding', '0'], ['border', '0']]) el.style.setProperty(k, v, 'important');
@@ -90,7 +100,7 @@
       }
     }
     for (const p of (L.phrases || []).map((s) => s.toLowerCase())) {
-      for (const el of holding(p)) { if (!el.closest('[data-fhr]')) hide(el.closest('article, li, [role="listitem"], [role="article"]') || el) || hide(el); }
+      for (const el of holding(p)) { if (!el.closest('[data-fhr]')) { const post = el.closest('article, li, [role="listitem"], [role="article"]'); (post && hide(post, 'content')) || hide(el); } }
     }
   }
   let t = 0;

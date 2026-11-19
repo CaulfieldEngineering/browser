@@ -113,6 +113,7 @@
   function plainSearch() {
     markNav();
     if (!/^\/explore(\/|$)/.test(location.pathname) || !document.body || !F('ig.plainSearch')) return;
+    if (globalThis.IGCore && globalThis.IGCore.creationDialog()) return; // what he is posting is never touched
     for (const v of document.querySelectorAll('video')) gone(v.closest('a') || v);
     for (const img of document.querySelectorAll('img, [style*="background-image"]')) {
       const r = img.getBoundingClientRect();
@@ -135,133 +136,41 @@
   setInterval(plainSearch, 500);
 
   // No "Suggested for you", anywhere on Instagram (Joe, 2026-11-15, of the desktop's right-hand list of accounts with
-  // Follow buttons: "Can we remove this sidebar from instagram"). Gone: the desktop sidebar's suggestions, the
-  // suggestions page ("See all", /explore/people/, which goes to the Following feed), the suggestion carousels in the
-  // feed, on profiles and on the activity page ("Suggested for you", "Similar accounts", "Discover people"), each
-  // suggested account's row, and the profile button that opens similar accounts. Found by the heading's words and the
-  // Follow buttons under it, not by Instagram's class names. A panel is the smallest box around its heading that holds
-  // a Follow button or two profile links; it is never one that holds a post, the tab bar, a search field, the page's
-  // main area or almost the whole screen (Facebook's Friends page of 2026-11-14 went blank from a hide that climbed too
-  // far), so the most a wrong guess can take is a corner. Posts are left to the filter (a suggested post's header line
-  // is not a panel), and so is the new-message list ("Suggested" alone is not a heading here).
-  const SUGG_HEAD = /^(suggested for you|suggestions for you|suggested accounts|similar accounts|discover people|people you may know|accounts you may like|more accounts to follow)$/i;
-  const SUGG_BTN = /^(similar accounts|suggested for you|discover people|see all suggestions)$/i;
+  // Follow buttons: "Can we remove this sidebar from instagram"; 2026-11-18: "still waiting on you to block this element
+  // in instagram via our extension"; 2026-11-19: "Except suggested accounts aren't even being hidden.", "did you remove
+  // the Follow button?"). By structure, not by words and a climb (docs/instagram-filter-design.md): IGCore finds the
+  // rows (one account and one Follow each, in a list, with a suggestion line or under a suggestions heading) and each
+  // is blanked in place through the guard, so a profile's own Follow and Message, a post, a dialog (Followers,
+  // Following, likes), the navigation and a field he types in can never be taken. Until 2026-11-19 a panel was "the
+  // smallest box around the words that holds a Follow", and a profile's own Follow and Message row, whose chevron
+  // carries the words "Similar accounts" as an SVG title, was taken as one. The suggestions page itself
+  // (/explore/people/) goes to the Following feed, and links to it are blanked.
   const SUGG_PAGE = /^\/explore\/people(\/|$)/;
-  const FOLLOW = /^follow( back)?$/i;
-  const suggCss = 'a[href^="/explore/people"]:not([data-igt-nav] a){display:none !important}';
-  const tooBig = (el) => {
-    const r = el.getBoundingClientRect();
-    return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
-  };
-  const guarded = (el) => !el || el === document.body || el === document.documentElement || el.matches('main, [role="main"], article, nav, [role="navigation"], [role="dialog"], [data-igt-nav]') ||
-    !!el.querySelector('main, [role="main"], article, nav, [role="navigation"], [data-igt-nav], input, textarea, [role="search"], video') || inNav(el) || tooBig(el);
-  const follows = (el) => [...el.querySelectorAll('button, [role="button"]')].filter((b) => FOLLOW.test((b.textContent || '').trim())).length;
-  const profileLinks = (el) => new Set([...el.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => /^\/[A-Za-z0-9._]+\/?$/.test(h) && !/^\/(explore|direct|reels?|accounts|p)\/?$/.test(h))).size;
-  // The panel a suggestions heading heads, or null when no box around it is safe to take. Either a panel that starts
-  // with its heading (the sidebar, a carousel), or one suggested account's row whose line says "Suggested for you" (one
-  // Follow button, one account, a short line). A box that holds accounts but neither starts with the heading nor is one
-  // row (say, the activity page's list with suggestions at its end) is not taken: the climb stops there.
-  const textOf = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
-  function suggPanel(head) {
-    const words = textOf(head).toLowerCase();
-    let box = head;
-    for (let i = 0; i < 8; i++) {
-      const up = box.parentElement;
-      if (!up || guarded(up)) return null;
-      box = up;
-      const f = follows(box), n = profileLinks(box);
-      if (f < 1 && n < 2) continue;
-      const t = textOf(box);
-      if (t.toLowerCase().startsWith(words)) return box;
-      if (f === 1 && n === 1 && t.length <= 160 && !box.closest('header') && !box.querySelector('h1, h2')) return box;
-      return null;
-    }
-    return null;
-  }
-  // A profile's own controls are never taken (Joe, 2026-11-19: "did you remove the Follow button?", of a profile whose
-  // Follow, Following and Message buttons were gone): the chevron beside them carries the words "Similar accounts" (an
-  // SVG title), and the row around it holds one Follow and no account link, so it was taken as one suggested row.
-  const OWN_CTL = /^(follow|following|follow back|requested|message|edit profile|view archive)$/i;
-  const holdsOwnControls = (el) => !!el.querySelector && [...el.querySelectorAll('button, [role="button"], a[role="link"], a[href]')].some((b) => OWN_CTL.test(textOf(b))) && !!(el.closest('header') || el.querySelector('h1, h2, header'));
-  const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el) && !holdsOwnControls(el)) { gone(el); note('sugg-' + what); } };
-  // One suggested account at a time (Joe, 2026-11-18, the third ask: "still waiting on you to block this element in
-  // instagram via our extension", of a column of accounts on the Following feed, each "N mutuals" and a blue Follow).
-  // A list as wide and as tall as the screen is never taken as a panel (the guard above, so the page cannot go blank),
-  // so until then its heading went and its rows stayed. Now each row goes by itself: the largest box around one Follow
-  // (exactly "Follow", never "Follow back" or "Following") that holds no other Follow, stays a short row, links one
-  // account and carries a suggestion line ("3 mutuals", "Followed by ...", "Suggested for you", "New to Instagram").
-  // Never in a post, a profile's header or the tab bar, and never the box of a dialog or the main area. A list left
-  // with only hidden rows on a page with no post (a page of suggestions only) gets one plain line instead, drawn by a
-  // style rule (no element of ours in Instagram's list): "Suggestions are hidden".
-  const SUGG_LINE = /^(\d[\d.,]*\s?[km]?\s+mutuals?|followed by \S.{0,80}|suggested for you|new to instagram)$/i;
-  const ROW_STOP = 'main, [role="main"], article, header, nav, [role="navigation"], [role="dialog"], [data-igt-nav], body, html';
-  const suggNoteCss = '[data-igt-sugg-note]::before{content:"Suggestions are hidden";display:block;padding:24px 16px;text-align:center;font:14px/1.4 -apple-system,system-ui,sans-serif;color:#737373}';
-  const followsIn = (el) => { let n = 0; for (const b of el.querySelectorAll('button, [role="button"], a, div, span')) if (!b.firstElementChild && textOf(b) === 'Follow') n++; return n; };
-  function suggRow(ctl) {
-    let row = ctl;
-    for (let i = 0; i < 12; i++) {
-      const up = row.parentElement;
-      if (!up || up.matches(ROW_STOP) || followsIn(up) > 1 || textOf(up).length > 220 || up.querySelector('input, textarea, video, article')) break;
-      row = up;
-    }
-    if (row === ctl || profileLinks(row) < 1) return null;
-    for (const el of row.querySelectorAll('span, div')) { const t = textOf(el); if (t.length < 100 && SUGG_LINE.test(t)) return row; }
-    return null;
-  }
-  function noSuggRows() {
-    let snap;
-    try { snap = document.evaluate('//body//text()[normalize-space(.)="Follow"]', document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null); } catch { return; }
-    for (let i = 0; i < Math.min(snap.snapshotLength, 400); i++) {
-      const t = snap.snapshotItem(i).parentElement;
-      if (!t || t.closest('article, header, [data-igt-nav], nav, [role="navigation"], [data-igt], [data-igf-gone]')) continue;
-      const ctl = t.closest('button, [role="button"], a') || t;
-      const row = suggRow(ctl);
-      if (!row || guarded(row)) continue;
-      row.setAttribute('data-igt-row', '');
-      suggGone(row, 'row');
-    }
-    // The note: only on a page with no post to show, for a list with nothing left in it but hidden rows, on the nearest
-    // box around it that is still shown (the panel around the list may have gone too, once it was small enough).
-    const old = document.querySelector('[data-igt-sugg-note]');
-    const posts = !!document.querySelector('main article:not([data-igf-gone])');
-    if (old && (posts || old.closest('[data-igt]'))) old.removeAttribute('data-igt-sugg-note');
-    else if (old) return;
-    if (posts) return;
-    const lists = new Set([...document.querySelectorAll('[data-igt-row]')].map((r) => r.parentElement).filter(Boolean));
-    for (const list of lists) {
-      const kids = [...list.children];
-      if (kids.filter((k) => k.hasAttribute('data-igt-row')).length < 3 || !kids.every((k) => k.hasAttribute('data-igt') || !textOf(k))) continue;
-      let at = list;
-      while (at && at.closest('[data-igt]')) at = at.closest('[data-igt]').parentElement;
-      if (!at || at === document.body || at === document.documentElement || inNav(at)) continue;
-      at.setAttribute('data-igt-sugg-note', ''); note('sugg-note');
-      break;
-    }
-  }
+  const CORE = globalThis.IGCore;
   function noSuggestions() {
     const root = document.documentElement;
-    if (!root || !(F('ig.noSuggestions') || F('ig.suggestedRows'))) return; // ig.suggestedRows: the same, by the fixed code (1.6.3 does not know it)
-    if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss + suggNoteCss; (document.head || root).appendChild(st); }
+    if (!root || !CORE || !(F('ig.noSuggestions') || F('ig.suggestedRows'))) return; // ig.suggestedRows: the name 1.6.3 does not know (its own code took a profile's Follow row)
     if (SUGG_PAGE.test(location.pathname)) { note('sugg-page'); location.replace(FOLLOWING); return; }
     if (!document.body) return;
-    // the headings, found by their words (a text search the browser does itself, so cheap on every page)
-    let snap;
-    try { snap = document.evaluate('//body//text()[contains(., "uggest") or contains(., "imilar accounts") or contains(., "iscover people") or contains(., "ay know") or contains(., "ay like") or contains(., "ccounts to follow")]', document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null); } catch { snap = null; }
-    for (let i = 0; snap && i < snap.snapshotLength; i++) {
-      const el = snap.snapshotItem(i).parentElement;
-      if (!el || el.closest('article, [data-igt-nav], svg') || !SUGG_HEAD.test((el.textContent || '').trim())) continue; // an SVG's title is a button's label (below), not a heading
-      const panel = suggPanel(el);
-      if (panel) suggGone(panel, 'panel');
-      else if (el.children.length === 0 && !el.closest('[data-igt]')) suggGone(el, 'head'); // the words at least; the rest once it loads
+    let rows = 0;
+    for (const { row, heading } of CORE.suggestionRows(document.body)) {
+      if (!row.hasAttribute('data-igx') && CORE.blank(row, 'sugg-row', 'structure')) rows++;
+      if (heading && !heading.hasAttribute('data-igx')) CORE.blank(heading, 'sugg-head', 'structure');
     }
-    // the button by a profile's Follow that opens its similar accounts
-    for (const b of document.querySelectorAll('button, [role="button"], a[role="link"]')) {
-      if (b.closest('article, [data-igt-nav], [data-igt]')) continue;
-      const label = b.getAttribute('aria-label') || (b.querySelector('svg[aria-label]') || { getAttribute: () => '' }).getAttribute('aria-label') || '';
-      if (textOf(b).length > 40 || b.querySelector('button, [role="button"]')) continue; // a button, not a box of buttons
-      if (SUGG_BTN.test(label.trim()) || SUGG_BTN.test((b.textContent || '').trim())) suggGone(b, 'button');
+    if (rows) note('sugg-row');
+    // A page of nothing but suggestions (no post in sight, the blank rows over half the screen) says so in one plain
+    // line, drawn over the page by the root element: nothing is put into Instagram's tree and nothing of it moves.
+    let share = 0; for (const r of document.querySelectorAll('[data-igx="sugg-row"]')) share += CORE.shareOf(r);
+    const only = share > 0.5 && ![...document.querySelectorAll('main article')].some((p) => CORE.isVisible(p) && !p.hasAttribute('data-igx'));
+    if (only !== root.hasAttribute('data-igx-only-sugg')) { if (only) { root.setAttribute('data-igx-only-sugg', ''); note('sugg-note'); } else root.removeAttribute('data-igx-only-sugg'); }
+    if (only && !document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = 'html[data-igx-only-sugg]::after{content:"Suggestions are hidden";position:fixed;left:0;right:0;top:40%;text-align:center;font:14px/1.4 -apple-system,system-ui,sans-serif;color:#737373;pointer-events:none;z-index:1}'; (document.head || root).appendChild(st); }
+    // links to the suggestions page ("See all"), wherever they are outside the navigation
+    for (const a of document.querySelectorAll('a[href^="/explore/people"]')) if (!a.hasAttribute('data-igx') && !a.closest('[data-igt-nav]')) CORE.blank(a, 'sugg-head', 'structure');
+    // the button by a profile's Follow that opens its similar accounts: that button itself, by its label, in the header
+    const head = CORE.profileHeader();
+    if (head) for (const b of head.querySelectorAll('button, [role="button"]')) {
+      if (!b.hasAttribute('data-igx') && /^similar accounts$/i.test(CORE.labelOf(b)) && !b.querySelector('button, [role="button"]')) { if (CORE.blank(b, 'sugg-button', 'structure')) note('sugg-button'); }
     }
-    noSuggRows();
   }
   let sg = 0;
   new MutationObserver(() => { if (!sg) sg = setTimeout(() => { sg = 0; noSuggestions(); }, 120); }).observe(document, { childList: true, subtree: true });

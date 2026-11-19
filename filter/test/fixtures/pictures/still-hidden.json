@@ -1,0 +1,125 @@
+{
+ "_what": "Fine pictures the judges still flag (2026-11-19), looked at by an agent or reported by the urgent pass: a plate of food, coloured smoke, a hand in pink light, a silhouette, and posts of a guitar maker and a space agency with people in them. Not asserted either way. They stay hidden because no change was found that shows them and still flags every picture in bad.json: the first judge (nsfwjs, MobileNetV2) calls them explicit on its own, and the fix is a better judge, measured on these files, not a higher line.",
+ "pictures": [
+  {
+   "id": "profile-c-04",
+   "scores": {
+    "Neutral": 0.7391,
+    "Drawing": 0.256,
+    "Hentai": 0.0038,
+    "Porn": 0.0009,
+    "Sexy": 0.0002,
+    "Revealing": 0.6398,
+    "Scene": 0.2437
+   },
+   "before": {
+    "Neutral": 0.7391,
+    "Drawing": 0.256,
+    "Hentai": 0.0038,
+    "Porn": 0.0009,
+    "Sexy": 0.0002,
+    "Revealing": 0.6398
+   }
+  },
+  {
+   "id": "profile-c-06",
+   "scores": {
+    "Porn": 0.8727,
+    "Neutral": 0.112,
+    "Sexy": 0.0097,
+    "Hentai": 0.0052,
+    "Drawing": 0.0004,
+    "Revealing": 0.2918,
+    "Scene": 0.4234
+   },
+   "before": {
+    "Porn": 0.8727,
+    "Neutral": 0.112,
+    "Sexy": 0.0097,
+    "Hentai": 0.0052,
+    "Drawing": 0.0004,
+    "Revealing": 0.2918
+   }
+  },
+  {
+   "id": "profile-c-10",
+   "scores": {
+    "Porn": 0.6747,
+    "Neutral": 0.2971,
+    "Sexy": 0.0214,
+    "Hentai": 0.0046,
+    "Drawing": 0.0022,
+    "Revealing": 0.2062,
+    "Scene": 0.025
+   },
+   "before": {
+    "Porn": 0.6747,
+    "Neutral": 0.2971,
+    "Sexy": 0.0214,
+    "Hentai": 0.0046,
+    "Drawing": 0.0022,
+    "Revealing": 0.2062
+   }
+  },
+  {
+   "id": "guitar-maker-06",
+   "scores": {
+    "Neutral": 0.6192,
+    "Porn": 0.5269,
+    "Sexy": 0.0075,
+    "Hentai": 0.007,
+    "Drawing": 0.0038,
+    "Revealing": 0.5147,
+    "Scene": 0.3686
+   }
+  },
+  {
+   "id": "guitar-maker-07",
+   "scores": {
+    "Neutral": 0.8546,
+    "Porn": 0.3001,
+    "Sexy": 0.009,
+    "Hentai": 0.0053,
+    "Drawing": 0.0019,
+    "Revealing": 0.0859,
+    "Scene": 0.5156
+   }
+  },
+  {
+   "id": "space-agency-08",
+   "scores": {
+    "Neutral": 0.9964,
+    "Porn": 0.3546,
+    "Sexy": 0.0706,
+    "Hentai": 0.0076,
+    "Drawing": 0.0024,
+    "Revealing": 0.6153,
+    "Scene": 0.0943
+   }
+  },
+  {
+   "id": "space-agency-12",
+   "scores": {
+    "Neutral": 0.9946,
+    "Porn": 0.6416,
+    "Sexy": 0.0296,
+    "Hentai": 0.0083,
+    "Drawing": 0.0046,
+    "Revealing": 0.0638,
+    "Scene": 0.2864
+   }
+  },
+  {
+   "id": "profile-c-01",
+   "scores": {
+    "Neutral": 0.9729,
+    "Porn": 0.4524,
+    "Sexy": 0.0155,
+    "Hentai": 0.0046,
+    "Drawing": 0.0032,
+    "Revealing": 0.0454,
+    "Scene": 0.9303
+   }
+  }
+ ]
+}

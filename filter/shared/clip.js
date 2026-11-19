@@ -149,11 +149,20 @@
     const logits = prompts.embeds.map((t) => { let s = 0; for (let i = 0; i < t.length; i++) s += t[i] * e[i]; return s * prompts.scale; });
     const m = Math.max(...logits), ex = logits.map((l) => Math.exp(l - m)), sum = ex.reduce((a, b) => a + b, 0);
     let rev = 0; for (let i = 0; i < prompts.nrev; i++) rev += ex[i] / sum;
+    // How surely the picture is of no person at all (a landscape, gear, a product, food, text, a building, an animal,
+    // a drawing): the share of those prompts. Kept beside the picture for the classifier's colour check (classifier.js).
+    let scene = 0; for (const i of NO_PERSON) if (prompts.nrev + i < ex.length) scene += ex[prompts.nrev + i] / sum;
+    scenes.set(img, Math.round(scene * 10000) / 10000);
     info.n++; info.totalMs += performance.now() - started;
     return Math.round(rev * 10000) / 10000;
   }
+  // The "neg" prompts of vendor/clip-prompts.json that have no person in them, by their place in that list.
+  const NO_PERSON = [9, 10, 11, 12, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31];
+  const scenes = new WeakMap();
+  /** The no-person share of an image revealing() has judged (0 to 1), or 0 if it has not. */
+  const sceneOf = (img) => scenes.get(img) || 0;
 
   /** How many pictures can be judged at once (the lanes ready now; one in the page). */
   const width = () => Math.max(1, lanes.length);
-  window.IGClip = { load, revealing, width, info: () => ({ ...info, mode: lanes.length ? 'workers' : session ? 'page' : '', lanes: lanes.length, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
+  window.IGClip = { load, revealing, sceneOf, width, info: () => ({ ...info, mode: lanes.length ? 'workers' : session ? 'page' : '', lanes: lanes.length, avgMs: info.n ? Math.round(info.totalMs / info.n) : 0 }) };
 })();

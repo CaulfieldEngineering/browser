@@ -24,7 +24,7 @@ final class InstagramFilterTests: XCTestCase {
     }
 
     func testTheFilterFilesAreInTheApp() {
-        for name in ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "reddit-filter", "classifier", "clip", "clip-worker"] {
+        for name in ["filter-config", "rules", "bridge-ios", "ig-core", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "reddit-filter", "classifier", "clip", "clip-worker"] {
             XCTAssertNotNil(Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"), "\(name).js")
         }
         XCTAssertNotNil(Bundle.main.url(forResource: "classifier", withExtension: "html", subdirectory: "shared"))
@@ -167,8 +167,10 @@ final class InstagramFilterTests: XCTestCase {
         // (Joe: "my feed seems to stop after a few scrolls down").
         // Since 2026-11-15 a post removed while it is on screen goes blank where it is (nothing under it moves) and closes
         // up once it is off screen (Joe: "Its infuriatingly glitchy and is gonna give me epilepsy"); either is hidden.
-        let shown = try? await web.evaluateJavaScript("(() => { const e = document.getElementById('hot'), cs = getComputedStyle(e); return (e.getBoundingClientRect().height <= 1 && cs.opacity === '0') || (e.hasAttribute('data-igf-defer') && cs.visibility === 'hidden') ? 'collapsed' : 'shown'; })() + '|' + document.body.innerText") as? String
-        XCTAssertEqual(shown?.components(separatedBy: "|").first, "collapsed", "a hidden post collapses")
+        let shown = try? await web.evaluateJavaScript("(() => { const e = document.getElementById('hot'), cs = getComputedStyle(e); return e.hasAttribute('data-igx') && e.getBoundingClientRect().height > 1 && getComputedStyle(e.firstElementChild).visibility === 'hidden' ? 'blank' : 'shown:' + cs.display + ':' + e.getBoundingClientRect().height; })() + '|' + document.body.innerText") as? String
+        // Since 2026-11-19 a hidden post is blanked in place: it keeps its box (Instagram's layout is never changed) and
+        // everything in it is invisible (Joe: "its all destroying instagram"; docs/instagram-filter-design.md).
+        XCTAssertEqual(shown?.components(separatedBy: "|").first, "blank", "a hidden post is blank in place, its box kept")
         XCTAssertFalse(shown?.contains("Hidden") ?? true, "nothing on the page says why")
         let seen = try? await web.evaluateJavaScript("typeof window.IGFilterRules + typeof window.__igFilter") as? String
         XCTAssertEqual(seen, "undefinedundefined", "the page cannot see the filter")
@@ -318,8 +320,13 @@ final class InstagramFilterTests: XCTestCase {
         XCTAssertTrue(loaded, "the test's page is on screen")
         let ran = try await until(web, "Number(document.documentElement.getAttribute('data-igf-pass') || 0) >= 1")
         XCTAssertTrue(ran, "the filter finished a pass over it (its account checks included)")
-        let js = "['ok','bad'].map(i => { let e = document.getElementById(i); for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return i + ':gone'; return i + ':shown'; }).join(' ')"
-        let state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+        let js = "['ok','bad'].map(i => { const e = document.getElementById(i); return i + (getComputedStyle(e).visibility === 'hidden' && !!e.closest('[data-igx]') ? ':gone' : ':shown'); }).join(' ')"
+        var state = ""
+        for _ in 0..<20 {
+            state = (try? await web.evaluateJavaScript(js) as? String) ?? ""
+            if state == "ok:shown bad:gone" { break }
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
         let runs = try? await web.evaluateJavaScript("document.documentElement.getAttribute('data-igf-acc') || 'never ran'") as? String
         XCTAssertEqual(state, "ok:shown bad:gone", "account checks: \(runs ?? "?")")
     }
@@ -351,7 +358,7 @@ final class InstagramFilterTests: XCTestCase {
         var gone = false
         for _ in 0..<20 {
             try await Task.sleep(nanoseconds: 300_000_000)
-            gone = (try? await web.evaluateJavaScript("document.getElementById('post').getBoundingClientRect().height <= 1 && getComputedStyle(document.getElementById('post')).opacity === '0'") as? Bool) ?? false
+            gone = (try? await web.evaluateJavaScript("document.getElementById('post').hasAttribute('data-igx') && getComputedStyle(document.getElementById('pic')).visibility === 'hidden'") as? Bool) ?? false
             if gone && HiddenByHand.shared.ids.contains("instagram:BYHAND9") { break }
         }
         XCTAssertTrue(gone, "the post is hidden")

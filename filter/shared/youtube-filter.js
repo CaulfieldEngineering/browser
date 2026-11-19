@@ -14,7 +14,13 @@
 //     shelves, the end screen's tiles). A watch page whose own text is sexual only marks its channel, so that channel's
 //     tiles are taken from the recommendations for the rest of the visit.
 //   - A thumbnail is not held while it is judged (config thumbnails.hold), so pages never sit blank.
-// It is the feature `youtube`; off in the default config until Joe turns it on.
+// It is the feature `youtube`; on since 2026-11-19 (Joe: "also our youtube filter still needs to remove \"sexual\" content").
+// Joe's own words for what it takes, 2026-11-19: "For youtube: sexual content only - so, this can be things like latex
+// models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value". So: a
+// video whose evident purpose is sexual appeal (latex and fetish-outfit model videos, sensual or girlfriend-roleplay
+// ASMR, bikini, swimsuit and lingerie model videos and try-on hauls). Not: music videos, gear, tutorials, news, comedy,
+// sports, fitness instruction, ordinary ASMR (tapping, cooking, whispering), or anything with real other value, even
+// with a person in swimwear in it. Terms and the thumbnail line are data (the config's youtube block).
 (function (run) { const G = globalThis.FilterGate; if (G && G.when) G.when(run); else run(); })(function () {
   'use strict';
   const F = (name, href) => { const f = globalThis.FilterFeature; return typeof f !== 'function' || f(name, href); };
@@ -30,16 +36,14 @@
     tileChannel: ['ytd-channel-name', '#channel-name', '.yt-content-metadata-view-model__metadata-text'],
     captions: { on: true, selector: '.ytp-caption-segment', everySeconds: 2, keepChars: 800 },
     transcript: { on: true },
-    thumbnails: { judge: true, hold: false, minPx: 100, line: { explicit: 0.3, sexy: 0.45, combined: 0.6 } },
+    // (the thumbnail line: the suggestive judge's own; `revealing` is a line of its own for YouTube, null = not used,
+    // since a person in swimwear or gymwear is not by itself in scope here: fitness, sport and travel stay)
+    thumbnails: { judge: true, hold: false, minPx: 100, line: { explicit: 0.3, sexy: 0.45, combined: 0.6 }, revealing: null },
     terms: {
-      always: ['porn', 'porno', 'pornhub', 'onlyfans', 'only fans', 'fansly', 'nsfw', 'xxx', 'hentai', 'rule 34', 'rule34', 'camgirl', 'cam girl',
-        'striptease', 'strip tease', 'stripper', 'lap dance', 'thirst trap', 'thirst traps', 'lingerie', 'try on haul', 'try-on haul', 'bikini haul',
-        'micro bikini', 'see through haul', 'twerk', 'twerking', 'boobs', 'sexy', 'sex tape', 'leaked nudes', 'nip slip', 'wardrobe malfunction', 'asmr girlfriend'],
-      words: ['nude', 'nudes', 'naked', 'topless', 'braless', 'sex', 'sexual', 'sexually', 'erotic', 'erotica', 'sensual', 'seductive', 'cleavage', 'booty', 'bikini', 'hot girls', 'babes', 'kissing'],
-      notWhen: ['true crime', 'murder', 'murdered', 'killer', 'serial killer', 'homicide', 'case', 'trial', 'court', 'convicted', 'sentenced', 'investigation',
-        'documentary', 'news', 'police', 'detective', 'assault', 'abuse', 'victim', 'victims', 'survivor', 'trafficking', 'education', 'health', 'doctor',
-        'medical', 'history', 'explained', 'lecture', 'interview', 'podcast', 'war', 'violence'],
-      patterns: [],
+      always: ["porn", "porno", "pornhub", "onlyfans", "only fans", "fansly", "nsfw", "xxx", "hentai", "rule 34", "rule34", "camgirl", "cam girl", "striptease", "strip tease", "lap dance", "thirst trap", "thirst traps", "bikini haul", "lingerie haul", "lingerie try on", "lingerie try-on", "lingerie lookbook", "micro bikini", "see through haul", "twerk", "twerking", "boobs", "sexy", "sex tape", "leaked nudes", "nip slip", "wardrobe malfunction", "asmr girlfriend", "latex model", "latex models", "latex catsuit", "latex lookbook", "latex girl", "latex girls", "fetish model", "fetish fashion", "fetish outfit", "bikini model", "bikini models", "bikini girl", "bikini girls", "bikini try on", "bikini lookbook", "bikini photoshoot", "swimsuit model", "swimsuit models", "swimwear model", "swimsuit try on", "lingerie model", "see through try on", "transparent try on", "sheer try on", "no bra", "braless try on", "sensual asmr", "asmr sensual", "asmr kisses", "asmr kissing", "kissing asmr", "asmr gf", "girlfriend asmr", "girlfriend roleplay", "asmr ear licking", "ear licking", "ear eating", "asmr licking", "spicy asmr", "asmr lap", "lewd asmr", "asmr moaning", "fansly asmr"],
+      words: ["latex outfit", "latex dress", "latex leggings", "latex fashion", "stripper", "strippers", "lingerie", "catsuit", "nude", "nudes", "naked", "topless", "braless", "sex", "sexual", "sexually", "erotic", "erotica", "sensual", "seductive", "cleavage", "booty", "bikini", "hot girls", "babes", "kissing", "latex", "fetish", "swimsuit haul", "leggings haul", "yoga pants haul", "yoga pants try on"],
+      notWhen: ["true crime", "murder", "murdered", "killer", "serial killer", "homicide", "case", "trial", "court", "convicted", "sentenced", "investigation", "documentary", "news", "police", "detective", "assault", "abuse", "victim", "victims", "survivor", "trafficking", "education", "health", "doctor", "medical", "history", "explained", "lecture", "interview", "podcast", "war", "violence", "tutorial", "overleaf", "tex", "thesis", "equation", "equations", "math", "maths", "paper", "paint", "gloves", "mattress", "pillow", "allergy", "balloon", "balloons", "mask making", "mold", "mould", "casting", "prosthetic", "sfx", "surf", "surfing", "swim meet", "competition", "bodybuilding", "olympics", "volleyball", "bikini atoll", "bikini bottom", "spongebob", "science", "review", "reviewed", "song", "official video", "lyrics", "live at", "cover", "trailer", "movie", "film", "wire", "cable", "tool", "tools", "electrician", "sewing", "sew", "pattern", "diy", "how to", "cosplay", "costume", "halloween", "wetsuit", "superhero", "motorcycle", "racing", "kids", "school"],
+      patterns: ["\\basmr\\b.{0,60}\\b(girlfriend|gf|kiss(es|ing)?|sensual|seduc\\w+|lick(s|ing)?|flirt\\w*|cuddl\\w+|in bed|lap|moan\\w*)\\b", "\\b(girlfriend|gf|kiss(es|ing)?|sensual|seduc\\w+|lick(s|ing)?|flirt\\w*|moan\\w*)\\b.{0,60}\\basmr\\b", "\\b(bikini|bikinis|swimsuit|swimsuits|swimwear|lingerie|latex|pvc|leggings|yoga pants|bodysuit|thong|micro|see[\\s-]?through|sheer|transparent)\\b.{0,30}\\b(model|models|try[\\s-]?on|haul|lookbook|photoshoot|photo shoot|fashion show)\\b", "\\b(model|models|try[\\s-]?on|haul|lookbook|photoshoot)\\b.{0,30}\\b(bikini|bikinis|swimsuit|swimwear|lingerie|latex|pvc|bodysuit|thong|see[\\s-]?through|sheer|transparent)\\b", "\\bleather\\b.{0,20}\\b(bodysuit|lingerie|catsuit|leggings)\\b.{0,30}\\b(lookbook|try[\\s-]?on|haul|model)\\b"],
     },
     surfaces: { home: true, search: true, sidebar: true, shelves: true, endScreen: true },
     onSexualWatch: 'mark-channel',
@@ -76,7 +80,9 @@
   const state = (g.__ytFilter = { removed: 0, judged: 0, flaggedChannels: new Set(), watch: null, reasons: {} });
   const stat = (n) => { try { B && B.stat && B.stat(n); } catch {} };
   const TILE = C.tiles.join(', '), PLAYER = C.player.join(', ');
-  const css = '[data-ytf-gone]{display:none !important}[data-ytf-hold] img{visibility:hidden !important}';
+  // A tile that goes is blanked in place: it keeps its box, so YouTube's grid and lists are exactly as YouTube laid them
+  // out (2026-11-19, the same rule as Instagram: docs/instagram-filter-design.md); nothing in it shows or takes a click.
+  const css = '[data-ytf-gone],[data-ytf-gone] *{visibility:hidden !important;pointer-events:none !important}[data-ytf-hold] img{visibility:hidden !important}';
   const addStyle = () => { const p = document.head || document.documentElement; if (p && !document.getElementById('ytf-style')) { const s = document.createElement('style'); s.id = 'ytf-style'; s.textContent = css; p.appendChild(s); } };
   addStyle();
 
@@ -93,6 +99,7 @@
     if (tile.hasAttribute('data-ytf-gone') || isPlayerish(tile)) return;
     tile.setAttribute('data-ytf-gone', why);
     tile.removeAttribute('data-ytf-hold');
+    try { tile.setAttribute('aria-hidden', 'true'); tile.inert = true; for (const v of tile.querySelectorAll('video')) { v.muted = true; v.pause(); } } catch {} // (a tile's own hover preview, never the player: isPlayerish above)
     state.removed++; state.reasons[why] = (state.reasons[why] || 0) + 1;
     stat('hidden-yt-' + why.split(':')[0]);
   };
@@ -101,7 +108,7 @@
     for (const el of [tile, ...tile.querySelectorAll('a[title], a[aria-label], [aria-label], img[alt]')].slice(0, 30)) bits.push(el.getAttribute('title') || '', el.getAttribute('aria-label') || '', el.getAttribute('alt') || '');
     return bits.join(' ').replace(/\s+/g, ' ').slice(0, 1500);
   };
-  const channelOfTile = (tile) => { for (const s of C.tileChannel) { const el = tile.querySelector(s); if (el && el.textContent.trim()) return el.textContent.trim().toLowerCase(); } return ''; };
+  const channelOfTile = (tile) => { for (const s of C.tileChannel) { const el = tile.querySelector(s); if (el && el.textContent.trim()) return oneLine(el.textContent).toLowerCase(); } return ''; };
 
   // thumbnails: judged by the same judge as every picture, at YouTube's own line; not held while judged unless asked
   const line = C.thumbnails.line, REVEALING = (g.IGFilterRules && g.IGFilterRules.revealing) || 0.6;
@@ -109,7 +116,8 @@
     if (!s) return null;
     const ex = (s.Porn || 0) + (s.Hentai || 0);
     if (F('pictures') && (ex >= line.explicit || (s.Sexy || 0) >= line.sexy || ex + (s.Sexy || 0) >= line.combined)) return 'thumbnail';
-    if (F('revealing') && 'Revealing' in s && (s.Revealing || 0) >= REVEALING) return 'thumbnail-revealing';
+    const rl = typeof C.thumbnails.revealing === 'number' ? C.thumbnails.revealing : F('revealing') && C.thumbnails.revealing !== null ? REVEALING : null;
+    if (rl !== null && 'Revealing' in s && (s.Revealing || 0) >= rl) return 'thumbnail-revealing';
     return null;
   };
   const thumbSeen = new WeakMap();
@@ -147,13 +155,15 @@
 
   // ---- the video being watched: its own words, read; the player never touched ---------------------------------------
   const firstText = (sels) => { for (const s of sels) { const el = document.querySelector(s); if (el && el.textContent.trim()) return el.textContent.trim(); } return ''; };
+  // A channel's name as one line (YouTube writes it twice in the element, with line breaks between: seen live 2026-11-19).
+  const oneLine = (t) => String(t || '').split(/[\r\n]+/).map((x) => x.trim()).filter(Boolean)[0] || '';
   let capText = '', capFor = '';
   function watchCheck() {
     if (!/^\/(watch|shorts)/.test(location.pathname)) { state.watch = null; return; }
     const id = location.pathname + location.search;
     if (capFor !== id) { capFor = id; capText = ''; transcriptFor(id); }
     if (C.captions.on) for (const seg of document.querySelectorAll(C.captions.selector)) { const t = seg.textContent.trim(); if (t && !capText.endsWith(t)) capText = (capText + ' ' + t).slice(-C.captions.keepChars); }
-    const title = firstText(C.watch.title), channel = firstText(C.watch.channel), desc = firstText(C.watch.description).slice(0, 1500);
+    const title = firstText(C.watch.title), channel = oneLine(firstText(C.watch.channel)), desc = firstText(C.watch.description).slice(0, 1500);
     const why = sexualText(title + ' \n ' + desc, T) || sexualText(capText, T) || sexualText(state.transcript && state.transcript.id === id ? state.transcript.text : '', T);
     state.watch = { id, why, channel: channel.toLowerCase() };
     if (why && channel && C.onSexualWatch === 'mark-channel' && !state.flaggedChannels.has(channel.toLowerCase())) { state.flaggedChannels.add(channel.toLowerCase()); stat('yt-watch-flagged'); }

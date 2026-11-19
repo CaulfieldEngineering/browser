@@ -74,7 +74,7 @@ try {
   await ctx.route(/fbcdn\.net/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
   for (const f of ['filter-config.js', 'rules.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
   await ctx.addInitScript({ content: fakeBridge });
-  for (const f of ['ig-filter.js', 'ig-tidy.js', 'fb-tidy.js', 'hide-rules.js', 'hide-engine.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
+  for (const f of ['ig-core.js', 'ig-filter.js', 'ig-tidy.js', 'fb-tidy.js', 'hide-rules.js', 'hide-engine.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
   const go = async (url, wait = 1200) => { await page.goto(url); await page.waitForTimeout(wait); };

@@ -1,0 +1,773 @@
+{
+ "_what": "Known-bad pictures: revealing and explicit photographs from a public media archive (search words: swimwear, lingerie, sports bra, crop top, nude, topless), scored 2026-11-19 by the real judges (node filter/test/tools/score-pictures.mjs). Only the scores are kept. Every one must be flagged, always: this set only grows, and no change to a line, a rule or a judge may let one through. Scene is the second judge's no-person share (the highest here is 0.35; the colour check lets a picture go only at 0.9 and with every other score clean).",
+ "pictures": [
+  {
+   "id": "croptop-01",
+   "scores": {
+    "Porn": 0.8472,
+    "Sexy": 0.0873,
+    "Hentai": 0.0364,
+    "Neutral": 0.0279,
+    "Drawing": 0.0012,
+    "Revealing": 0.9767,
+    "Scene": 0.0011
+   }
+  },
+  {
+   "id": "croptop-02",
+   "scores": {
+    "Porn": 0.6724,
+    "Sexy": 0.2931,
+    "Neutral": 0.3675,
+    "Hentai": 0.0787,
+    "Drawing": 0.0085,
+    "Revealing": 0.9668,
+    "Scene": 0.0286
+   }
+  },
+  {
+   "id": "croptop-03",
+   "scores": {
+    "Porn": 0.4674,
+    "Sexy": 0.3075,
+    "Neutral": 0.7124,
+    "Hentai": 0.05,
+    "Drawing": 0.0568,
+    "Revealing": 0.6464,
+    "Scene": 0.1144
+   }
+  },
+  {
+   "id": "croptop-04",
+   "scores": {
+    "Sexy": 0.9391,
+    "Porn": 0.526,
+    "Neutral": 0.0113,
+    "Hentai": 0.0011,
+    "Drawing": 0,
+    "Revealing": 0.9806,
+    "Scene": 0.0131
+   }
+  },
+  {
+   "id": "croptop-05",
+   "scores": {
+    "Porn": 0.437,
+    "Neutral": 0.349,
+    "Sexy": 0.1831,
+    "Hentai": 0.0223,
+    "Drawing": 0.0086,
+    "Revealing": 0.9754,
+    "Scene": 0.0042
+   }
+  },
+  {
+   "id": "croptop-06",
+   "scores": {
+    "Sexy": 0.8893,
+    "Neutral": 0.3443,
+    "Porn": 0.0206,
+    "Drawing": 0.0019,
+    "Hentai": 0.0004,
+    "Revealing": 0.9569,
+    "Scene": 0.0192
+   }
+  },
+  {
+   "id": "croptop-07",
+   "scores": {
+    "Sexy": 0.9628,
+    "Neutral": 0.0334,
+    "Porn": 0.0038,
+    "Drawing": 0,
+    "Hentai": 0,
+    "Revealing": 0.9202,
+    "Scene": 0.0158
+   }
+  },
+  {
+   "id": "croptop-08",
+   "scores": {
+    "Sexy": 0.6119,
+    "Porn": 0.3239,
+    "Neutral": 0.057,
+    "Hentai": 0.0064,
+    "Drawing": 0.0008,
+    "Revealing": 0.904,
+    "Scene": 0.0164
+   }
+  },
+  {
+   "id": "croptop-09",
+   "scores": {
+    "Sexy": 0.8638,
+    "Porn": 0.5785,
+    "Neutral": 0.2469,
+    "Drawing": 0.0531,
+    "Hentai": 0.0157,
+    "Revealing": 0.976,
+    "Scene": 0.0123
+   }
+  },
+  {
+   "id": "croptop-10",
+   "scores": {
+    "Sexy": 0.9672,
+    "Neutral": 0.9086,
+    "Porn": 0.0395,
+    "Drawing": 0.0006,
+    "Hentai": 0.0003,
+    "Revealing": 0.9887,
+    "Scene": 0.0014
+   }
+  },
+  {
+   "id": "croptop-11",
+   "scores": {
+    "Sexy": 0.8548,
+    "Neutral": 0.4911,
+    "Porn": 0.2024,
+    "Drawing": 0.0127,
+    "Hentai": 0.0083,
+    "Revealing": 0.9765,
+    "Scene": 0.0009
+   }
+  },
+  {
+   "id": "croptop-12",
+   "scores": {
+    "Sexy": 0.9501,
+    "Porn": 0.169,
+    "Neutral": 0.0153,
+    "Hentai": 0.0012,
+    "Drawing": 0.0003,
+    "Revealing": 0.9173,
+    "Scene": 0.0294
+   }
+  },
+  {
+   "id": "lingerie-01",
+   "scores": {
+    "Sexy": 0.9366,
+    "Neutral": 0.4565,
+    "Porn": 0.2055,
+    "Drawing": 0.0011,
+    "Hentai": 0.0016,
+    "Revealing": 0.9731,
+    "Scene": 0.0189
+   }
+  },
+  {
+   "id": "lingerie-02",
+   "scores": {
+    "Sexy": 0.6566,
+    "Porn": 0.3393,
+    "Neutral": 0.0587,
+    "Hentai": 0.0168,
+    "Drawing": 0.0034,
+    "Revealing": 0.9933,
+    "Scene": 0.0048
+   }
+  },
+  {
+   "id": "lingerie-03",
+   "scores": {
+    "Porn": 0.7603,
+    "Sexy": 0.2244,
+    "Hentai": 0.0099,
+    "Neutral": 0.0054,
+    "Drawing": 0.0001,
+    "Revealing": 0.9648,
+    "Scene": 0.0295
+   }
+  },
+  {
+   "id": "lingerie-04",
+   "scores": {
+    "Sexy": 0.9146,
+    "Porn": 0.099,
+    "Neutral": 0.0578,
+    "Hentai": 0.0039,
+    "Drawing": 0.0024,
+    "Revealing": 0.9913,
+    "Scene": 0.0066
+   }
+  },
+  {
+   "id": "lingerie-05",
+   "scores": {
+    "Sexy": 0.9532,
+    "Porn": 0.4383,
+    "Neutral": 0.0066,
+    "Hentai": 0.003,
+    "Drawing": 0.0001,
+    "Revealing": 0.9972,
+    "Scene": 0.0023
+   }
+  },
+  {
+   "id": "lingerie-06",
+   "scores": {
+    "Sexy": 0.6858,
+    "Porn": 0.5403,
+    "Neutral": 0.0324,
+    "Hentai": 0.0032,
+    "Drawing": 0.0001,
+    "Revealing": 0.9972,
+    "Scene": 0.002
+   }
+  },
+  {
+   "id": "lingerie-07",
+   "scores": {
+    "Sexy": 0.6715,
+    "Porn": 0.699,
+    "Neutral": 0.0187,
+    "Hentai": 0.0111,
+    "Drawing": 0.0003,
+    "Revealing": 0.9883,
+    "Scene": 0.0081
+   }
+  },
+  {
+   "id": "lingerie-08",
+   "scores": {
+    "Sexy": 0.5962,
+    "Neutral": 0.9014,
+    "Porn": 0.0284,
+    "Drawing": 0.0012,
+    "Hentai": 0.0003,
+    "Revealing": 0.9829,
+    "Scene": 0.0112
+   }
+  },
+  {
+   "id": "lingerie-09",
+   "scores": {
+    "Porn": 0.5639,
+    "Sexy": 0.4215,
+    "Hentai": 0.0085,
+    "Neutral": 0.0059,
+    "Drawing": 0.0002,
+    "Revealing": 0.9967,
+    "Scene": 0.0026
+   }
+  },
+  {
+   "id": "lingerie-10",
+   "scores": {
+    "Porn": 0.4325,
+    "Neutral": 0.3203,
+    "Sexy": 0.2204,
+    "Hentai": 0.0184,
+    "Drawing": 0.0084,
+    "Revealing": 0.9068,
+    "Scene": 0.076
+   }
+  },
+  {
+   "id": "lingerie-11",
+   "scores": {
+    "Porn": 0.5437,
+    "Sexy": 0.4389,
+    "Hentai": 0.0125,
+    "Neutral": 0.0046,
+    "Drawing": 0.0003,
+    "Revealing": 0.984,
+    "Scene": 0.0111
+   }
+  },
+  {
+   "id": "lingerie-12",
+   "scores": {
+    "Porn": 0.6064,
+    "Sexy": 0.3785,
+    "Hentai": 0.0121,
+    "Neutral": 0.0028,
+    "Drawing": 0.0002,
+    "Revealing": 0.9563,
+    "Scene": 0.0372
+   }
+  },
+  {
+   "id": "nude-01",
+   "scores": {
+    "Neutral": 0.9941,
+    "Porn": 0.0478,
+    "Drawing": 0.0074,
+    "Sexy": 0.0085,
+    "Hentai": 0.0024,
+    "Revealing": 0.6123,
+    "Scene": 0.3463
+   }
+  },
+  {
+   "id": "nude-02",
+   "scores": {
+    "Sexy": 0.8997,
+    "Porn": 0.5454,
+    "Neutral": 0.1352,
+    "Hentai": 0.01,
+    "Drawing": 0.002,
+    "Revealing": 0.8829,
+    "Scene": 0.0944
+   }
+  },
+  {
+   "id": "nude-03",
+   "scores": {
+    "Porn": 0.8935,
+    "Sexy": 0.0398,
+    "Hentai": 0.0332,
+    "Neutral": 0.0324,
+    "Drawing": 0.0011,
+    "Revealing": 0.8419,
+    "Scene": 0.1276
+   }
+  },
+  {
+   "id": "nude-04",
+   "scores": {
+    "Porn": 0.7654,
+    "Sexy": 0.2218,
+    "Hentai": 0.0085,
+    "Neutral": 0.0042,
+    "Drawing": 0.0001,
+    "Revealing": 0.6411,
+    "Scene": 0.3007
+   }
+  },
+  {
+   "id": "nude-05",
+   "scores": {
+    "Porn": 0.8335,
+    "Sexy": 0.1851,
+    "Neutral": 0.1303,
+    "Hentai": 0.0205,
+    "Drawing": 0.0026,
+    "Revealing": 0.8818,
+    "Scene": 0.1014
+   }
+  },
+  {
+   "id": "nude-06",
+   "scores": {
+    "Porn": 0.8759,
+    "Sexy": 0.258,
+    "Hentai": 0.0152,
+    "Neutral": 0.0011,
+    "Drawing": 0,
+    "Revealing": 0.6938,
+    "Scene": 0.2808
+   }
+  },
+  {
+   "id": "nude-07",
+   "scores": {
+    "Porn": 0.7537,
+    "Sexy": 0.4186,
+    "Neutral": 0.0614,
+    "Hentai": 0.0091,
+    "Drawing": 0.0011,
+    "Revealing": 0.9751,
+    "Scene": 0.0174
+   }
+  },
+  {
+   "id": "nude-08",
+   "scores": {
+    "Porn": 0.9338,
+    "Sexy": 0.1057,
+    "Hentai": 0.004,
+    "Neutral": 0.0006,
+    "Drawing": 0,
+    "Revealing": 0.5767,
+    "Scene": 0.3308
+   }
+  },
+  {
+   "id": "nude-09",
+   "scores": {
+    "Porn": 0.8259,
+    "Sexy": 0.1422,
+    "Hentai": 0.0177,
+    "Neutral": 0.0141,
+    "Drawing": 0.0002,
+    "Revealing": 0.9549,
+    "Scene": 0.0337
+   }
+  },
+  {
+   "id": "nude-10",
+   "scores": {
+    "Porn": 0.6955,
+    "Sexy": 0.5395,
+    "Neutral": 0.1625,
+    "Hentai": 0.0068,
+    "Drawing": 0.0006,
+    "Revealing": 0.9034,
+    "Scene": 0.0647
+   }
+  },
+  {
+   "id": "nude-11",
+   "scores": {
+    "Porn": 0.9553,
+    "Sexy": 0.0839,
+    "Hentai": 0.0181,
+    "Neutral": 0.0588,
+    "Drawing": 0.0007,
+    "Revealing": 0.8549,
+    "Scene": 0.1023
+   }
+  },
+  {
+   "id": "sportsbra-01",
+   "scores": {
+    "Porn": 0.8684,
+    "Neutral": 0.3987,
+    "Sexy": 0.0593,
+    "Hentai": 0.0101,
+    "Drawing": 0.0014,
+    "Revealing": 0.4915,
+    "Scene": 0.0364
+   }
+  },
+  {
+   "id": "sportsbra-02",
+   "scores": {
+    "Sexy": 0.6113,
+    "Neutral": 0.2451,
+    "Porn": 0.1413,
+    "Hentai": 0.0013,
+    "Drawing": 0.0009,
+    "Revealing": 0.2582,
+    "Scene": 0.0108
+   }
+  },
+  {
+   "id": "sportsbra-03",
+   "scores": {
+    "Sexy": 0.9751,
+    "Porn": 0.0347,
+    "Neutral": 0.0153,
+    "Hentai": 0.0008,
+    "Drawing": 0.0005,
+    "Revealing": 0.9706,
+    "Scene": 0.0013
+   }
+  },
+  {
+   "id": "sportsbra-04",
+   "scores": {
+    "Hentai": 0.5728,
+    "Porn": 0.3255,
+    "Sexy": 0.0744,
+    "Drawing": 0.0227,
+    "Neutral": 0.0047,
+    "Revealing": 0.7933,
+    "Scene": 0.1356
+   }
+  },
+  {
+   "id": "swim-01",
+   "scores": {
+    "Porn": 0.5287,
+    "Sexy": 0.5759,
+    "Hentai": 0.01,
+    "Neutral": 0.0249,
+    "Drawing": 0.0004,
+    "Revealing": 0.9463,
+    "Scene": 0.0446
+   }
+  },
+  {
+   "id": "swim-02",
+   "scores": {
+    "Sexy": 0.6207,
+    "Neutral": 0.2267,
+    "Porn": 0.1465,
+    "Hentai": 0.0037,
+    "Drawing": 0.0024,
+    "Revealing": 0.9622,
+    "Scene": 0.0168
+   }
+  },
+  {
+   "id": "swim-03",
+   "scores": {
+    "Sexy": 0.5384,
+    "Neutral": 0.2731,
+    "Porn": 0.1821,
+    "Hentai": 0.0039,
+    "Drawing": 0.0025,
+    "Revealing": 0.922,
+    "Scene": 0.0731
+   }
+  },
+  {
+   "id": "swim-04",
+   "scores": {
+    "Sexy": 0.8905,
+    "Porn": 0.0624,
+    "Neutral": 0.0398,
+    "Drawing": 0.0039,
+    "Hentai": 0.0035,
+    "Revealing": 0.9931,
+    "Scene": 0.0062
+   }
+  },
+  {
+   "id": "swim-05",
+   "scores": {
+    "Sexy": 0.7545,
+    "Neutral": 0.2284,
+    "Porn": 0.0169,
+    "Drawing": 0.0002,
+    "Hentai": 0.0001,
+    "Revealing": 0.9638,
+    "Scene": 0.0347
+   }
+  },
+  {
+   "id": "swim-06",
+   "scores": {
+    "Sexy": 0.9364,
+    "Porn": 0.0421,
+    "Neutral": 0.0212,
+    "Hentai": 0.0002,
+    "Drawing": 0.0001,
+    "Revealing": 0.9801,
+    "Scene": 0.0153
+   }
+  },
+  {
+   "id": "swim-07",
+   "scores": {
+    "Sexy": 0.9726,
+    "Porn": 0.0186,
+    "Neutral": 0.0087,
+    "Hentai": 0,
+    "Drawing": 0,
+    "Revealing": 0.8768,
+    "Scene": 0.0587
+   }
+  },
+  {
+   "id": "swim-08",
+   "scores": {
+    "Sexy": 0.7223,
+    "Porn": 0.2515,
+    "Neutral": 0.0253,
+    "Hentai": 0.0009,
+    "Drawing": 0.0001,
+    "Revealing": 0.9356,
+    "Scene": 0.0564
+   }
+  },
+  {
+   "id": "swim-09",
+   "scores": {
+    "Sexy": 0.853,
+    "Porn": 0.364,
+    "Neutral": 0.0736,
+    "Hentai": 0.0063,
+    "Drawing": 0.0004,
+    "Revealing": 0.9891,
+    "Scene": 0.0098
+   }
+  },
+  {
+   "id": "swim-10",
+   "scores": {
+    "Sexy": 0.9594,
+    "Neutral": 0.0963,
+    "Porn": 0.0281,
+    "Drawing": 0.0003,
+    "Hentai": 0.0002,
+    "Revealing": 0.9896,
+    "Scene": 0.0089
+   }
+  },
+  {
+   "id": "swim-11",
+   "scores": {
+    "Sexy": 0.5935,
+    "Neutral": 0.7741,
+    "Porn": 0.1111,
+    "Drawing": 0.0037,
+    "Hentai": 0.0015,
+    "Revealing": 0.9965,
+    "Scene": 0.0032
+   }
+  },
+  {
+   "id": "swim-12",
+   "scores": {
+    "Porn": 0.8092,
+    "Sexy": 0.0989,
+    "Neutral": 0.0516,
+    "Hentai": 0.0383,
+    "Drawing": 0.0019,
+    "Revealing": 0.9713,
+    "Scene": 0.0252
+   }
+  },
+  {
+   "id": "topless-01",
+   "scores": {
+    "Porn": 0.5287,
+    "Sexy": 0.5759,
+    "Hentai": 0.01,
+    "Neutral": 0.0249,
+    "Drawing": 0.0004,
+    "Revealing": 0.9463,
+    "Scene": 0.0446
+   }
+  },
+  {
+   "id": "topless-02",
+   "scores": {
+    "Neutral": 0.485,
+    "Sexy": 0.473,
+    "Porn": 0.0381,
+    "Drawing": 0.0026,
+    "Hentai": 0.0012,
+    "Revealing": 0.9885,
+    "Scene": 0.0058
+   }
+  },
+  {
+   "id": "topless-03",
+   "scores": {
+    "Porn": 0.5344,
+    "Neutral": 0.1809,
+    "Hentai": 0.1423,
+    "Sexy": 0.1047,
+    "Drawing": 0.0378,
+    "Revealing": 0.9318,
+    "Scene": 0.0615
+   }
+  },
+  {
+   "id": "topless-04",
+   "scores": {
+    "Porn": 0.6445,
+    "Sexy": 0.4954,
+    "Hentai": 0.003,
+    "Neutral": 0.0009,
+    "Drawing": 0,
+    "Revealing": 0.7907,
+    "Scene": 0.1911
+   }
+  },
+  {
+   "id": "topless-05",
+   "scores": {
+    "Sexy": 0.7586,
+    "Porn": 0.2311,
+    "Neutral": 0.008,
+    "Hentai": 0.0022,
+    "Drawing": 0.0002,
+    "Revealing": 0.9054,
+    "Scene": 0.0922
+   }
+  },
+  {
+   "id": "topless-06",
+   "scores": {
+    "Sexy": 0.4914,
+    "Neutral": 0.3555,
+    "Porn": 0.1492,
+    "Hentai": 0.002,
+    "Drawing": 0.0019,
+    "Revealing": 0.9825,
+    "Scene": 0.0151
+   }
+  },
+  {
+   "id": "topless-07",
+   "scores": {
+    "Porn": 0.5164,
+    "Sexy": 0.4478,
+    "Neutral": 0.0243,
+    "Hentai": 0.0103,
+    "Drawing": 0.0013,
+    "Revealing": 0.8781,
+    "Scene": 0.1192
+   }
+  },
+  {
+   "id": "topless-08",
+   "scores": {
+    "Sexy": 0.7226,
+    "Porn": 0.1509,
+    "Neutral": 0.1212,
+    "Hentai": 0.0029,
+    "Drawing": 0.0024,
+    "Revealing": 0.8382,
+    "Scene": 0.1574
+   }
+  },
+  {
+   "id": "topless-09",
+   "scores": {
+    "Neutral": 0.4464,
+    "Sexy": 0.3618,
+    "Porn": 0.1281,
+    "Drawing": 0.0364,
+    "Hentai": 0.0273,
+    "Revealing": 0.8068,
+    "Scene": 0.1873
+   }
+  },
+  {
+   "id": "topless-10",
+   "scores": {
+    "Sexy": 0.7493,
+    "Porn": 0.5909,
+    "Neutral": 0.1508,
+    "Hentai": 0.0026,
+    "Drawing": 0.0017,
+    "Revealing": 0.9859,
+    "Scene": 0.0113
+   }
+  },
+  {
+   "id": "topless-11",
+   "scores": {
+    "Porn": 0.8075,
+    "Sexy": 0.094,
+    "Hentai": 0.0648,
+    "Neutral": 0.031,
+    "Drawing": 0.0027,
+    "Revealing": 0.9618,
+    "Scene": 0.0328
+   }
+  },
+  {
+   "id": "topless-12",
+   "scores": {
+    "Porn": 0.7188,
+    "Sexy": 0.2744,
+    "Hentai": 0.0056,
+    "Neutral": 0.0012,
+    "Drawing": 0,
+    "Revealing": 0.9309,
+    "Scene": 0.0612
+   }
+  },
+  {
+   "id": "topless-13",
+   "scores": {
+    "Porn": 0.6023,
+    "Neutral": 0.2418,
+    "Sexy": 0.1325,
+    "Hentai": 0.0202,
+    "Drawing": 0.0032,
+    "Revealing": 0.9199,
+    "Scene": 0.0701
+   }
+  }
+ ]
+}

@@ -1,0 +1,621 @@
+{
+ "_what": "Fine pictures: the grids of five public profiles (three from the laptop's filter log of 2026-11-19, Joe: 'our filter is blocking fine posts'; a guitar maker and a space agency, where the urgent pass had seen fine posts hidden), scored by the real judges. Only the scores are kept. Every one must be shown. The ones with 'before' were hidden until the colour check of 2026-11-19 (pink clouds, a band under stage lights: scored explicit by their colour alone).",
+ "pictures": [
+  {
+   "id": "club-01",
+   "scores": {
+    "Neutral": 0.702,
+    "Drawing": 0.2818,
+    "Hentai": 0.0135,
+    "Porn": 0.0022,
+    "Sexy": 0.0005,
+    "Revealing": 0.0055,
+    "Scene": 0.9568
+   }
+  },
+  {
+   "id": "club-02",
+   "scores": {
+    "Neutral": 0.8226,
+    "Drawing": 0.1622,
+    "Hentai": 0.0099,
+    "Porn": 0.0044,
+    "Sexy": 0.0009,
+    "Revealing": 0.0047,
+    "Scene": 0.9536
+   }
+  },
+  {
+   "id": "club-03",
+   "scores": {
+    "Neutral": 0.7229,
+    "Drawing": 0.2682,
+    "Hentai": 0.0086,
+    "Porn": 0.0003,
+    "Sexy": 0.0001,
+    "Revealing": 0.0075,
+    "Scene": 0.83
+   }
+  },
+  {
+   "id": "club-04",
+   "scores": {
+    "Neutral": 0.9376,
+    "Drawing": 0.057,
+    "Hentai": 0.0046,
+    "Porn": 0.0007,
+    "Sexy": 0.0001,
+    "Revealing": 0.004,
+    "Scene": 0.9802
+   }
+  },
+  {
+   "id": "club-05",
+   "scores": {
+    "Neutral": 0.998,
+    "Porn": 0.0041,
+    "Drawing": 0.0013,
+    "Sexy": 0.0003,
+    "Hentai": 0.0002,
+    "Revealing": 0.0027,
+    "Scene": 0.9389
+   }
+  },
+  {
+   "id": "club-06",
+   "scores": {
+    "Neutral": 0.9709,
+    "Drawing": 0.0275,
+    "Hentai": 0.0015,
+    "Porn": 0.0001,
+    "Sexy": 0,
+    "Revealing": 0.003,
+    "Scene": 0.9771
+   }
+  },
+  {
+   "id": "club-07",
+   "scores": {
+    "Neutral": 0.8934,
+    "Drawing": 0.0937,
+    "Hentai": 0.0112,
+    "Porn": 0.0014,
+    "Sexy": 0.0003,
+    "Revealing": 0.0045,
+    "Scene": 0.9668
+   }
+  },
+  {
+   "id": "club-08",
+   "scores": {
+    "Neutral": 0.929,
+    "Drawing": 0.0644,
+    "Hentai": 0.0057,
+    "Porn": 0.0008,
+    "Sexy": 0.0001,
+    "Revealing": 0.0033,
+    "Scene": 0.9799
+   }
+  },
+  {
+   "id": "club-09",
+   "scores": {
+    "Neutral": 0.9993,
+    "Drawing": 0.0007,
+    "Hentai": 0,
+    "Porn": 0,
+    "Sexy": 0,
+    "Revealing": 0.0038,
+    "Scene": 0.9703
+   }
+  },
+  {
+   "id": "club-10",
+   "scores": {
+    "Neutral": 0.9917,
+    "Drawing": 0.0071,
+    "Hentai": 0.0011,
+    "Porn": 0.0001,
+    "Sexy": 0,
+    "Revealing": 0.0162,
+    "Scene": 0.9645
+   }
+  },
+  {
+   "id": "club-11",
+   "scores": {
+    "Neutral": 0.9269,
+    "Drawing": 0.0663,
+    "Hentai": 0.0059,
+    "Porn": 0.0008,
+    "Sexy": 0.0001,
+    "Revealing": 0.0029,
+    "Scene": 0.9876
+   }
+  },
+  {
+   "id": "club-12",
+   "scores": {
+    "Neutral": 0.9375,
+    "Drawing": 0.0569,
+    "Hentai": 0.0048,
+    "Porn": 0.0007,
+    "Sexy": 0.0001,
+    "Revealing": 0.0039,
+    "Scene": 0.9803
+   }
+  },
+  {
+   "id": "profile-b-01",
+   "scores": {
+    "Neutral": 0.9508,
+    "Porn": 0.0906,
+    "Sexy": 0.0173,
+    "Drawing": 0.0106,
+    "Hentai": 0.0162,
+    "Revealing": 0.0078,
+    "Scene": 0.1471
+   }
+  },
+  {
+   "id": "profile-b-02",
+   "scores": {
+    "Porn": 0.0135,
+    "Neutral": 0.4017,
+    "Hentai": 0.0971,
+    "Sexy": 0.0304,
+    "Drawing": 0.016,
+    "Revealing": 0.0173,
+    "Scene": 0.1596
+   },
+   "before": {
+    "Porn": 0.4547,
+    "Neutral": 0.4017,
+    "Hentai": 0.0971,
+    "Sexy": 0.0304,
+    "Drawing": 0.016,
+    "Revealing": 0.0173
+   }
+  },
+  {
+   "id": "profile-b-03",
+   "scores": {
+    "Neutral": 0.8678,
+    "Porn": 0.119,
+    "Sexy": 0.0111,
+    "Hentai": 0.0011,
+    "Drawing": 0.0009,
+    "Revealing": 0.2254,
+    "Scene": 0.5751
+   }
+  },
+  {
+   "id": "profile-b-04",
+   "scores": {
+    "Neutral": 0.8256,
+    "Porn": 0.1046,
+    "Drawing": 0.036,
+    "Sexy": 0.0179,
+    "Hentai": 0.016,
+    "Revealing": 0.2533,
+    "Scene": 0.3858
+   }
+  },
+  {
+   "id": "profile-b-05",
+   "scores": {
+    "Neutral": 0.6438,
+    "Porn": 0.15,
+    "Sexy": 0.0018,
+    "Hentai": 0.0007,
+    "Drawing": 0.0005,
+    "Revealing": 0.0092,
+    "Scene": 0.9159
+   },
+   "before": {
+    "Neutral": 0.6438,
+    "Porn": 0.3531,
+    "Sexy": 0.0018,
+    "Hentai": 0.0007,
+    "Drawing": 0.0005,
+    "Revealing": 0.0092
+   }
+  },
+  {
+   "id": "profile-b-06",
+   "scores": {
+    "Neutral": 0.9754,
+    "Porn": 0.1422,
+    "Sexy": 0.002,
+    "Drawing": 0.0048,
+    "Hentai": 0.0011,
+    "Revealing": 0.0093,
+    "Scene": 0.9697
+   }
+  },
+  {
+   "id": "profile-b-07",
+   "scores": {
+    "Neutral": 0.9996,
+    "Porn": 0.0002,
+    "Drawing": 0.0001,
+    "Sexy": 0.0001,
+    "Hentai": 0,
+    "Revealing": 0.0029,
+    "Scene": 0.2289
+   }
+  },
+  {
+   "id": "profile-b-08",
+   "scores": {
+    "Neutral": 0.9591,
+    "Porn": 0.0351,
+    "Drawing": 0.0177,
+    "Hentai": 0.008,
+    "Sexy": 0.0076,
+    "Revealing": 0.5659,
+    "Scene": 0.2062
+   }
+  },
+  {
+   "id": "profile-b-09",
+   "scores": {
+    "Neutral": 0.9856,
+    "Drawing": 0.0301,
+    "Porn": 0.0554,
+    "Hentai": 0.0107,
+    "Sexy": 0.0036,
+    "Revealing": 0.032,
+    "Scene": 0.6189
+   }
+  },
+  {
+   "id": "profile-b-10",
+   "scores": {
+    "Neutral": 0.9906,
+    "Porn": 0.0068,
+    "Sexy": 0.0022,
+    "Drawing": 0.0002,
+    "Hentai": 0.0001,
+    "Revealing": 0.0266,
+    "Scene": 0.8988
+   }
+  },
+  {
+   "id": "profile-c-02",
+   "scores": {
+    "Neutral": 0.9982,
+    "Drawing": 0.0054,
+    "Hentai": 0.0002,
+    "Porn": 0.0001,
+    "Sexy": 0,
+    "Revealing": 0.0165,
+    "Scene": 0.9477
+   }
+  },
+  {
+   "id": "profile-c-03",
+   "scores": {
+    "Neutral": 0.9786,
+    "Porn": 0.0108,
+    "Drawing": 0.0076,
+    "Hentai": 0.0024,
+    "Sexy": 0.0007,
+    "Revealing": 0.2488,
+    "Scene": 0.4219
+   }
+  },
+  {
+   "id": "profile-c-05",
+   "scores": {
+    "Neutral": 0.9966,
+    "Porn": 0.0062,
+    "Drawing": 0.0015,
+    "Hentai": 0.0009,
+    "Sexy": 0.0002,
+    "Revealing": 0.06,
+    "Scene": 0.4476
+   }
+  },
+  {
+   "id": "profile-c-07",
+   "scores": {
+    "Neutral": 0.9335,
+    "Drawing": 0.0435,
+    "Porn": 0.0148,
+    "Hentai": 0.0061,
+    "Sexy": 0.0021,
+    "Revealing": 0.3526,
+    "Scene": 0.31
+   }
+  },
+  {
+   "id": "profile-c-08",
+   "scores": {
+    "Neutral": 0.9664,
+    "Drawing": 0.0174,
+    "Porn": 0.013,
+    "Hentai": 0.0026,
+    "Sexy": 0.0007,
+    "Revealing": 0.1743,
+    "Scene": 0.6348
+   }
+  },
+  {
+   "id": "profile-c-09",
+   "scores": {
+    "Neutral": 0.8542,
+    "Drawing": 0.1418,
+    "Hentai": 0.0022,
+    "Porn": 0.0015,
+    "Sexy": 0.0003,
+    "Revealing": 0.0249,
+    "Scene": 0.9214
+   }
+  },
+  {
+   "id": "profile-c-11",
+   "scores": {
+    "Neutral": 0.9784,
+    "Drawing": 0.0131,
+    "Porn": 0.0051,
+    "Hentai": 0.0031,
+    "Sexy": 0.0003,
+    "Revealing": 0.0231,
+    "Scene": 0.934
+   }
+  },
+  {
+   "id": "profile-c-12",
+   "scores": {
+    "Neutral": 0.9418,
+    "Drawing": 0.055,
+    "Porn": 0.0017,
+    "Hentai": 0.0009,
+    "Sexy": 0.0007,
+    "Revealing": 0.0427,
+    "Scene": 0.6037
+   }
+  },
+  {
+   "id": "guitar-maker-01",
+   "scores": {
+    "Neutral": 0.9986,
+    "Porn": 0.0182,
+    "Sexy": 0.0024,
+    "Drawing": 0.0015,
+    "Hentai": 0.0019,
+    "Revealing": 0.0301,
+    "Scene": 0.4338
+   }
+  },
+  {
+   "id": "guitar-maker-02",
+   "scores": {
+    "Neutral": 0.9997,
+    "Drawing": 0.0008,
+    "Porn": 0.0005,
+    "Hentai": 0.0002,
+    "Sexy": 0,
+    "Revealing": 0,
+    "Scene": 0.9836
+   }
+  },
+  {
+   "id": "guitar-maker-03",
+   "scores": {
+    "Neutral": 0.9986,
+    "Drawing": 0.0101,
+    "Porn": 0.0036,
+    "Hentai": 0.0016,
+    "Sexy": 0.0004,
+    "Revealing": 0.0001,
+    "Scene": 0.9971
+   }
+  },
+  {
+   "id": "guitar-maker-04",
+   "scores": {
+    "Neutral": 0.9998,
+    "Porn": 0.1019,
+    "Sexy": 0.0036,
+    "Drawing": 0.0005,
+    "Hentai": 0.001,
+    "Revealing": 0.0357,
+    "Scene": 0.7608
+   }
+  },
+  {
+   "id": "guitar-maker-05",
+   "scores": {
+    "Neutral": 0.9989,
+    "Drawing": 0.0144,
+    "Hentai": 0.0079,
+    "Porn": 0.15,
+    "Sexy": 0.0101,
+    "Revealing": 0.0047,
+    "Scene": 0.9707
+   }
+  },
+  {
+   "id": "guitar-maker-08",
+   "scores": {
+    "Neutral": 0.9836,
+    "Porn": 0.0285,
+    "Sexy": 0.0116,
+    "Drawing": 0.0061,
+    "Hentai": 0.006,
+    "Revealing": 0.0003,
+    "Scene": 0.8818
+   }
+  },
+  {
+   "id": "guitar-maker-09",
+   "scores": {
+    "Neutral": 0.9916,
+    "Drawing": 0.0082,
+    "Hentai": 0.0002,
+    "Porn": 0,
+    "Sexy": 0,
+    "Revealing": 0.0001,
+    "Scene": 0.9972
+   }
+  },
+  {
+   "id": "guitar-maker-10",
+   "scores": {
+    "Neutral": 0.9985,
+    "Porn": 0.1617,
+    "Sexy": 0.1313,
+    "Drawing": 0.0088,
+    "Hentai": 0.0048,
+    "Revealing": 0.0183,
+    "Scene": 0.4793
+   }
+  },
+  {
+   "id": "guitar-maker-11",
+   "scores": {
+    "Drawing": 0.756,
+    "Neutral": 0.1373,
+    "Hentai": 0.0629,
+    "Sexy": 0.0277,
+    "Porn": 0.0161,
+    "Revealing": 0.0581,
+    "Scene": 0.8934
+   }
+  },
+  {
+   "id": "guitar-maker-12",
+   "scores": {
+    "Neutral": 0.9996,
+    "Drawing": 0.0003,
+    "Hentai": 0,
+    "Porn": 0,
+    "Sexy": 0,
+    "Revealing": 0.0001,
+    "Scene": 0.9985
+   }
+  },
+  {
+   "id": "space-agency-01",
+   "scores": {
+    "Neutral": 0.9936,
+    "Drawing": 0.109,
+    "Hentai": 0.0039,
+    "Porn": 0.0035,
+    "Sexy": 0.0016,
+    "Revealing": 0.0041,
+    "Scene": 0.9751
+   }
+  },
+  {
+   "id": "space-agency-02",
+   "scores": {
+    "Neutral": 0.9358,
+    "Drawing": 0.0593,
+    "Porn": 0.0037,
+    "Hentai": 0.0009,
+    "Sexy": 0.0004,
+    "Revealing": 0.0043,
+    "Scene": 0.9432
+   }
+  },
+  {
+   "id": "space-agency-03",
+   "scores": {
+    "Neutral": 0.9165,
+    "Porn": 0.0713,
+    "Drawing": 0.0071,
+    "Sexy": 0.0031,
+    "Hentai": 0.0019,
+    "Revealing": 0.0081,
+    "Scene": 0.9277
+   }
+  },
+  {
+   "id": "space-agency-04",
+   "scores": {
+    "Neutral": 0.9997,
+    "Drawing": 0.0224,
+    "Porn": 0.0015,
+    "Hentai": 0.0005,
+    "Sexy": 0.0001,
+    "Revealing": 0.005,
+    "Scene": 0.9714
+   }
+  },
+  {
+   "id": "space-agency-05",
+   "scores": {
+    "Neutral": 0.981,
+    "Porn": 0.0108,
+    "Drawing": 0.0075,
+    "Hentai": 0.0004,
+    "Sexy": 0.0002,
+    "Revealing": 0.0072,
+    "Scene": 0.9126
+   }
+  },
+  {
+   "id": "space-agency-06",
+   "scores": {
+    "Neutral": 0.9865,
+    "Drawing": 0.0394,
+    "Porn": 0.0025,
+    "Sexy": 0.0011,
+    "Hentai": 0.0022,
+    "Revealing": 0.0231,
+    "Scene": 0.8837
+   }
+  },
+  {
+   "id": "space-agency-07",
+   "scores": {
+    "Neutral": 0.9991,
+    "Drawing": 0.0009,
+    "Porn": 0,
+    "Hentai": 0,
+    "Sexy": 0,
+    "Revealing": 0.0393,
+    "Scene": 0.8201
+   }
+  },
+  {
+   "id": "space-agency-09",
+   "scores": {
+    "Neutral": 0.9144,
+    "Drawing": 0.0741,
+    "Porn": 0.0102,
+    "Hentai": 0.0008,
+    "Sexy": 0.0004,
+    "Revealing": 0.0068,
+    "Scene": 0.9373
+   }
+  },
+  {
+   "id": "space-agency-10",
+   "scores": {
+    "Neutral": 0.9969,
+    "Drawing": 0.0029,
+    "Hentai": 0.0001,
+    "Porn": 0.0001,
+    "Sexy": 0,
+    "Revealing": 0.0039,
+    "Scene": 0.9379
+   }
+  },
+  {
+   "id": "space-agency-11",
+   "scores": {
+    "Neutral": 0.9329,
+    "Porn": 0.0518,
+    "Sexy": 0.0077,
+    "Drawing": 0.0054,
+    "Hentai": 0.0022,
+    "Revealing": 0.0288,
+    "Scene": 0.8233
+   }
+  }
+ ]
+}

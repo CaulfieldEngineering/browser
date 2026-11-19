@@ -429,6 +429,7 @@ try {
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'filter-config.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'rules.js'), 'utf8') });
   await ctx.addInitScript({ content: fakeBridge });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-core.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-filter.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-tidy.js'), 'utf8') });
   await ctx.addInitScript({ content: 'globalThis.__igSeenMs = 300;' });
@@ -444,7 +445,8 @@ try {
   const go = async (p, wait = 900) => { await page.goto('https://www.instagram.com' + p); await page.waitForTimeout(wait); };
   // hidden: the post is marked and shows only its placeholder; shown: not marked and its media visible
   const hiddenAs = (sel) => page.$eval(sel, (e) => { const u = e.closest('[data-igf-gone]') || (e.previousElementSibling && e.previousElementSibling.classList.contains('igf-ph') && e.hasAttribute('data-igf-gone') ? e : null); return u ? u.getAttribute('data-igf-gone') : ''; });
-  const gone1px = (e) => e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0';
+  // Hidden is blank in place (2026-11-19): the post keeps its box and everything in it is invisible.
+  const gone1px = (e) => e.hasAttribute('data-igx') && e.getBoundingClientRect().height > 1 && [...e.children].every((c) => getComputedStyle(c).visibility === 'hidden');
   const visible = (sel) => page.$eval(sel, (e) => getComputedStyle(e).visibility === 'visible' && getComputedStyle(e).display !== 'none' && !e.closest('[data-igf-gone]'));
 
   // ---- the feed ----
@@ -455,12 +457,13 @@ try {
   check('feed: a flagged picture hides its post', (await hiddenAs('#img')) === 'image');
   // 2026-11-15 ("infuriatingly glitchy"): a post removed while it is on screen goes blank where it is, nothing under it
   // moves; it closes up once it is off the screen.
-  check('feed: a post removed on screen goes blank in place, with no words (nothing under it moves)', await page.$eval('#img', (e) => e.hasAttribute('data-igf-defer') && getComputedStyle(e).visibility === 'hidden' && e.getBoundingClientRect().height > 300 && !e.querySelector('.igf-ph')));
+  const imgBox = await page.$eval('#img', (e) => { const r = e.getBoundingClientRect(); return [Math.round(r.height), Math.round(r.top + scrollY)]; });
+  check('feed: a post removed goes blank in place, with no words (its box kept, nothing under it moves)', await page.$eval('#img', (e) => e.hasAttribute('data-igx') && [...e.children].every((c) => getComputedStyle(c).visibility === 'hidden') && e.getBoundingClientRect().height > 300 && !e.querySelector('.igf-ph')));
   await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
   await page.waitForTimeout(300);
-  check('feed: off the screen, the hidden post collapses entirely', await page.$eval('#img', (e) => !e.hasAttribute('data-igf-defer') && e.getBoundingClientRect().height <= 1 && getComputedStyle(e).opacity === '0'));
+  check('feed: off the screen it is the same box in the same place (it never collapses, 2026-11-19)', await page.$eval('#img', (e, was) => { const r = e.getBoundingClientRect(); return Math.round(r.height) === was[0] && Math.round(r.top + scrollY) === was[1]; }, imgBox));
   // Joe, 2026-11-08: the feed stopped loading after a hidden post; a post with display:none never comes into view.
-  check('feed: a hidden post still comes into view (one invisible pixel, not display:none), so the next posts load', await page.$eval('#img', (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height === 1));
+  check('feed: a hidden post still comes into view (its own box, not display:none), so the next posts load', await page.$eval('#img', (e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 300));
   await page.evaluate(() => scrollTo(0, 0));
   check('feed: nothing on the page says why (no labels)', !/Hidden|suggestive|caption/i.test(await page.evaluate(() => document.body.innerText)));
   check('feed: a caption tag hides its post', (await hiddenAs('#txt')) === 'text' && await page.$eval('#txt', gone1px));
@@ -550,16 +553,24 @@ try {
   check('feed: nor on the way back up, where runs of hidden posts are put in again and collapse again', up.worst <= 2 && up.moves > 150 && up.last <= 2 && up.shown === 0, JSON.stringify(up));
   const again = await slow(70, 200);
   check('feed: nor down again', again.worst <= 2 && again.moves > 150 && again.last >= 20 && again.shown === 0, JSON.stringify(again));
-  check('feed: every flagged post in the page is collapsed', await page.evaluate(() => [...document.querySelectorAll('article.vflag')].every((a) => a.getAttribute('data-igf-gone') === 'image' && a.getBoundingClientRect().height <= 1)));
-  check('feed: held still is counted on the device', (await page.evaluate(() => globalThis.IGFilterBridge.stats['feed-held'] || 0)) >= 3);
+  check('feed: every flagged post in the page is blank in place, at its full height', await page.evaluate(() => [...document.querySelectorAll('article.vflag')].every((a) => a.getAttribute('data-igf-gone') === 'image' && a.hasAttribute('data-igx') && a.getBoundingClientRect().height > 100)));
+  check('feed: the filter never scrolls the page (nothing changes height, so there is nothing to hold)', (await page.evaluate(() => globalThis.IGFilterBridge.stats['feed-held'] || 0)) === 0);
   check('feed: with the screen held, no jump is told to the mini PC', (await page.evaluate(() => globalThis.IGFilterBridge.diags.length)) === 0, JSON.stringify(await page.evaluate(() => globalThis.IGFilterBridge.diags.slice(0, 3))));
   // A jump the filter does not hold (something above the screen grows on a page with no posts in it): told, in numbers only.
-  await page.evaluate(() => { document.querySelector('main').innerHTML = '<div id="grow" style="height:10px"></div>' + Array.from({ length: 30 }, (_, i) => '<div class="row" style="height:200px">row ' + i + '</div>').join(''); scrollTo(0, 2000); });
+  // (a leap is a big move within 150 ms of the filter's last look at the page: one small scroll first, so that look is
+  // recent whatever else the page was doing, and the test does not hang on timing)
+  await page.evaluate(async () => { scrollBy(0, -1); await new Promise((r) => setTimeout(r, 60)); document.querySelector('main').innerHTML = '<div id="grow" style="height:10px"></div>' + Array.from({ length: 30 }, (_, i) => '<div class="row" style="height:200px">row ' + i + '</div>').join(''); scrollTo(0, 2000); });
   await page.waitForTimeout(300);
   await page.evaluate(() => { document.getElementById('grow').style.height = '500px'; document.querySelector('main').appendChild(document.createElement('i')); });
   await page.waitForTimeout(200);
   const told = await page.evaluate(() => globalThis.IGFilterBridge.diags);
-  check('a jump the filter does not hold is told to the mini PC (a leap down the page first, then the shift): on a profile, how far, numbers only', told.length === 2 && told[0][1].k === 2 && told[1][0] === 'jump' && told[1][1].k === 1 && told[1][1].s === 1 && Math.abs(told[1][1].d - 490) <= 2 && told.every((t) => Object.values(t[1]).every((v) => typeof v === 'number')), JSON.stringify(told));
+  // Since 2026-11-19 the browser's own scroll anchoring is left on (the filter no longer changes a height, so it no
+  // longer switches anchoring off): where the browser anchors (Chromium), something growing above the screen moves
+  // nothing on it and only the leap is told; where it does not (WebKit), the shift is told too, as before.
+  const anchors = await page.evaluate(() => { try { return CSS.supports('overflow-anchor', 'auto') && getComputedStyle(document.documentElement).overflowAnchor !== 'none'; } catch { return false; } });
+  const numbersOnly = told.every((t) => Object.values(t[1]).every((v) => typeof v === 'number'));
+  check('a jump is told to the mini PC, numbers only (a leap down the page; and the shift where the browser does not hold the screen itself)', told.length >= 1 && told[0][0] === 'jump' && told[0][1].k === 2 && numbersOnly
+    && (anchors ? told.length === 1 : told.length === 2 && told[1][1].k === 1 && told[1][1].s === 1 && Math.abs(told[1][1].d - 490) <= 2), JSON.stringify({ anchors, told }));
   // ---- the home feed is the Following feed ("I see the same 10 accounts and its not even people I know") ----
   await go('/', 700);
   check('following: opening instagram.com lands on the Following feed', new URL(page.url()).search === '?variant=following', page.url());
@@ -623,7 +634,7 @@ try {
   check('reels tab: the plain tile still shows at its size', await page.$eval('#r1', (e) => e.getBoundingClientRect().height >= 290));
   // ---- a grid of rows: a hidden tile keeps its place, nothing moves ----
   await go('/gridprofile/');
-  check("grid: the flagged tile's picture is gone", await page.$eval('#g2 img', (e) => getComputedStyle(e).visibility === 'hidden') && await page.$eval('#g2', (e) => e.hasAttribute('data-igf-tile')));
+  check("grid: the flagged tile's picture is gone", await page.$eval('#g2 img', (e) => getComputedStyle(e).visibility === 'hidden') && await page.$eval('#g2', (e) => e.hasAttribute('data-igf-tile') && e.hasAttribute('data-igx')));
   check('grid: the flagged tile keeps its box (a plain blank of its size)', await page.evaluate(() => { const r = (id) => document.getElementById(id).parentElement.getBoundingClientRect(); return Math.abs(r('g2').height - r('g1').height) < 2 && Math.abs(r('g2').width - r('g1').width) < 2; }));
   check('grid: the tiles after it stay where Instagram put them', await page.evaluate(() => { const r = (id) => document.getElementById(id).parentElement.getBoundingClientRect(); return Math.abs(r('g3').top - r('g1').top) < 2 && r('g3').left > r('g2').right - 1 && r('g4').top >= r('g1').bottom - 1 && Math.abs(r('g4').left - r('g1').left) < 2; }));
   check('grid: the columns keep their width', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g1').width - r('g4').width) < 2 && r('g1').width >= 190; }));
@@ -732,7 +743,7 @@ try {
   await page.setViewportSize({ width: 1280, height: 720 });
   // ---- the search page, plain ("get rid of all of the junk and images that come along with the Instagram search page") ----
   await go('/explore/search/keyword/', 1200);
-  const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return true; }, id);
+  const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; if (e.closest('[data-igx]')) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return true; }, id);
   check('search: the search field stays', await shown('q'));
   check('search: an account result stays, with its small avatar (judged clean)', (await shown('r1')) && (await shown('r1img')));
   check('search: a hashtag result stays', await shown('r2'));
@@ -789,7 +800,7 @@ try {
   // ---- hide rules as data: the extra (fetched) rules only add ----
   await go('/?variant=following&fx=extra', 1800);
   check('hide rules: a heading named only in the extra rules takes its panel', !(await shown('xpanel')) && !(await shown('xhead')));
-  check('hide rules: a phrase takes its post (collapsed, so the feed still loads)', await page.$eval('#xpaid', (e) => e.hasAttribute('data-fhr') && e.getBoundingClientRect().height <= 1));
+  check('hide rules: a phrase takes its post (blank in place, its box kept)', await page.$eval('#xpaid', (e) => e.hasAttribute('data-fhr') && e.hasAttribute('data-igx') && e.getBoundingClientRect().height > 1 && [...e.children].every((c) => getComputedStyle(c).visibility === 'hidden')));
   check('hide rules: a selector and a button', !(await shown('xsel')) && !(await shown('xbtn')));
   check('hide rules: the floor stays ("unhide" and empty lists in the extra file change nothing)', !(await shown('xsugg')) && await page.evaluate(() => { const l = globalThis.__hideEngine.rules.sites['instagram.com']; return l.headings.includes('Suggested for you') && l.headings.includes('Brands you might like') && !('unhide' in l) && l.blockPaths.includes('/explore/people') && !l.blockPaths.includes('/'); }));
   check('hide rules: "main" and "body" as selectors, and "/" as a blocked path, do not blank the page', (await shown('X1')) && (await shown('X2')) && (await shown('tHome')) && /variant=following/.test(page.url()), page.url());
@@ -804,16 +815,16 @@ try {
   const joeLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden'; }), JOE_ROWS.map((r) => r[0]));
   check("suggestions, Joe's list (2026-11-18): every row is gone, Follow as a div or a button, mutuals or Followed by", joeLeft.length === 0, joeLeft.join(','));
   check("suggestions, Joe's list: the heading is gone", !(await shown('joehead')));
-  const note = await page.evaluate(() => { const n = document.querySelector('[data-igt-sugg-note]'); if (!n) return null; const s = getComputedStyle(n, '::before'); const r = n.getBoundingClientRect(); return { text: s.content, h: r.height, w: r.width }; });
-  check("suggestions, Joe's list: a page of only suggestions is not blank, one plain line says so", !!note && /Suggestions are hidden/.test(note.text) && note.h > 10 && note.h < 120, JSON.stringify(note));
+  const note = await page.evaluate(() => { const n = document.documentElement; if (!n.hasAttribute('data-igx-only-sugg')) return null; const s = getComputedStyle(n, '::after'); return { text: s.content, position: s.position }; });
+  check("suggestions, Joe's list: a page of only suggestions says so in one plain line, drawn over the page (nothing of Instagram's moves)", !!note && /Suggestions are hidden/.test(note.text) && note.position === 'fixed', JSON.stringify(note));
   check("suggestions, Joe's list: the page and the tab bar stay (main, the column)", (await shown('joecol')) && (await shown('tHome')) && (await shown('tProfile')));
   check("suggestions, Joe's list: the tab bar's avatar and links are untouched", await page.evaluate(() => !document.querySelector('#tabbar [data-igt], #tabbar[data-igt]')));
   await go('/?variant=following&fx=joefeed', 1800);
-  const feedLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && e.getBoundingClientRect().height > 0; }), JOE_ROWS.map((r) => r[0]));
+  const feedLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && getComputedStyle(e).visibility !== 'hidden'; }), JOE_ROWS.map((r) => r[0]));
   check("suggestions, Joe's rows after the Following feed's posts, no heading: every row goes", feedLeft.length === 0, feedLeft.join(','));
-  check("suggestions, Joe's rows after posts: the posts stay, and no note (it is not a page of suggestions)", (await shown('JF1')) && (await shown('JF2')) && !(await page.$('[data-igt-sugg-note]')));
+  check("suggestions, Joe's rows after posts: the posts stay, and no note (it is not a page of suggestions)", (await shown('JF1')) && (await shown('JF2')) && !(await page.$('html[data-igx-only-sugg]')));
   await go('/?variant=following&fx=deeplist', 1800);
-  const deepLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('dl-' + u); return e && e.getBoundingClientRect().height > 0; }), DEEP_ROWS.map((r) => r[0]));
+  const deepLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('dl-' + u); return e && getComputedStyle(e).visibility !== 'hidden'; }), DEEP_ROWS.map((r) => r[0]));
   check("suggestions, Joe's list of 2026-11-19 (rows as deep as Instagram's, mutual faces as links): every row is gone", deepLeft.length === 0, deepLeft.join(','));
   check("suggestions, Joe's list of 2026-11-19: the Messages pill and the tab bar stay", (await shown('dlmsg')));
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -876,11 +887,11 @@ try {
     await tctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }));
     for (const f of ['filter-config.js', 'rules.js']) await tctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
     await tctx.addInitScript({ content: fakeBridge });
-    for (const f of ['ig-filter.js', 'ig-tidy.js']) await tctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
+    for (const f of ['ig-core.js', 'ig-filter.js', 'ig-tidy.js']) await tctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
     const tp = await tctx.newPage();
     tp.on('pageerror', (e) => console.log('pageerror:', e.message));
     const tcentre = (sel) => tp.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-    const tshown = (id) => tp.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return e.getBoundingClientRect().height > 1; }, id);
+    const tshown = (id) => tp.evaluate((i) => { const e = document.getElementById(i); if (!e) return false; if (e.closest('[data-igx]')) return false; for (let x = e; x; x = x.parentElement) { const cs = getComputedStyle(x); if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false; } return e.getBoundingClientRect().height > 1; }, id);
     await tp.goto('https://www.instagram.com/hand2/'); await tp.waitForTimeout(900);
     check('touch: before picking, a tap on the picture reaches Instagram (nothing changed for normal use)', await (async () => { const c = await tcentre('#o1img'); await tp.touchscreen.tap(c.x, c.y); await tp.waitForTimeout(100); return tp.evaluate(() => window.igTaps > 0); })());
     await tp.waitForTimeout(700);
@@ -1005,7 +1016,7 @@ try {
   await page.waitForTimeout(300);
   await page.evaluate((cdn) => { document.getElementById('grid').insertAdjacentHTML('beforeend', '<div class="_aabd"><a id="e9" href="/p/E9/" role="link"><img src="' + cdn + '/plain-e9.jpg" style="width:200px;height:200px" alt=""></a></div><a id="acct9" href="/amy_x9/"><span>amy_x9</span><span>Amy | OnlyFans</span></a><a id="acct8" href="/amy.pedals8/"><span>amy.pedals8</span><span>Amy | Fuzz boxes</span></a>'); }, CDN);
   await page.waitForTimeout(900);
-  const shownNow = (id) => page.evaluate((i) => { let e = document.getElementById(i); if (!e) return false; for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return false; return true; }, id);
+  const shownNow = (id) => page.evaluate((i) => { let e = document.getElementById(i); if (!e) return false; if (e.closest('[data-igx]')) return false; for (; e; e = e.parentElement) if (getComputedStyle(e).display === 'none') return false; return true; }, id);
   check('no Explore: a tile that arrives after Instagram changed pages by itself is still hidden', !(await shownNow('e9')));
   check('accounts by name: still checked after Instagram changed pages by itself', !(await shownNow('acct9')) && await shownNow('acct8'), `${await shownNow('acct9')} ${await shownNow('acct8')}`);
 

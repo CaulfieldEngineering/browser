@@ -27,7 +27,7 @@ enum InstagramFilter {
     /// posts seen before, and repeats) is no longer injected (Joe, 2026-11-19: "our filter is blocking fine posts. Can we
     /// just pull back the filtering? Especially the "don't show repeated posts" one").
     private static let scripts: [WKUserScript] = {
-        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy", "reddit-filter"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-core", "ig-filter", "ig-tidy", "fb-tidy", "reddit-filter"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")
@@ -559,6 +559,8 @@ final class FilterLog {
         if name.hasPrefix("late-shown") { return ["action": "shown", "what": "post", "reason": "judged on a later try"] }
         if name.hasPrefix("late-flagged") { return ["action": "hidden", "what": "post", "rule": "late-flagged"] }
         if name.hasPrefix("unjudged-") || name.hasPrefix("late-unjudged") { return ["action": "judge", "error": String(name.prefix(60))] }
+        // The page's own check of itself (ig-core.js, selftest): a rule that hid too much or found nothing it should have.
+        if name.hasPrefix("selftest:") { return ["action": "error", "what": "page", "error": String(name.prefix(80))] }
         if name.hasPrefix("judge-restarted") || name.hasPrefix("page-restarted") || name.hasPrefix("page-hung") { return ["action": "error", "error": String(name.prefix(60))] }
         return nil
     }

@@ -182,6 +182,7 @@ for (const mode of ['default', 'reduced', 'tuned']) try {
   await ctx.route(/cdninstagram\.com/, (r) => r.fulfill({ contentType: 'image/png', body: png }).catch(() => {}));
   for (const f of ['filter-config.js', 'rules.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
   await ctx.addInitScript({ content: fakeBridge });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-core.js'), 'utf8') });
   await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, 'ig-filter.js'), 'utf8') });
   await ctx.addInitScript({ content: sampler });
   const page = await ctx.newPage();

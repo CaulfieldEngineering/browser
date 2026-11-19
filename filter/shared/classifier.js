@@ -22,6 +22,8 @@
   // As many pictures at a time as the revealing-clothing judge has lanes (clip.js: two workers, or one in the page),
   // the rest waiting in order. Each answer's time is its own work, so a busy feed does not make the native side give
   // up on pictures still waiting. (Until 2026-11-12: strictly one at a time.)
+  // The colour check's bounds (above): only a picture both other judges call clean is looked at again.
+  const GRAY = { from: 0.2, sexy: 0.1, hentai: 0.1, revealing: 0.15, scene: 0.9, sceneKeeps: 0.15 };
   const waiting = [];
   let running = 0;
   const info = { backend: '', loadMs: 0, n: 0, totalMs: 0, waitMs: 0 };
@@ -66,6 +68,35 @@
     // The revealing-clothing judge (clip.js) on the same picture, started above. If it cannot run, the picture is not
     // judged (the page then holds it as "still checking"): the category never quietly switches off.
     scores.Revealing = await revealing;
+    try { scores.Scene = window.IGClip.sceneOf ? window.IGClip.sceneOf(img) : 0; } catch { scores.Scene = 0; } // for the log only: no rule reads it
+    // A picture the explicit class alone flags, with neither other judge seeing anything (not suggestive, not revealing,
+    // not drawn), is checked twice more (Joe, 2026-11-19: "our filter is blocking fine posts"; the fine posts were pink
+    // and magenta ones scored explicit by their colour, clouds and stage lights, and pictures with no person in them,
+    // a guitar, a plate of food, the night sky): once without its colour, and by what the second judge says it is a
+    // picture of. Its explicit score is then the lower of the two readings without colour, or nothing where the
+    // second judge is sure there is no person in it. Measured on filter/test/fixtures/pictures: every known-bad picture
+    // is still flagged (each one), and a bad picture is never in this branch unless both other judges call it clean.
+    if ((scores.Porn || 0) >= GRAY.from && (scores.Sexy || 0) < GRAY.sexy && (scores.Hentai || 0) < GRAY.hentai && scores.Revealing < GRAY.revealing) {
+      const scene = window.IGClip.sceneOf ? window.IGClip.sceneOf(img) : 0;
+      // (the second judge sees the middle of a picture: only where the first judge saw no more than that, so never a tall
+      // picture, whose top and bottom were judged too)
+      const tall = img.naturalHeight > img.naturalWidth * 1.3;
+      if (scene >= GRAY.scene && !tall) scores.Porn = Math.min(scores.Porn, GRAY.sceneKeeps);
+      else {
+        let gray = 0;
+        const tops = img.naturalHeight > img.naturalWidth * 1.3 ? [(img.naturalHeight - side) / 2, 0, img.naturalHeight - side] : [(img.naturalHeight - side) / 2];
+        for (const top of tops) {
+          const x = c.getContext('2d');
+          x.drawImage(img, (img.naturalWidth - side) / 2, top, side, side, 0, 0, 224, 224);
+          const d = x.getImageData(0, 0, 224, 224), p = d.data;
+          for (let i = 0; i < p.length; i += 4) { const y = 0.2126 * p[i] + 0.7152 * p[i + 1] + 0.0722 * p[i + 2]; p[i] = p[i + 1] = p[i + 2] = y; }
+          x.putImageData(d, 0, 0);
+          const g2 = await model.classify(c, 5);
+          gray = Math.max(gray, (g2.find((m) => m.className === 'Porn') || {}).probability || 0);
+        }
+        scores.Porn = Math.min(scores.Porn, Math.round(gray * 10000) / 10000);
+      }
+    }
     info.n++; info.totalMs += performance.now() - started;
     return scores;
   }

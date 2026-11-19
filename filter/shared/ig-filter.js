@@ -45,6 +45,16 @@
   const state = { removed: 0, judged: 0, failed: 0, ready: false, held: 0 };
   g.__igFilter = state;
   const stat = (name) => { try { BRIDGE.stat && BRIDGE.stat(name); } catch {} };
+  // Instagram: everything is hidden by blanking it in place through the core (ig-core.js, docs/instagram-filter-design.md):
+  // the box is kept and Instagram's own layout is never changed, so nothing collapses, nothing is placed by hand and
+  // the page is never scrolled for it (Joe, 2026-11-19: "its all destroying instagram"). Facebook keeps its old way.
+  const CORE = SITE === 'instagram' ? g.IGCore || null : null;
+  function blankUnit(unit, why) {
+    const kind = /^(IMG|VIDEO|CANVAS)$/.test(unit.tagName) ? 'media' : 'content';
+    if (CORE.blank(unit, why, kind)) return;
+    // a unit the guard will not give up (it holds the page, a dialog, a field he types in): its pictures, one by one
+    for (const m of unit.querySelectorAll('img, video, canvas, [style*="background-image"]')) CORE.blank(m, why, 'media');
+  }
   try { BRIDGE.warm && BRIDGE.warm(); } catch {}
 
   // ---- calm (Joe, 2026-11-15: "our instagram feed filter just isn't cutting it. Its infuriatingly glitchy and is gonna
@@ -82,11 +92,11 @@
     T.holdShade > 0 ? '[data-igf-shade]{background-color:rgba(128,128,128,' + T.holdShade + ') !important}' : '',
     '[data-igf-defer]{visibility:hidden !important;pointer-events:none !important}',
     // Instagram's feed is held still by hold() below, and only by it: the browser's own scroll anchoring is off.
-    SITE === 'instagram' ? 'html,body{overflow-anchor:none !important}' : '',
+    CORE ? '' : (SITE === 'instagram' ? 'html,body{overflow-anchor:none !important}' : ''),
     '@keyframes igf-in{from{opacity:0}to{opacity:1}}',
     T.fadeMs > 0 && !T.motionOff ? '[data-igf-in]{animation:igf-in ' + T.fadeMs + 'ms ease-out 1}' : '',
     '@media (prefers-reduced-motion: reduce){[data-igf-in]{animation:none !important}}',
-    GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}',
+    CORE ? '' : (GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:none !important}'),
     // In the reel and story viewers a hidden slide is covered, not removed (Joe, 2026-11-12: "A lot of times when it
     // blocks a slide too it completely shuts down the app. Like grey box."): the viewer measures its slides, so a slide
     // taken out of the layout left it blank and stuck. The slide keeps its box; its pictures and videos are invisible.
@@ -98,7 +108,7 @@
     // A hidden feed post keeps one invisible pixel in the page instead of none (Joe, 2026-11-08: "my feed seems to stop
     // after a few scrolls down - presumably it stops once something gets blocked"): Instagram loads the next posts when
     // the last ones come into view, and a post with display:none never comes into view.
-    'article' + GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
+    CORE ? '' : ('article' + GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}'),
     '[data-igf-grid]{display:grid !important;grid-template-columns:repeat(var(--igf-cols,3),minmax(0,1fr)) !important;column-gap:var(--igf-cgap,0px) !important;row-gap:var(--igf-rgap,0px) !important}',
     '[data-igf-grid]>:not([data-igf-row]){grid-column:1/-1}',
     '[data-igf-row]{display:contents !important}',
@@ -116,8 +126,8 @@
     // An avatar judged suggestive: a plain circle the same size, the picture moved out of sight (no icon, no word).
     'img[data-igf-avatar]{object-position:-99999px -99999px !important;background:rgba(128,128,128,.28) !important;border-radius:50% !important;visibility:visible !important}',
     // A profile flagged by its name or bio: no posts, reels or tagged grids.
-    'html[data-igf-account] main a[href*="/p/"],html[data-igf-account] main a[href*="/reel/"],html[data-igf-account] main a[href*="/tv/"]{display:none !important}',
-    '[data-igf-bio]{display:none !important}',
+    'html[data-igf-account] main a[href*="/p/"],html[data-igf-account] main a[href*="/reel/"],html[data-igf-account] main a[href*="/tv/"]{' + (CORE ? 'visibility:hidden !important;pointer-events:none !important' : 'display:none !important') + '}',
+    CORE ? '' : ('[data-igf-bio]{display:none !important}'),
   ].join('');
   let css = cssText(tune());
   const addStyle = () => {
@@ -306,6 +316,7 @@
     return true;
   }
   function skipTile(unit) {
+    if (CORE) return;
     // The cell: the nearest box (the tile or above) with a sibling that also holds a tile. Its parent is the row.
     let cell = unit;
     while (cell.parentElement && cell.parentElement !== document.body && ![...cell.parentElement.children].some((c) => c !== cell && holdsTile(c))) cell = cell.parentElement;
@@ -336,6 +347,7 @@
   // Facebook: the first post at or below the top of the screen is kept where it was. Instagram: hold(), below.
   const POST_SEL = SITE === 'facebook' ? '[role="article"]' : 'article';
   function keepPlace(unit, change) {
+    if (CORE) { actedAt = performance.now(); change(); return; }
     actedAt = performance.now();
     if (inViewer() || isTile(unit)) { change(); return; }
     if (HOLD) { hold(); change(); hold(unit); return; }
@@ -373,7 +385,7 @@
   // the phone hold() never ran: 0.1.107 and 0.1.113 reported no "feed-held" at all while the feed jumped (Joe: "This
   // scrolling bug is still freakin present"). And where the browser does anchor (Chrome), the two together corrected
   // twice. "anchor-native" counts, once a page, a browser that says it anchors, for the mini PC.
-  const HOLD = SITE === 'instagram';
+  const HOLD = SITE === 'instagram' && !CORE; // with the core nothing changes height, so there is nothing to hold
   try { if (HOLD && g.CSS && CSS.supports('overflow-anchor', 'auto')) stat('anchor-native'); } catch {}
   let actedAt = 0, heldAt = 0, heldBy = 0; // when the filter last collapsed or showed something; when hold() last scrolled, and how far
   let marks = [], markSc = null; // the posts on screen, top first: {el, at: its top in the page}
@@ -484,9 +496,23 @@
     if (was && !pending(was)) return;      // already hidden for good
     if (pending(was) && kind === 'checking') return;
     const viewer = inViewer() && !isTile(unit);
+    // The guard first (ig-core.js): a unit that is really the page (it holds the main area, a profile's tabs, a dialog,
+    // a field he types in) is never marked or taken. A people row then is not a row and is left; anything else gives up
+    // its pictures one by one, so a flagged picture is still never shown.
+    if (CORE && !viewer && kind !== 'checking' && !/^(IMG|VIDEO|CANVAS)$/.test(unit.tagName) && !unit.hasAttribute('data-igx') && CORE.refusal(unit, why || kind, 'content')) {
+      if (why === 'account-name') return;
+      // every picture and video in it, whatever its address, and any put in later (a carousel's next slide); if even
+      // that is refused (the unit is the page itself), the ones in it now, one by one
+      let n = 0;
+      if (unit.hasAttribute('data-igx-media')) return;
+      if (CORE.blankMedia(unit, why || kind)) n = 1;
+      else for (const m of unit.querySelectorAll('img, video, canvas, [style*="background-image"]')) { if (m.tagName === 'VIDEO') { try { m.muted = true; m.pause(); } catch {} } if (!m.hasAttribute('data-igx') && CORE.blank(m, why || kind, 'media')) n++; }
+      if (n) { state.removed++; stat('hidden-' + (why || kind)); const id = idOf(unit, null); if (id) goneById.set(id, [kind, why || kind]); }
+      return;
+    }
     const wasOnScreen = viewer && onScreen(unit);
     // (not a picture Joe hid by hand: that one goes at once, as he asked)
-    const defer = kind !== 'checking' && why !== 'by-hand' && !viewer && !isTile(unit) && unit.tagName === 'ARTICLE' && deferIO && inView(unit) && !onDirect();
+    const defer = !CORE && kind !== 'checking' && why !== 'by-hand' && !viewer && !isTile(unit) && unit.tagName === 'ARTICLE' && deferIO && inView(unit) && !onDirect();
     keepPlace(unit, () => {
       if (viewer && kind === 'checking') unit.setAttribute('data-igf-slide-hold', ''); else unit.removeAttribute('data-igf-slide-hold');
       if (viewer && kind !== 'checking') unit.setAttribute('data-igf-cover', ''); // covered, never taken out of the viewer
@@ -504,7 +530,8 @@
     // closed up and no tile is moved.
     if (isTile(unit)) actedAt = performance.now();
     if (SITE === 'facebook' && kind !== 'checking' && isTile(unit)) skipTile(unit); else placeholder(unit);
-    if (!isTile(unit) && kind !== 'checking') setTimeout(nudge, 50); // only a post that closed up changes what Instagram measures
+    if (!CORE && !isTile(unit) && kind !== 'checking') setTimeout(nudge, 50); // only a post that closed up changes what Instagram measures
+    if (CORE && !viewer && kind !== 'checking') blankUnit(unit, why || kind);
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
   }
@@ -622,7 +649,7 @@
   function judgeUrl(url, el) {
     const key = keyOf(url);
     if (verdicts.has(key)) { const w = waitingByKey.get(key); if (w && el) w.els.add(el); return verdicts.get(key); }
-    const p = queued(url, el).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); scoresOf.set(key, v.scores); known.set(key, v); if (known.size > 4000) known.delete(known.keys().next().value); } return v; });
+    const p = queued(url, el).then((v) => { if (v.flagged === null) verdicts.delete(key); else { stat(v.flagged ? 'judged-flagged' : 'judged-clean'); if (v.flagged) { try { BRIDGE.scored && BRIDGE.scored(v.why || 'image', v.scores); } catch {} } scoresOf.set(key, v.scores); known.set(key, v); if (known.size > 4000) known.delete(known.keys().next().value); } return v; });
     verdicts.set(key, p);
     if (verdicts.size > 4000) verdicts.delete(verdicts.keys().next().value);
     return p;
@@ -709,6 +736,7 @@
     if (img.tagName === 'IMG' && !img.complete) { img.addEventListener('load', settle, { once: true }); img.addEventListener('error', settle, { once: true }); }
   }
   function handleImg(img) {
+    if (CORE && CORE.inCreation(img)) return; // what he is posting is his own: never held or judged
     const src = srcOf(img);
     if (SITE === 'facebook' && F('fb.foreignPictures') && src && /^(https?:)?\/\//i.test(src) && !isMediaUrl(src) && !isOwnPage(src)) { handleForeign(img, src); return; }
     if (!F('pictures') && !F('revealing')) return; // neither picture judge is on for this page (the config)
@@ -780,6 +808,7 @@
         if (v.flagged === null) allClean = false;
       }
       if (!allClean) { stat('late-unjudged'); later(unit); return; }
+      if (!pending(kindOf(unit)) || unit.hasAttribute('data-igx') || unit.hasAttribute('data-igx-media')) return; // hidden for good while this waited (a caption that loaded later): it stays
       unit.setAttribute('data-igf-gone', 'checking');
       for (const img of imgs) { if (img.tagName === 'VIDEO') img.removeAttribute('data-igf-hold'); else show(img); }
       restore(unit);
@@ -839,6 +868,7 @@
     return verdict && verdict.flagged === false ? 'ok' : 'none';
   }
   function handleVideo(v) {
+    if (CORE && CORE.inCreation(v)) return; // what he is posting is his own: never held or judged
     if (vidState.has(v)) return;
     vidState.set(v, { last: 0 });
     vids.add(v);
@@ -1074,7 +1104,7 @@
   function checkAccountRows() {
     for (const a of document.querySelectorAll('a[href]')) {
       const who = profileOf(a.getAttribute('href'));
-      if (!who || a.closest('article, header, [data-igt-nav], nav, [data-igf-gone]')) continue;
+      if (!who || a.closest('article, header, [data-igt-nav], nav, [data-igf-gone], [role="tablist"], [role="tab"]')) continue; // (a profile's own tabs link to the profile: not a row)
       // The row: the largest box around this link that holds no other account.
       let row = a;
       for (let i = 0; i < 5 && row.parentElement && row.parentElement !== document.body; i++) {
@@ -1085,7 +1115,8 @@
       const text = who + ' ' + pieces(row, 300);
       if (rowsSeen.get(row) === text) continue;
       rowsSeen.set(row, text);
-      if (RULES.account(text)) hide(row, 'text', 'account-name');
+      const term = RULES.account(text);
+      if (term && !(CORE && /^suggested account row/i.test(String(term)))) hide(row, 'text', 'account-name');
     }
   }
   let profileDone = '', flaggedPath = '';
@@ -1111,7 +1142,7 @@
     const keep = (el) => {
       for (const c of [...el.children]) {
         if (c.matches('h1, h2')) continue;
-        if (!c.querySelector('h1, h2')) { c.setAttribute('data-igf-bio', ''); continue; } // the avatar, the bio, its link, the counts
+        if (!c.querySelector('h1, h2')) { if (!CORE) c.setAttribute('data-igf-bio', ''); else if (c.hasAttribute('data-igx') || (!CORE.refusal(c, 'account', 'content') && CORE.blank(c, 'account', 'content'))) c.setAttribute('data-igf-bio', ''); else keep(c); continue; } // the avatar, the bio, its link, the counts
         keep(c);
       }
     };
@@ -1202,7 +1233,7 @@
   //   nat 1 if the browser says it anchors.  (-1: never.)  Nothing about what is on the page or why anything is hidden.
   const jump = { el: null, at: 0, y: 0, t: 0, n: 0 };
   let touchAt = 0, touchEndAt = 0;
-  if (HOLD) {
+  if (HOLD || CORE) {
     addEventListener('touchstart', () => { touchAt = performance.now(); }, { capture: true, passive: true });
     addEventListener('touchend', () => { touchEndAt = performance.now(); }, { capture: true, passive: true });
   }
@@ -1233,6 +1264,13 @@
     try { el = document.elementFromPoint(innerWidth / 2, Math.min(220, innerHeight / 3)); } catch {}
     if (el && (el === document.documentElement || el === document.body || el.id === 'igf-pick' || el.id === 'igf-pick-tip')) el = null;
     jump.el = el; jump.at = el ? el.getBoundingClientRect().top + y : 0; jump.y = y; jump.t = now;
+  }
+  if (CORE) {
+    // Nothing of ours changes a height now, so there is nothing to hold; a jump of Instagram's own is still told.
+    new MutationObserver(() => watchJump()).observe(document, { childList: true, subtree: true });
+    document.addEventListener('load', () => watchJump(), true);
+    addEventListener('scroll', watchJump, { capture: true, passive: true });
+    addEventListener('resize', () => watchJump(), { passive: true });
   }
   if (HOLD) {
     state.hold = hold; // ig-seen.js collapses posts too, and keeps the place through this

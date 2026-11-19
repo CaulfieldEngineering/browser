@@ -61,7 +61,7 @@ async function run(withFilter) {
     if (withFilter) {
       for (const f of ['filter-config.js', 'rules.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
       await ctx.addInitScript({ content: fakeBridge });
-      for (const f of ['ig-filter.js', 'ig-tidy.js', 'ig-seen.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
+      for (const f of ['ig-core.js', 'ig-filter.js', 'ig-tidy.js']) await ctx.addInitScript({ content: fs.readFileSync(path.join(shared, f), 'utf8') });
     }
     const p = await ctx.newPage();
     p.on('pageerror', (e) => console.log('pageerror:', e.message));
