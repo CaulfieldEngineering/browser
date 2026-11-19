@@ -68,10 +68,24 @@
   const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[\\s._-]?');
   const termRe = (list) => (list.length ? new RegExp('(^|[^\\p{L}\\p{N}])(' + list.map(esc).join('|') + ')(?=$|[^\\p{L}\\p{N}])', 'iu') : null);
   const KINDS = Object.entries(ACC.kinds || {}).map(([kind, words]) => ({ kind, re: termRe(words), captions: kind !== 'names and bios only' }));
-  const PATTERNS = Object.entries(ACC.patterns || {}).map(([kind, src]) => ({ kind, re: new RegExp(src, /^OF\b/.test(kind) ? 'u' : 'iu') }));
+  // A pattern this engine cannot read (the laptop's config may use a newer syntax than a phone has) is dropped, never thrown.
+  const PATTERNS = Object.entries(ACC.patterns || {}).map(([kind, src]) => { try { return { kind, re: new RegExp(src, /^OF\b/.test(kind) ? 'u' : 'iu') }; } catch { return null; } }).filter(Boolean);
+  // Words Joe named, on every site and wherever words are read: a post, a caption, an account's name and bio
+  // (2026-11-19: "let's completely block the word latex, perhaps ignoring anything as LaTeX"; "anything "goddess" "joi"
+  // "femdom" "domme" "mistress""). latex as a word or inside one (#latexmodel), any case, except the exact spelling
+  // LaTeX; goddess, femdom, domme, mistress anywhere in a word; joi only as a whole word (Joie, Joint and enjoin stay).
+  // In code, not a pattern, because the one exception is by case.
+  const NAMED_RE = /goddess|femdom|domme|mistress/iu, JOI_RE = /(^|[^\p{L}\p{N}])#?joi(?=$|[^\p{L}\p{N}])/iu;
+  function namedWord(text) {
+    const t = String(text || '');
+    if (NAMED_RE.test(t) || JOI_RE.test(t)) return true;
+    const m = t.match(/latex/giu);
+    return !!m && m.some((x) => x !== 'LaTeX');
+  }
   const forName = (t) => String(t || '').replace(/[._]+/g, ' ');
   function accountKind(text, captionsOnly) {
     const t = String(text || '');
+    if (namedWord(t)) return 'words he named';
     for (const k of KINDS) if (k.re && (!captionsOnly || k.captions) && k.re.test(t)) return k.kind;
     for (const p of PATTERNS) if (p.re.test(t)) return p.kind;
     return null;
@@ -210,7 +224,8 @@
     work: { on: onWork, add: addWork, ownPost, scope: workScope, scopes: () => workScopes.map((w) => w.host + w.path) },
     /** The kind of term an account's name or bio carries, or null: every kind, the suggestive words, the revealing tags. */
     account(text) { return accountOf(text); },
-    accountKinds: () => KINDS.map((k) => k.kind).concat(PATTERNS.map((p) => p.kind)),
+    accountKinds: () => ['words he named'].concat(KINDS.map((k) => k.kind), PATTERNS.map((p) => p.kind)),
+    namedWord,
     /** Which part of the image line a score crossed ('explicit', 'sexy', 'combined') or null. For the counts on the
      *  device (why a post was hidden); it decides nothing and changes no line. */
     explain(s) {

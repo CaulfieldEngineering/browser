@@ -19,19 +19,21 @@ let failed = 0, n = 0;
 const check = (name, ok, x = '') => { n++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} ${ok ? '' : x}`); if (!ok) failed++; };
 
 // ---- titles: in scope and out of scope ----
-export const IN_SCOPE = ['Latex model photoshoot 4K', 'Latex catsuit try on', 'Black latex leggings haul', 'ASMR girlfriend takes care of you', 'Sensual ASMR ear licking',
+// Since later the same day the word latex goes whatever else the title says, in every spelling but LaTeX (Joe: "let's
+// completely block the word latex, perhaps ignoring anything as LaTeX"): the four latex titles that used to be out of scope.
+export const IN_SCOPE = ['How to paint a wall with latex paint', 'Latex allergy: what nurses should know', 'Making a latex mask: SFX prosthetic tutorial', 'How to make a latex dress: SFX tutorial', 'Latex model photoshoot 4K', 'Latex catsuit try on', 'Black latex leggings haul', 'ASMR girlfriend takes care of you', 'Sensual ASMR ear licking',
   'ASMR kisses and whispers for sleep', 'Bikini model beach shoot 2026', 'Micro bikini try on haul', 'Swimsuit model lookbook', 'Lingerie try-on',
   'ASMR | your gf cuddles you in bed (roleplay)', 'Sheer try on haul', 'Transparent try on haul with Mia', 'Yoga pants try on', 'Fetish fashion show highlights',
   'Hot girls dancing compilation', 'Leather bodysuit lookbook', 'Her OnlyFans story', 'Thirst trap compilation', 'Topless beach day'];
 export const OUT_OF_SCOPE = ['LaTeX tutorial for beginners: write your thesis in Overleaf', 'ASMR tapping and scratching for sleep (no talking)', 'ASMR cooking: crispy fried chicken',
-  'Whispered ASMR reading you a bedtime story', 'Olympic beach volleyball final highlights', 'How to paint a wall with latex paint', '10 minute ab workout at home',
+  'Whispered ASMR reading you a bedtime story', 'Olympic beach volleyball final highlights', '10 minute ab workout at home',
   'Learn to swim freestyle: technique drills', 'Fuzz pedal demo', 'Surfing Pipeline in a storm', 'Bikini Atoll: the nuclear tests explained', 'SpongeBob: best of Bikini Bottom',
-  'Taylor Swift - official video', 'Maldives travel vlog: snorkeling with manta rays', 'Bodybuilding competition posing routine', 'Latex allergy: what nurses should know',
-  'Making a latex mask: SFX prosthetic tutorial', 'Deftones live at Rock am Ring', 'ASMR barber shop haircut roleplay', 'Triathlon wetsuit review',
+  'Taylor Swift - official video', 'Maldives travel vlog: snorkeling with manta rays', 'Bodybuilding competition posing routine',
+  'Deftones live at Rock am Ring', 'ASMR barber shop haircut roleplay', 'Triathlon wetsuit review',
   'The Golden State Killer: a true crime documentary', 'Sex education for parents: a doctor explains', 'Stand-up comedy special: full show', 'Evening news, November 19',
   'Winter coat try on haul', 'Best wire stripper tools reviewed', 'How to sew lingerie: a bralette pattern tutorial', 'Thrifted jeans try-on haul', 'Spider-Man cosplay: making the suit',
   'Leather jacket lookbook for men', 'School uniform haul for kids', 'Catsuit costume DIY for Halloween', 'Motorcycle leather racing suit review',
-  'How to make a latex dress: SFX tutorial', 'ASMR with my wife: tapping and scratching'];
+  'ASMR with my wife: tapping and scratching'];
 const ctx = { globalThis: {} };
 vm.runInNewContext(fs.readFileSync(path.join(shared, 'youtube-filter.js'), 'utf8'), ctx);
 const Y = ctx.globalThis.YouTubeRules;
