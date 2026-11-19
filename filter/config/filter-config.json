@@ -2,7 +2,7 @@
   "_what": "The laptop filter's whole behaviour (Filter 1.6.3 and later), as data. Signed on the mini PC (the admin panel's Publish config, or node sign-config.mjs in the held laptop-filter folder) and fetched by the extension every 5 minutes from the mini PC and from this repo; no change here needs a new extension or a Chrome Web Store review. Every feature is named in filter/shared/filter-features.js. This default is what Joe asked for (vault AI/Notes 'Laptop filter, what he asked for and what we added, 2026-11-17'): everything agents added without his asking is off here, not deleted from the engine. The suggestive-picture and revealing-clothing removal are locked (locked memory entries 23 to 28, 46): turning them off or narrowing them needs a decisions entry.",
   "kind": "filter-config",
   "schema": 1,
-  "note": "2026-11-19 (config 6): YouTube terms narrowed after review (a latex dress tutorial, ordinary ASMR with 'wife' in its title stay). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 4): ig.suggestedRows on, read by 1.6.4 only. 2026-11-19: ig.noSuggestions off for 1.6.3 (it hid profiles' Follow and Message buttons); the hide rules keep the suggestions out. Default config, 2026-11-17: only what Joe asked for. 2026-11-18: Instagram's suggested-account rows (N mutuals, Follow) go one by one (settings.IGFilterConfig.accounts, its last pattern; Joe: \"still waiting on you to block this element in instagram via our extension\").",
+  "note": "2026-11-19 (config 7): latex blocked everywhere except the exact spelling LaTeX; goddess, joi (whole word), femdom, domme, mistress blocked everywhere; YouTube fetish-wear vocabulary widened (Joe: \"let's completely block the word latex, perhaps ignoring anything as LaTeX\"; \"or just do better at filtering. it's close though\"; \"anything \\\"goddess\\\" \\\"joi\\\" \\\"femdom\\\" \\\"domme\\\" \\\"mistress\\\"\"). 2026-11-19 (config 6): YouTube terms narrowed after review (a latex dress tutorial, ordinary ASMR with 'wife' in its title stay). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 5): YouTube on, by Joe's spec (\"also our youtube filter still needs to remove \\\"sexual\\\" content\"; \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\"); the revealing-clothing judge is not used on youtube.com (decisions.revealing). 2026-11-19 (config 4): ig.suggestedRows on, read by 1.6.4 only. 2026-11-19: ig.noSuggestions off for 1.6.3 (it hid profiles' Follow and Message buttons); the hide rules keep the suggestions out. Default config, 2026-11-17: only what Joe asked for. 2026-11-18: Instagram's suggested-account rows (N mutuals, Follow) go one by one (settings.IGFilterConfig.accounts, its last pattern; Joe: \"still waiting on you to block this element in instagram via our extension\").",
   "decisions": {
     "revealing": "2026-11-19, Claude (Fable), on Joe's YouTube spec of that day: \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\". The revealing-clothing judge was asked for Instagram (2026-11-05) and never for YouTube, where the filter has not run at all since 2026-11-17 and where a person in swimwear or gymwear with real other value (sport, fitness, travel) is out of scope by his words; on every other site it runs as before. YouTube's thumbnails are judged by the suggestive judge at the same line as everywhere. Nothing in effect on Instagram, Facebook or the open web changes."
   },
@@ -282,7 +282,10 @@
         "patterns": {
           "OF with a link": "\\bOF\\b.{0,24}(link|below|bio|🔗|👇|⬇)",
           "DM for collab, as a model": "(dm|message) (me )?(for|4) (collab|collabs|promo).{0,40}model|model.{0,40}(dm|message) (me )?(for|4) (collab|collabs|promo)",
-          "Suggested account row (N mutuals, Follow)": "^.{1,120}?\\s(\\d[\\d.,]*[km]?\\s+mutuals?|followed by \\S.{0,80}|suggested for you|new to instagram)\\s+follow$"
+          "Suggested account row (N mutuals, Follow)": "^.{1,120}?\\s(\\d[\\d.,]*[km]?\\s+mutuals?|followed by \\S.{0,80}|suggested for you|new to instagram)\\s+follow$",
+          "latex, any spelling but LaTeX (2026-11-19)": "(?!(?-i:LaTeX))latex",
+          "words he named (2026-11-19)": "goddess|femdom|domme|mistress",
+          "a word he named, whole word only (2026-11-19)": "(^|[^\\p{L}\\p{N}])#?joi(?=$|[^\\p{L}\\p{N}])"
         }
       }
     },
@@ -341,10 +344,23 @@
       }
     }
   },
-  "textRules": [],
+  "textRules": [
+    {
+      "id": "named-words-2026-11-19",
+      "_what": "Joe, 2026-11-19: \"let's completely block the word latex, perhaps ignoring anything as LaTeX\"; \"anything \\\"goddess\\\" \\\"joi\\\" \\\"femdom\\\" \\\"domme\\\" \\\"mistress\\\"\". Every site: the words of a post on Instagram and Facebook, the words around a picture on the open web. latex as a word or inside one, any case, except the exact spelling LaTeX; joi as a whole word only.",
+      "patterns": [
+        "(?!(?-i:LaTeX))latex",
+        "goddess",
+        "femdom",
+        "domme",
+        "mistress",
+        "(^|[^\\p{L}\\p{N}])#?joi(?=$|[^\\p{L}\\p{N}])"
+      ]
+    }
+  ],
   "blockSites": [],
   "youtube": {
-    "_what": "Joe's spec. 2026-11-19: \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\". 2026-11-17: sexual content only, from titles, channel names, descriptions, captions or transcripts and thumbnails; never true crime, violence or adult topics; never stops or removes a video he clicked to play. In scope: latex and fetish-outfit model videos, sensual or girlfriend-roleplay ASMR, bikini, swimsuit and lingerie model videos and try-on hauls. Out of scope: music, gear, tutorials, news, comedy, sport, fitness instruction, ordinary ASMR, anything with real other value. Any key of YouTubeRules.DEFAULTS (filter/shared/youtube-filter.js) can be set here.",
+    "_what": "Joe's spec. 2026-11-19: \"For youtube: sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value\". 2026-11-17: sexual content only, from titles, channel names, descriptions, captions or transcripts and thumbnails; never true crime, violence or adult topics; never stops or removes a video he clicked to play. In scope: latex and fetish-outfit model videos, sensual or girlfriend-roleplay ASMR, bikini, swimsuit and lingerie model videos and try-on hauls. Out of scope: music, gear, tutorials, news, comedy, sport, fitness instruction, ordinary ASMR, anything with real other value. Any key of YouTubeRules.DEFAULTS (filter/shared/youtube-filter.js) can be set here. 2026-11-19, later (config 7), his words: \"let's completely block the word latex, perhaps ignoring anything as LaTeX\"; \"or just do better at filtering. it's close though\" (a rubber doll photoshoot by a channel named Latexographer and a gas mask and latex gear review were still showing); \"anything \\\"goddess\\\" \\\"joi\\\" \\\"femdom\\\" \\\"domme\\\" \\\"mistress\\\"\". So: latex anywhere in a tile's text (title, channel, snippet), any case, as a word or inside one, except the exact spelling LaTeX; his five words (joi as a whole word only); and the fetish-wear vocabulary (rubber doll, rubberist, PVC catsuit, gimp suit, shiny world sessions...). These are patterns, so no word of other value cancels them. The plain word \"latex\" left the cancellable list the same day: the pattern takes every spelling but LaTeX, which he asked to be let through.",
     "thumbnails": {
       "judge": true,
       "hold": false,
@@ -476,12 +492,12 @@
         "hot girls",
         "babes",
         "kissing",
-        "latex",
         "fetish",
         "swimsuit haul",
         "leggings haul",
         "yoga pants haul",
-        "yoga pants try on"
+        "yoga pants try on",
+        "bondage"
       ],
       "notWhen": [
         "true crime",
@@ -585,7 +601,25 @@
         "\\b(girlfriend|gf|kiss(es|ing)?|sensual|seduc\\w+|lick(s|ing)?|flirt\\w*|moan\\w*)\\b.{0,60}\\basmr\\b",
         "\\b(bikini|bikinis|swimsuit|swimsuits|swimwear|lingerie|latex|pvc|leggings|yoga pants|bodysuit|thong|micro|see[\\s-]?through|sheer|transparent)\\b.{0,30}\\b(model|models|try[\\s-]?on|haul|lookbook|photoshoot|photo shoot|fashion show)\\b",
         "\\b(model|models|try[\\s-]?on|haul|lookbook|photoshoot)\\b.{0,30}\\b(bikini|bikinis|swimsuit|swimwear|lingerie|latex|pvc|bodysuit|thong|see[\\s-]?through|sheer|transparent)\\b",
-        "\\bleather\\b.{0,20}\\b(bodysuit|lingerie|catsuit|leggings)\\b.{0,30}\\b(lookbook|try[\\s-]?on|haul|model)\\b"
+        "\\bleather\\b.{0,20}\\b(bodysuit|lingerie|catsuit|leggings)\\b.{0,30}\\b(lookbook|try[\\s-]?on|haul|model)\\b",
+        "(?!(?-i:LaTeX))latex",
+        "goddess",
+        "femdom",
+        "domme",
+        "mistress",
+        "(^|[^\\p{L}\\p{N}])#?joi(?=$|[^\\p{L}\\p{N}])",
+        "rubber[\\s-]?doll",
+        "rubberist",
+        "\\brubber\\s+(catsuit|fetish|gimp|kink)\\w*",
+        "\\bshiny\\s+world\\s+sessions?\\b",
+        "\\bshiny\\s+(channel|fetish|kink|catsuit|doll|rubber|pvc)\\b",
+        "\\bpvc[\\s-]?(catsuit|outfit|leggings|dress|fetish|bodysuit|lingerie)",
+        "\\bgimp[\\s-]?(suit|mask|hood)\\b",
+        "\\b(total|full)\\s+(rubber|body)\\s+enclosure\\b",
+        "dominatrix",
+        "\\bbdsm\\b",
+        "\\bzentai\\b",
+        "fetish[\\s-]?(wear|gear|model|fashion|outfit|shoot|photo)"
       ]
     }
   }
