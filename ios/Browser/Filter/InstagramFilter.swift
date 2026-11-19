@@ -100,6 +100,9 @@ enum InstagramFilter {
                 }
             }
             switch op {
+            case "second":
+                // The second opinion (SecondOpinion.swift; docs/second-opinion.md): the page's units to the mini PC.
+                SecondOpinion.shared.ask(body["body"] as? String) { replyHandler($0, nil) }
             case "warm":
                 Classifier.shared.warmUp(); replyHandler(true, nil)
             case "width":

@@ -18,6 +18,9 @@
     report: (record) => { webkit.messageHandlers.igf.postMessage({ op: 'report', record: JSON.stringify(record).slice(0, 4000) }).catch(() => {}); },
     // "Skip posts I've seen" (ig-seen.js): the menu's switch, on unless turned off.
     seenOn: () => webkit.messageHandlers.igf.postMessage({ op: 'seen' }).then((on) => on !== false, () => true),
+    // The second opinion (second-opinion.js; docs/second-opinion.md): the app posts the units to the mini PC's
+    // /api/filter-review and answers {verdicts} or null (off, unreachable, slow). Never the page's own network.
+    secondOpinion: (req) => webkit.messageHandlers.igf.postMessage({ op: 'second', body: JSON.stringify(req).slice(0, 8e6) }).then((r) => { try { return typeof r === 'string' ? JSON.parse(r) : r || null; } catch { return null; } }, () => null),
     byHand: () => webkit.messageHandlers.igf.postMessage({ op: 'byhand' }).then((ids) => (Array.isArray(ids) ? ids : []), () => []),
   };
 })();

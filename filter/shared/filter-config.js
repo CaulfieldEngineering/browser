@@ -29,6 +29,7 @@ globalThis.IGFilterConfig = {
     ],
     "pages": ["Wonderland Audio"]
   },
+  "secondOpinion": {"_what": "The second opinion on the iPhone apps (docs/second-opinion.md; the laptop reads the signed config's block). OFF until tested on the device.", "on": false, "sites": ["instagram.com", "youtube.com"], "endpoint": "http://100.92.203.47:4500/api/filter-review", "timeoutMs": 3000, "batch": 16, "text": {"youtube": true, "instagram": true, "comments": true, "maxComments": 8}, "band": {"below": {"explicit": 0.1, "sexy": 0.1, "combined": 0.1, "revealing": 0.15}, "above": {"explicit": 0.4, "sexy": 0.25, "combined": 0.2, "revealing": 0.15}, "quiet": {"explicit": 0.2, "sexy": 0.2, "revealing": 0.3}}, "removeMin": 0.6, "rescueMin": 0.85, "rescue": false, "holdNear": true, "audit": 0.05},
   "labels": "none",
   "explore": "removed",
   "search": "the search field and a plain list of accounts and hashtags, with small avatars (judged)",
