@@ -24,7 +24,7 @@
     on: false,
     sites: ['instagram.com', 'youtube.com'],
     timeoutMs: 3000,
-    batch: 8, // 8 texts and a picture answer in about 2 s on the mini PC (measured 2026-11-19)
+    batch: 5, // 5 texts and a picture answer in about 1.2 to 2.4 s on the mini PC, its model held to about 4 GB (2026-11-19)
     endpoint: 'http://100.92.203.47:4500/api/filter-review',
     // Text-first: which units send their text (every YouTube tile, every Instagram post with a caption).
     text: { youtube: true, instagram: true, comments: true, maxComments: 8 },
@@ -147,7 +147,7 @@
     const S = settings(opts && opts.settings);
     const B = g.IGFilterBridge;
     if (!S.on || !B || typeof B.secondOpinion !== 'function' || !Array.isArray(units) || !units.length) return null;
-    const list = units.slice(0, num(S.batch, 8)).map((u) => {
+    const list = units.slice(0, num(S.batch, 5)).map((u) => {
       const w = worth(u, S);
       const x = shape(u, S);
       if (!w.image) { delete x.image; delete x.imageUrl; }
