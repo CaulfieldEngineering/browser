@@ -34,7 +34,7 @@ The laptop runs **Filter 1.6.3** from the Chrome Web Store. Its behaviour is one
 ## The three delivery routes, and what each costs him
 
 1. **Data** (the signed config): nothing. Five minutes.
-2. **Our own copy of the extension, served by the mini PC** (`.held/laptop-filter/laptop-selfhost`, 1.6.5 built): no store and no review, ever again; a new version is a file on the mini PC and Chrome takes it at its next update check. It needs Chrome enrolled in his Chrome Enterprise Core (one token, one restart) because Windows 11 Home takes an extension from outside the store by policy only then; Edge cannot do this for free and is blocked from starting instead.
+2. **Our own copy of the extension, served by the mini PC** (`.held/laptop-filter/laptop-selfhost`, 1.6.5 built and served at `http://100.92.203.47:4500/filter/`): no store and no review, ever again; a new version is two files on the mini PC and Chrome takes it at its next update check. Chrome is enrolled in his Chrome Enterprise Core since 2026-11-19. Tried that day from the laptop's own registry and refused: on Windows, Chrome drops a registry force-install that is not from the Web Store unless the PC is domain-joined; enrolled, it takes one only from the cloud. So it needs **one entry in his Admin console** (Apps & extensions, add by ID, custom update URL, force install). Until then the laptop stays on the store's 1.6.3. Edge cannot do this for free and is blocked from starting.
 3. **The Chrome Web Store**: a review of a day or more for every change. Ruled out by him on 2026-11-19.
 
 ## Rule for every future capability
