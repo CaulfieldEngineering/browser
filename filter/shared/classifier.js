@@ -68,7 +68,6 @@
     // The revealing-clothing judge (clip.js) on the same picture, started above. If it cannot run, the picture is not
     // judged (the page then holds it as "still checking"): the category never quietly switches off.
     scores.Revealing = await revealing;
-    try { scores.Scene = window.IGClip.sceneOf ? window.IGClip.sceneOf(img) : 0; } catch { scores.Scene = 0; } // for the log only: no rule reads it
     // A picture the explicit class alone flags, with neither other judge seeing anything (not suggestive, not revealing,
     // not drawn), is checked twice more (Joe, 2026-11-19: "our filter is blocking fine posts"; the fine posts were pink
     // and magenta ones scored explicit by their colour, clouds and stage lights, and pictures with no person in them,
