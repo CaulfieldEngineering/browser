@@ -77,7 +77,7 @@
     for (const sel of L.selectors || []) { try { for (const el of document.querySelectorAll(sel)) hide(el); } catch {} }
     for (const h of (L.headings || []).map((s) => s.toLowerCase())) {
       for (const el of holding(h)) {
-        if (el.hasAttribute('data-fhr') || el.closest('article, [data-fhr]') || textOf(el).toLowerCase() !== h) continue;
+        if (el.hasAttribute('data-fhr') || el.closest('article, [data-fhr], svg') || textOf(el).toLowerCase() !== h) continue; // an SVG's title labels a button
         if (!hide(panelOf(el, h))) hide(el);
       }
     }

@@ -2,7 +2,7 @@
   "_what": "The laptop filter's whole behaviour (Filter 1.6.3 and later), as data. Signed on the mini PC (the admin panel's Publish config, or node sign-config.mjs in the held laptop-filter folder) and fetched by the extension every 5 minutes from the mini PC and from this repo; no change here needs a new extension or a Chrome Web Store review. Every feature is named in filter/shared/filter-features.js. This default is what Joe asked for (vault AI/Notes 'Laptop filter, what he asked for and what we added, 2026-11-17'): everything agents added without his asking is off here, not deleted from the engine. The suggestive-picture and revealing-clothing removal are locked (locked memory entries 23 to 28, 46): turning them off or narrowing them needs a decisions entry.",
   "kind": "filter-config",
   "schema": 1,
-  "note": "2026-11-19: ig.noSuggestions off for 1.6.3 (it hid profiles' Follow and Message buttons); the hide rules keep the suggestions out. Default config, 2026-11-17: only what Joe asked for. 2026-11-18: Instagram's suggested-account rows (N mutuals, Follow) go one by one (settings.IGFilterConfig.accounts, its last pattern; Joe: \"still waiting on you to block this element in instagram via our extension\").",
+  "note": "2026-11-19 (config 4): ig.suggestedRows on, read by 1.6.4 only. 2026-11-19: ig.noSuggestions off for 1.6.3 (it hid profiles' Follow and Message buttons); the hide rules keep the suggestions out. Default config, 2026-11-17: only what Joe asked for. 2026-11-18: Instagram's suggested-account rows (N mutuals, Follow) go one by one (settings.IGFilterConfig.accounts, its last pattern; Joe: \"still waiting on you to block this element in instagram via our extension\").",
   "decisions": {},
   "features": {
     "pictures": { "on": true, "sites": ["*"] },
@@ -27,6 +27,7 @@
     "ig.noReelsTab": { "on": true, "sites": ["instagram.com"] },
     "ig.followingFeed": { "on": true, "sites": ["instagram.com"] },
     "ig.noSuggestions": { "on": false, "sites": ["instagram.com"], "_why": "Off on 1.6.3 only, 2026-11-19 (Joe: \"did you remove the Follow button?\"): 1.6.3's code took a profile's Follow and Message row for a suggested account. The hide rules below still take the suggestion headings, panels, the Similar accounts button and the See all page. Back on with 1.6.4, whose code is fixed and also takes each suggested row." },
+    "ig.suggestedRows": { "on": true, "sites": ["instagram.com"], "_why": "Joe's no suggested accounts, by 1.6.4's fixed code (1.6.3 ignores this name). Joe, 2026-11-18: \"still waiting on you to block this element in instagram via our extension\"." },
     "ig.appPrompts": { "on": false },
     "ig.pageTop": { "on": true, "sites": ["instagram.com"] },
     "ig.calm": { "on": true, "sites": ["instagram.com", "facebook.com"] },

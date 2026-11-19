@@ -173,12 +173,17 @@
       if (f < 1 && n < 2) continue;
       const t = textOf(box);
       if (t.toLowerCase().startsWith(words)) return box;
-      if (f === 1 && n <= 1 && t.length <= 160) return box;
+      if (f === 1 && n === 1 && t.length <= 160 && !box.closest('header') && !box.querySelector('h1, h2')) return box;
       return null;
     }
     return null;
   }
-  const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el)) { gone(el); note('sugg-' + what); } };
+  // A profile's own controls are never taken (Joe, 2026-11-19: "did you remove the Follow button?", of a profile whose
+  // Follow, Following and Message buttons were gone): the chevron beside them carries the words "Similar accounts" (an
+  // SVG title), and the row around it holds one Follow and no account link, so it was taken as one suggested row.
+  const OWN_CTL = /^(follow|following|follow back|requested|message|edit profile|view archive)$/i;
+  const holdsOwnControls = (el) => !!el.querySelector && [...el.querySelectorAll('button, [role="button"], a[role="link"], a[href]')].some((b) => OWN_CTL.test(textOf(b))) && !!(el.closest('header') || el.querySelector('h1, h2, header'));
+  const suggGone = (el, what) => { if (el && !el.hasAttribute('data-igt') && !guarded(el) && !holdsOwnControls(el)) { gone(el); note('sugg-' + what); } };
   // One suggested account at a time (Joe, 2026-11-18, the third ask: "still waiting on you to block this element in
   // instagram via our extension", of a column of accounts on the Following feed, each "N mutuals" and a blue Follow).
   // A list as wide and as tall as the screen is never taken as a panel (the guard above, so the page cannot go blank),
@@ -194,7 +199,7 @@
   const followsIn = (el) => { let n = 0; for (const b of el.querySelectorAll('button, [role="button"], a, div, span')) if (!b.firstElementChild && textOf(b) === 'Follow') n++; return n; };
   function suggRow(ctl) {
     let row = ctl;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 12; i++) {
       const up = row.parentElement;
       if (!up || up.matches(ROW_STOP) || followsIn(up) > 1 || textOf(up).length > 220 || up.querySelector('input, textarea, video, article')) break;
       row = up;
@@ -235,7 +240,7 @@
   }
   function noSuggestions() {
     const root = document.documentElement;
-    if (!root || !F('ig.noSuggestions')) return;
+    if (!root || !(F('ig.noSuggestions') || F('ig.suggestedRows'))) return; // ig.suggestedRows: the same, by the fixed code (1.6.3 does not know it)
     if (!document.getElementById('igt-sugg-style')) { const st = document.createElement('style'); st.id = 'igt-sugg-style'; st.textContent = suggCss + suggNoteCss; (document.head || root).appendChild(st); }
     if (SUGG_PAGE.test(location.pathname)) { note('sugg-page'); location.replace(FOLLOWING); return; }
     if (!document.body) return;
@@ -244,7 +249,7 @@
     try { snap = document.evaluate('//body//text()[contains(., "uggest") or contains(., "imilar accounts") or contains(., "iscover people") or contains(., "ay know") or contains(., "ay like") or contains(., "ccounts to follow")]', document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null); } catch { snap = null; }
     for (let i = 0; snap && i < snap.snapshotLength; i++) {
       const el = snap.snapshotItem(i).parentElement;
-      if (!el || el.closest('article, [data-igt-nav]') || !SUGG_HEAD.test((el.textContent || '').trim())) continue;
+      if (!el || el.closest('article, [data-igt-nav], svg') || !SUGG_HEAD.test((el.textContent || '').trim())) continue; // an SVG's title is a button's label (below), not a heading
       const panel = suggPanel(el);
       if (panel) suggGone(panel, 'panel');
       else if (el.children.length === 0 && !el.closest('[data-igt]')) suggGone(el, 'head'); // the words at least; the rest once it loads
@@ -253,6 +258,7 @@
     for (const b of document.querySelectorAll('button, [role="button"], a[role="link"]')) {
       if (b.closest('article, [data-igt-nav], [data-igt]')) continue;
       const label = b.getAttribute('aria-label') || (b.querySelector('svg[aria-label]') || { getAttribute: () => '' }).getAttribute('aria-label') || '';
+      if (textOf(b).length > 40 || b.querySelector('button, [role="button"]')) continue; // a button, not a box of buttons
       if (SUGG_BTN.test(label.trim()) || SUGG_BTN.test((b.textContent || '').trim())) suggGone(b, 'button');
     }
     noSuggRows();

@@ -40,6 +40,7 @@
     'ig.noReelsTab': { what: 'No Reels tab in Instagram\'s bar', asked: '2026-11-05: "Also the reels button can go away"' },
     'ig.followingFeed': { what: 'Home is the Following feed', asked: '2026-11-05: "every time I open it I see the same exact post"' },
     'ig.noSuggestions': { what: 'No "Suggested for you" (desktop sidebar, See all page, carousels, Similar accounts)', asked: '2026-11-15: "Can we remove this sidebar from instagram"' },
+    'ig.suggestedRows': { what: 'No suggested accounts, by the fixed code (1.6.4 and later; the iPhone): each suggested row (N mutuals, Follow) and suggestion panel goes, never the Follow and Message buttons of a profile', asked: '2026-11-18: "still waiting on you to block this element in instagram via our extension"; 2026-11-19: "did you remove the Follow button?"' },
     'ig.appPrompts': { what: 'Instagram\'s "Open the app" prompts hidden', asked: null },
     'ig.pageTop': { what: 'A newly opened page starts at its top', asked: '2026-11-05: "opening certain pages scrolls way down instead of starting at the top"' },
     'ig.calm': { what: 'The calm feed: held posts keep their place over a plain grey, one short fade', asked: '2026-11-15: "Its infuriatingly glitchy and is gonna give me epilepsy"' },

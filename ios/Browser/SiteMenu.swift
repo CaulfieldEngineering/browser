@@ -49,9 +49,8 @@ final class SiteMenuViewController: UITableViewController {
     private func build() {
         sections = []
         if actions.newer != nil, actions.update != nil { sections.append((nil, nil, [.update])) }
-        if Flavor.isInstagram {
-            sections.append(("Feed", "Posts you have already scrolled past are left out the next time the feed opens, so you start at what is new. Posts you saw on this visit stay.", [.seen]))
-        }
+        // No Feed section: "Skip posts I've seen" (ig-seen.js) is no longer in the app (Joe, 2026-11-19: "our filter is
+        // blocking fine posts. Can we just pull back the filtering? Especially the "don't show repeated posts" one").
         sections.append(("Tools", nil, [.hide, .reload]))
         sections.append(("Account", nil, [.account]))
     }

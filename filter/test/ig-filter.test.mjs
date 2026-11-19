@@ -39,6 +39,8 @@ const seenPost = (id) => `<article id="${id}" style="height:340px"><header><a hr
 const JOE_ROWS = [['raven', 'RAVEN', '3 mutuals'], ['mikeperry', 'Mike Perry', '9 mutuals'], ['lilith', 'Lilith', '1 mutual'], ['vanswarpedtourfl', 'vanswarpedtourfl', '7 mutuals'],
   ['joeymonaco', 'Joey Monaco', '3 mutuals'], ['quinn', 'Quinn', '6 mutuals'], ['mobadr', 'Mo Badr', '15 mutuals'], ['tonycamposeo', 'Tony Camposeo', '7 mutuals'],
   ['hunter', 'H U N T E R', '9 mutuals'], ['hrlikes', 'H.R.Likes', '11 mutuals'], ['andrewbozymowski', 'Andrew Bozymowski', '12 mutuals'], ['alyssafoster', 'alyssafoster', 'Followed by quinn + 2 more']];
+const DEEP_ROWS = [['mitchfoster', 'Mitch Foster', '17 mutuals'], ['jessicalukas', 'Jessica Lukas', '2 mutuals'], ['lorene', 'Lorene Singleton King', '2 mutuals'], ['mikeyydread', 'mikeyydread', '1 mutual'],
+  ['jim.leatherman', 'jim.leatherman', '24 mutuals'], ['brendasmith', 'Brenda Smith', '1 mutual'], ['mykayla', 'Mykayla🌺 Stallings', '3 mutuals'], ['prestonhall', 'Preston Hall', '5 mutuals'], ['valerieadger', 'Valerie Adger', '3 mutuals'], ['cass', '~𝘾𝙖𝙨𝙨♡~', '1 mutual']];
 const joeRow = ([u, name, line], i) => `<div class="x1dm5mii" id="jr-${u}"><div class="x9f619 x78zum5" style="display:flex;align-items:center;padding:8px 16px">
   <div class="x1i10hfl"><a href="/${u}/" role="link" tabindex="0"><img alt="${u}'s profile picture" src="${CDN}/plain-j${u}.jpg" style="width:56px;height:56px;border-radius:50%"></a></div>
   <div style="flex:1;padding:0 12px"><div><a href="/${u}/" role="link"><span class="x1lliihq" dir="auto">${name}</span></a></div>
@@ -65,6 +67,11 @@ const pages = {
    </main>${NAV}${BANNER}`,
   '/someprofile/': `<main><nav><a id="home" href="/">Home</a><a id="favs" href="/?variant=favorites">Favorites</a></nav><header><img id="bigavatar" src="${CDN}/flag-avatar.jpg" style="width:150px;height:150px" alt="someprofile's profile picture"></header>
    <div class="_ac7v">${tile('p1', '/p/AAA/', 'plain-p1.jpg')}${tile('p2', '/p/BBB/', 'flag-p2.jpg')}</div></main>${NAV}${BANNER}`,
+  // Joe's profile grid of 2026-11-19 ("our instagram filter is absolutlely effed"): tiles overlapped and stacked after
+  // hidden ones were taken out. Instagram's markup as read that day from a public profile: rows (._ac7v, flex) of three
+  // cells, each a sized box holding the tile's link (inline) and a 3:4 picture. Tiles 2, 6, 7 and 11 are flagged, 9 cannot
+  // be judged (held), the rest are plain.
+  '/joegrid/': `<main><div id="jg" style="width:935px">${[0, 1, 2, 3].map((r) => `<div class="_ac7v" style="display:flex;gap:3px;margin-bottom:3px">${[1, 2, 3].map((c) => { const n = r * 3 + c; const f = [2, 6, 7, 11].includes(n) ? 'flag' : n === 9 ? 'fail' : 'plain'; return `<div class="jgc" id="jc${n}" style="position:relative;width:309px"><a id="jt${n}" href="/someone/p/JG${n}/" role="link"><div style="width:309px;height:412px"><img src="${CDN}/${f}-jg${n}.jpg" style="width:309px;height:412px;object-fit:cover" alt=""></div></a></div>`; }).join('')}</div>`).join('')}</div></main>`,
   '/gridprofile/': `<main><div id="rows">${[[1, 2, 3], [4, 5, 6]].map((row) => `<div class="_ac7v" style="display:flex;gap:4px;margin-bottom:4px">${row.map((n) => tile('g' + n, '/p/G' + n + '/', (n === 2 ? 'flag' : 'plain') + '-g' + n + '.jpg')).join('')}</div>`).join('')}</div></main>`,
   '/someprofile/reels/': `<main><div class="x1qjc9v5">${bgTile('r1', '/someprofile/reel/C1/', 'plain-r1.jpg')}${bgTile('r2', '/someprofile/reel/C2/', 'flag-r2.jpg')}</div></main>`,
   '/someprofile/tagged/': `<main>${tile('t1', '/p/TTT/', 'flag-t1.jpg')}${tile('t2', '/p/UUU/', 'plain-t2.jpg')}</main>`,
@@ -131,6 +138,31 @@ const pages = {
   '?joelist': joeList(true, false),
   // The same rows after the posts of the Following feed (the list in a feed that has posts), with no heading at all.
   '?joefeed': joeList(false, true),
+  // Joe's list again, 2026-11-19 ("Except suggested accounts aren't even being hidden"): the rows as deep as Instagram's
+  // own (the name eight boxes under the row), the mutual faces as links to those accounts, no heading, the Messages
+  // pill below. Mitch Foster, Jessica Lukas, ...
+  '?deeplist': `<main role="main"><div id="dlcol" style="max-width:630px;margin:0 auto"><div><div><div id="dlrows">${DEEP_ROWS.map(([u, n, l], i) => {
+    const wrap = (k, inner) => (k ? `<div class="x9f619">${wrap(k - 1, inner)}</div>` : inner);
+    return `<div id="dl-${u}" class="x1dm5mii"><div class="x9f619 x78zum5" style="display:flex;align-items:center;padding:8px 16px">
+      <div>${wrap(3, `<span role="link"><a href="/${u}/" role="link"><img alt="${u}'s profile picture" src="${CDN}/plain-d${u}.jpg" style="width:56px;height:56px"></a></span>`)}</div>
+      <div style="flex:1">${wrap(5, `<a href="/${u}/" role="link"><div><div><span dir="auto">${n}</span></div></div></a>`)}
+        <div style="display:flex">${[1, 2].map((k) => `<a href="/friend${k}${u}/"><img alt="" src="${CDN}/plain-f${k}${u}.jpg" style="width:14px;height:14px"></a>`).join('')}<span dir="auto">${l}</span></div></div>
+      <div>${wrap(2, i % 2 ? '<button type="button"><div>Follow</div></button>' : '<div role="button" tabindex="0"><div>Follow</div></div>')}</div></div></div>`; }).join('')}</div></div></div></div></main>
+    <div id="dlmsg" style="position:fixed;bottom:16px;right:16px"><div role="button"><span>Messages</span></div></div>`,
+  // A profile he does not follow, Joe's screenshot of 2026-11-19 ("did you remove the Follow button?", gator_billiards_club):
+  // the name, Follow, Message, the chevron whose SVG title is "Similar accounts", the "..." menu, counts, bio, highlights.
+  '/gatorprofile/': `<main><header><section><div><div id="gpbar" style="display:flex;align-items:center"><h2 id="gpname">gator_billiards_club</h2>
+      <div id="gpbtns" style="display:flex"><button id="gpfollow" type="button"><div>Follow</div></button><div role="button" id="gpmsg" tabindex="0"><div>Message</div></div>
+      <div role="button" id="gpsim" tabindex="0"><svg aria-label="Similar accounts" width="16" height="16"><title>Similar accounts</title><path d="M1 1"/></svg></div></div>
+      <div role="button" id="gpmore"><svg aria-label="Options" width="24" height="24"><title>Options</title></svg></div></div>
+      <ul id="gpcounts"><li>120 posts</li><li>2,400 followers</li><li>310 following</li></ul><div id="gpbio">Billiards club. Leagues on Tuesdays.</div></div></section></header>
+      <div id="gphigh"><a href="/stories/highlights/1/"><img src="${CDN}/plain-gh1.jpg" style="width:77px;height:77px" alt=""></a></div>
+      ${tile('gp1', '/gator_billiards_club/p/GP1/', 'plain-gp1.jpg')}</main>`,
+  // The same, followed: Following and Message.
+  '/gatorfollowing/': `<main><header><section><div style="display:flex"><h2>gator_billiards_club</h2><div id="gfbtns" style="display:flex"><button id="gffollowing" type="button"><div>Following</div></button><div role="button" id="gfmsg"><div>Message</div></div>
+      <div role="button" id="gfsim"><svg aria-label="Similar accounts" width="16" height="16"><title>Similar accounts</title></svg></div></div></div></section></header></main>`,
+  // A post's own page on the laptop: the author row has a Follow beside the name (no article).
+  '/p/POSTPAGE/': `<main><div style="display:flex"><div><img src="${CDN}/plain-pp.jpg" style="width:400px;height:500px"></div><div id="ppside"><div id="ppauthor" style="display:flex"><a href="/pedalshop/"><img alt="pedalshop's profile picture" src="${CDN}/plain-ppa.jpg" style="width:32px;height:32px"></a><a href="/pedalshop/">pedalshop</a><span>•</span><div role="button" id="ppfollow">Follow</div></div><div>New pedal day.</div></div></div></main>`,
   // What must stay: the profile of someone he does not follow (its Follow and its mutuals line are in the header), and
   // its Followers list (rows with Follow, but no suggestion line).
   '/mutualprofile/': `<main><header><img id="mpav" src="${CDN}/plain-mpav.jpg" style="width:150px;height:150px" alt="mutualprofile's profile picture">
@@ -585,15 +617,28 @@ try {
   await go('/someprofile/reels/');
   check('reels tab: a plain background tile shows', await page.$eval('#r1 [style*="background-image"]', (e) => getComputedStyle(e).visibility === 'visible' && !e.closest('[data-igf-gone]')));
   check('reels tab: a flagged background tile is hidden', (await hiddenAs('#r2 [style*="background-image"]')) === 'image');
-  // Joe, 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"
-  check('reels tab: the hidden tile is taken out, no blank left (nothing to see or tap)', await page.$eval('#r2', (e) => e.getBoundingClientRect().height === 0 && e.getBoundingClientRect().width === 0));
+  // Joe, 2026-11-19 ("our instagram filter is absolutlely effed"): a hidden tile keeps its box as a plain blank, so
+  // Instagram's grid is never re-laid out (the close-up asked for on 2026-11-08 broke his grids and was taken out).
+  check('reels tab: the hidden tile keeps its box, a plain blank (nothing to see or tap)', await page.$eval('#r2', (e) => { const b = e.parentElement.getBoundingClientRect(); const bg = e.querySelector('[style*="background-image"]'); return b.height >= 290 && b.width >= 190 && getComputedStyle(e).pointerEvents === 'none' && (!bg || getComputedStyle(bg).visibility === 'hidden'); }));
   check('reels tab: the plain tile still shows at its size', await page.$eval('#r1', (e) => e.getBoundingClientRect().height >= 290));
-  // ---- a grid of rows: the tiles after a hidden one close up ----
+  // ---- a grid of rows: a hidden tile keeps its place, nothing moves ----
   await go('/gridprofile/');
-  check('grid: the flagged tile is taken out', await page.$eval('#g2', (e) => e.getBoundingClientRect().height === 0));
-  check('grid: the next tile moves into its place', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g3').top - r('g1').top) < 2 && Math.abs(r('g3').left - r('g1').right - 4) < 3; }));
-  check('grid: a tile from the next row moves up to fill the row', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g4').top - r('g1').top) < 2; }));
+  check("grid: the flagged tile's picture is gone", await page.$eval('#g2 img', (e) => getComputedStyle(e).visibility === 'hidden') && await page.$eval('#g2', (e) => e.hasAttribute('data-igf-tile')));
+  check('grid: the flagged tile keeps its box (a plain blank of its size)', await page.evaluate(() => { const r = (id) => document.getElementById(id).parentElement.getBoundingClientRect(); return Math.abs(r('g2').height - r('g1').height) < 2 && Math.abs(r('g2').width - r('g1').width) < 2; }));
+  check('grid: the tiles after it stay where Instagram put them', await page.evaluate(() => { const r = (id) => document.getElementById(id).parentElement.getBoundingClientRect(); return Math.abs(r('g3').top - r('g1').top) < 2 && r('g3').left > r('g2').right - 1 && r('g4').top >= r('g1').bottom - 1 && Math.abs(r('g4').left - r('g1').left) < 2; }));
   check('grid: the columns keep their width', await page.evaluate(() => { const r = (id) => document.getElementById(id).getBoundingClientRect(); return Math.abs(r('g1').width - r('g4').width) < 2 && r('g1').width >= 190; }));
+  // ---- Joe's grid of 2026-11-19: tile count and positions unchanged, only the hidden ones blank ----
+  const jgAt = () => page.evaluate(() => [...document.querySelectorAll('.jgc')].map((c) => { const b = c.getBoundingClientRect(); const img = c.querySelector('img'); return { id: c.id, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), pic: !!img && img.getBoundingClientRect().height > 0 && getComputedStyle(img).visibility !== 'hidden' && !c.querySelector('[data-igf-gone]'), blank: !!c.querySelector('[data-igf-tile]') && getComputedStyle(c.querySelector('[data-igf-tile]').firstElementChild).backgroundColor !== 'rgba(0, 0, 0, 0)' }; }));
+  await go('/joegrid/', 1500);
+  const jg = await jgAt();
+  const jgWant = (i) => ({ x: jg[0].x + (i % 3) * 312, y: jg[0].y + Math.floor(i / 3) * 415 });
+  check("joe's grid: all 12 tiles are still in the page, each 309 by 412", jg.length === 12 && jg.every((t) => t.w === 309 && t.h === 412), JSON.stringify(jg.filter((t) => t.w !== 309 || t.h !== 412)));
+  check("joe's grid: every tile is where Instagram put it (column and row unchanged)", jg.every((t, i) => Math.abs(t.x - jgWant(i).x) <= 1 && Math.abs(t.y - jgWant(i).y) <= 1), JSON.stringify(jg.map((t) => [t.id, t.x, t.y])));
+  let jgOver = 0; for (let i = 0; i < jg.length; i++) for (let j = i + 1; j < jg.length; j++) { const a = jg[i], b = jg[j]; if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 1 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 1) jgOver++; }
+  check("joe's grid: no tile lies on another", jgOver === 0, String(jgOver));
+  check("joe's grid: the flagged tiles (2, 6, 7, 11) and the one that cannot be judged (9) are plain blanks, their pictures not shown", ['jc2', 'jc6', 'jc7', 'jc11', 'jc9'].every((id) => { const t = jg.find((x) => x.id === id); return t && !t.pic && t.blank; }), JSON.stringify(jg.filter((t) => ['jc2', 'jc6', 'jc7', 'jc11', 'jc9'].includes(t.id))));
+  check("joe's grid: the plain tiles show their pictures", jg.filter((t) => !['jc2', 'jc6', 'jc7', 'jc11', 'jc9'].includes(t.id)).every((t) => t.pic && !t.blank));
+  check("joe's grid: a plain tile can still be clicked", await page.$eval('#jt1', (e) => getComputedStyle(e).pointerEvents !== 'none' && document.elementFromPoint(e.getBoundingClientRect().left + 100, e.getBoundingClientRect().top + 100).closest('a') === e));
   await go('/someprofile/reels/');
   // A tile whose background is set after it is on the page.
   await page.evaluate(() => { const d = document.querySelector('#r1 [style*="background-image"]'); d.style.backgroundImage = 'url("https://scontent-iad3-1.cdninstagram.com/v/t51.2885-15/flag-r1b.jpg")'; });
@@ -767,6 +812,21 @@ try {
   const feedLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('jr-' + u); return e && e.getBoundingClientRect().height > 0; }), JOE_ROWS.map((r) => r[0]));
   check("suggestions, Joe's rows after the Following feed's posts, no heading: every row goes", feedLeft.length === 0, feedLeft.join(','));
   check("suggestions, Joe's rows after posts: the posts stay, and no note (it is not a page of suggestions)", (await shown('JF1')) && (await shown('JF2')) && !(await page.$('[data-igt-sugg-note]')));
+  await go('/?variant=following&fx=deeplist', 1800);
+  const deepLeft = await page.evaluate((ids) => ids.filter((u) => { const e = document.getElementById('dl-' + u); return e && e.getBoundingClientRect().height > 0; }), DEEP_ROWS.map((r) => r[0]));
+  check("suggestions, Joe's list of 2026-11-19 (rows as deep as Instagram's, mutual faces as links): every row is gone", deepLeft.length === 0, deepLeft.join(','));
+  check("suggestions, Joe's list of 2026-11-19: the Messages pill and the tab bar stay", (await shown('dlmsg')));
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await go('/gatorprofile/', 1800);
+  check("profile header (Joe, 2026-11-19: \"did you remove the Follow button?\"): Follow, Message and the ... menu show", (await shown('gpfollow')) && (await shown('gpmsg')) && (await shown('gpmore')) && (await shown('gpname')));
+  check('profile header: Follow and Message can be clicked', await page.evaluate(() => ['gpfollow', 'gpmsg'].every((id) => { const e = document.getElementById(id), r = e.getBoundingClientRect(); const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return r.width > 0 && at && (at === e || e.contains(at)); })));
+  check('profile header: the counts, bio, highlights and the grid stay', (await shown('gpcounts')) && (await shown('gpbio')) && (await shown('gphigh')) && (await shown('gp1')));
+  check('profile header: only the Similar accounts chevron goes', !(await shown('gpsim')));
+  await go('/gatorfollowing/', 1500);
+  check('profile header, followed: Following and Message show', (await shown('gffollowing')) && (await shown('gfmsg')) && (await shown('gfbtns')));
+  await go('/p/POSTPAGE/', 1500);
+  check("a post's page: the author's row and its Follow stay", (await shown('ppauthor')) && (await shown('ppfollow')));
+  await page.setViewportSize({ width: 556, height: 900 });
   await go('/mutualprofile/', 1500);
   check('suggestions, guard: a profile he does not follow keeps its header (Follow, Message, its mutuals line, bio) and posts', (await shown('mpname')) && (await shown('mpfollow')) && (await shown('mpmsg')) && (await shown('mpmutual')) && (await shown('mpbio')) && (await shown('mp1')));
   check('suggestions, guard: a Followers list (Follow buttons, no suggestion line) stays', (await shown('fdlg')) && (await shown('fl-fa')) && (await shown('fl-fb')) && (await shown('fl-fc')));

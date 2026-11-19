@@ -23,9 +23,11 @@ import WebKit
 enum InstagramFilter {
     static let world = WKContentWorld.world(name: "igfilter")
 
-    /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier.
+    /// The page scripts, in order: the settings, the rules, the bridge, the filter, the prompt tidier. ig-seen.js (skip
+    /// posts seen before, and repeats) is no longer injected (Joe, 2026-11-19: "our filter is blocking fine posts. Can we
+    /// just pull back the filtering? Especially the "don't show repeated posts" one").
     private static let scripts: [WKUserScript] = {
-        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "ig-seen", "fb-tidy", "reddit-filter"].compactMap { name in
+        ["filter-config", "rules", "bridge-ios", "ig-filter", "ig-tidy", "fb-tidy", "reddit-filter"].compactMap { name in
             guard let url = Bundle.main.url(forResource: name, withExtension: "js", subdirectory: "shared"),
                   let source = try? String(contentsOf: url, encoding: .utf8) else {
                 assertionFailure("missing \(name)")

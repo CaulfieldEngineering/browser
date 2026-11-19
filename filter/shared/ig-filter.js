@@ -99,17 +99,11 @@
     // after a few scrolls down - presumably it stops once something gets blocked"): Instagram loads the next posts when
     // the last ones come into view, and a post with display:none never comes into view.
     'article' + GONE + ':not([data-igf-tile]):not([data-igf-slide-hold]):not([data-igf-cover]){display:block !important;height:1px !important;min-height:0 !important;max-height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:hidden !important;opacity:0 !important;pointer-events:none !important}',
-    // A grid whose blocked tile was taken out: its rows give their tiles to one grid so the rest close up (Joe,
-    // 2026-11-08: "for where tiles are blocked, can we just skip it instead of leaving the hole?"). Anything else in it
-    // (a spinner, a row not marked yet) spans the full width, as before.
     '[data-igf-grid]{display:grid !important;grid-template-columns:repeat(var(--igf-cols,3),minmax(0,1fr)) !important;column-gap:var(--igf-cgap,0px) !important;row-gap:var(--igf-rgap,0px) !important}',
     '[data-igf-grid]>:not([data-igf-row]){grid-column:1/-1}',
     '[data-igf-row]{display:contents !important}',
     '[data-igf-row]>*{margin:0 !important;width:auto !important;min-width:0 !important;max-width:none !important}',
     '[data-igf-row]>[data-igf-cell-gone]{display:none !important}',
-    // Instagram's grids (2026-11-13): each row stays a box of its own, as tall as the share of a row its tiles fill, and
-    // its tiles are set where they belong in the closed-up grid (layoutRows, below). Instagram measures its rows to
-    // know what to keep in the page; a row with no box of its own measured as nothing.
     '[data-igf-rows]>[data-igf-r]{display:block !important;position:relative !important;box-sizing:border-box !important;margin:0 !important;padding:0 !important;border:0 !important;overflow:visible !important;height:var(--igf-h) !important;min-height:0 !important;max-height:none !important}',
     '[data-igf-rows]>[data-igf-r]>[data-igf-c]{position:absolute !important;box-sizing:border-box !important;margin:0 !important;left:var(--igf-x) !important;top:var(--igf-y) !important;width:var(--igf-w) !important;height:var(--igf-ht) !important;min-width:0 !important;max-width:none !important;flex:none !important}',
     '[data-igf-rows]>[data-igf-r]>:not([data-igf-c]){display:none !important}',
@@ -117,8 +111,8 @@
     // A reel or story still being checked holds its place in the viewer (its picture held invisible), not collapsed.
     '[data-igf-slide-hold]{visibility:hidden !important}',
     '[data-igf-tile]{pointer-events:none !important}',
-    '[data-igf-tile]>:not(.igf-ph){display:none !important}',
-    '.igf-ph{display:block !important;width:100%;background:' + (T.holdShade > 0 ? 'rgba(128,128,128,' + T.holdShade + ')' : 'transparent') + ';pointer-events:none}',
+    '[data-igf-tile]>*{background:rgba(128,128,128,' + (T.holdShade > 0 ? T.holdShade : 0.12) + ') !important}',
+    '[data-igf-tile]>* *,[data-igf-tile] img,[data-igf-tile] video{visibility:hidden !important}',
     // An avatar judged suggestive: a plain circle the same size, the picture moved out of sight (no icon, no word).
     'img[data-igf-avatar]{object-position:-99999px -99999px !important;background:rgba(128,128,128,.28) !important;border-radius:50% !important;visibility:visible !important}',
     // A profile flagged by its name or bio: no posts, reels or tagged grids.
@@ -190,15 +184,15 @@
   // anything else collapses. No text, no icon.
   const isTile = (unit) => unit.tagName === 'A' && (SITE === 'facebook' ? unit.matches(FB_TILE) && !unit.closest('[role="article"]')
     : /\/(p|reel|reels|tv)\//.test(unit.getAttribute('href') || '') && !unit.closest('article'));
+  // The tile's own boxes stay exactly as Instagram laid them out (2026-11-19): nothing is taken out of the page or put
+  // in; its first boxes are painted a plain grey and everything inside them (pictures, videos, backgrounds, counts) is
+  // made invisible, so the blank is always the tile's own size and nothing around it moves.
   function placeholder(unit) {
-    if (!isTile(unit) || [...unit.children].some((c) => c.classList && c.classList.contains('igf-ph'))) return;
-    const r = unit.getBoundingClientRect();
+    if (!isTile(unit)) return;
     unit.setAttribute('data-igf-tile', '');
-    const ph = document.createElement('div');
-    ph.className = 'igf-ph';
-    if (r.height > 0) ph.style.height = Math.round(r.height) + 'px'; else ph.style.aspectRatio = '1';
-    unit.prepend(ph);
   }
+  // Facebook only (Marketplace): a tile hidden for good leaves its grid and the rest close up, as before. Instagram's
+  // grids are never re-laid out (2026-11-19, below in hide()).
   // A tile hidden for good leaves the grid: its row is found (the nearest box whose siblings also hold tiles), the rows'
   // container becomes one grid with the same columns and gaps, and the tile's cell is dropped, so the tiles after it move
   // up. A tile still being checked keeps its blank (it may come back). Rows Instagram adds later are marked as they come.
@@ -504,7 +498,12 @@
     if (defer) deferIO.observe(unit);
     if (kind !== 'checking' && !viewer) { const id = idOf(unit, null); if (id) { goneById.set(id, [kind, why || kind]); if (goneById.size > 4000) goneById.delete(goneById.keys().next().value); } }
     for (const v of unit.tagName === 'VIDEO' ? [unit] : unit.querySelectorAll('video')) { try { v.muted = true; v.pause(); } catch {} }
-    if (kind !== 'checking' && isTile(unit)) { actedAt = performance.now(); skipTile(unit); } else placeholder(unit);
+    // A grid tile, hidden for good or still being checked, keeps its box as a plain grey tile of its size (Joe,
+    // 2026-11-19: "our instagram filter is absolutlely effed", of a profile grid whose tiles overlapped after hidden
+    // tiles were taken out and the rest placed by hand). Instagram's own layout is never changed: the grid is not
+    // closed up and no tile is moved.
+    if (isTile(unit)) actedAt = performance.now();
+    if (SITE === 'facebook' && kind !== 'checking' && isTile(unit)) skipTile(unit); else placeholder(unit);
     if (!isTile(unit) && kind !== 'checking') setTimeout(nudge, 50); // only a post that closed up changes what Instagram measures
     if (kind !== 'checking') { state.removed++; stat('hidden-' + (why || kind)); if (viewer) skipPast(unit, wasOnScreen); }
     else { stat('checking-' + (why || 'unjudged')); retry(unit); }
