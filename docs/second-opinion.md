@@ -9,7 +9,7 @@ This note is the interface for whoever wires it into the page scripts (the Insta
 - **Text first.** Every YouTube tile and every Instagram post sends its text (title, channel or account, caption or description, bio, hashtags, the visible comments) to a local model on the mini PC, judged by Joe's rules: Instagram, suggestive content and revealing clothing (locked memory entries 21 to 28); YouTube, his spec of 2026-11-19, "sexual content only - so, this can be things like latex models, asmr-type content, explicitly bikini models, things that obviously do not provide any other value", and not true crime, violence or adult topics (2026-11-17).
 - **A picture only near a line.** The picture goes too only when the on-device judges scored it near their lines (below), so the model's vision side sees the cases the device is least sure of.
 - **The on-device rules stay the first, instant pass.** The word lists (captions, names, bios) and the two picture judges decide alone whenever they are sure.
-- The model: Qwen3-VL-2B-Instruct (Q4_K_M), llama.cpp with Vulkan on the mini PC's Radeon 780M, on 127.0.0.1 only; one model does text and pictures. The Devices server's route is the only way in, from the mini PC and the tailnet. Nothing leaves the network.
+- The model: Qwen3-VL-4B-Instruct (Q4_K_M), llama.cpp with Vulkan on the mini PC's Radeon 780M, on 127.0.0.1 only; one model does text and pictures. Measured 2026-11-19 (devices `scripts/eval-second-opinion.mjs`, 50 texts written from his rules, 119 public pictures): text alone precision 1.0, recall 0.92, about 0.2 s a unit (the word lists alone: 0.89 and 0.32); pictures, vision alone 0.98 and 0.98, about 1.1 s; with the device, all 53 known-bad pictures removed. A batch of 8 texts and a picture answers in about 2 s. The 2B model was faster (0.1 s a text) but caught 0.64 of the texts and 0.66 of the pictures. The Devices server's route is the only way in, from the mini PC and the tailnet. Nothing leaves the network.
 
 ## The rules (filter/shared/second-opinion.js, one copy for every device and the server)
 
@@ -18,7 +18,7 @@ This note is the interface for whoever wires it into the page scripts (the Insta
 | zone | when | the device | the model may |
 |---|---|---|---|
 | `confident` | flagged by both judges (nsfwjs and the revealing judge), or one judge with the other not quiet, or a flagging score past its cap | removes | nothing (an audit share is asked, never applied) |
-| `rescuable` | flagged by one judge alone, every flagging score under its cap (line + `band.above`, never above the hard ceiling), the other judge quiet (`band.quiet`) | removes | **show** it, on a vision verdict "fine" at `rescueMin` (0.85) or more |
+| `rescuable` | flagged by one judge alone, every flagging score under its cap (line + `band.above`, never above the hard ceiling), the other judge quiet (`band.quiet`) | removes | **show** it, on a vision verdict "fine" at `rescueMin` (0.85) or more, when `rescue` is on (on in the configs for the 4B model, which keeps all 53 known-bad pictures removed with it; off in the code's floor) |
 | `near` | not flagged, a score within `band.below` of its line | shows | **remove** it, at `removeMin` (0.6) or more |
 | `clear` / `none` | not flagged and not near / no scores | shows | remove it on its text, at `removeMin` or more |
 

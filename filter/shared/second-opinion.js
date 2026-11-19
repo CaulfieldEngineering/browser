@@ -24,7 +24,7 @@
     on: false,
     sites: ['instagram.com', 'youtube.com'],
     timeoutMs: 3000,
-    batch: 16,
+    batch: 8, // 8 texts and a picture answer in about 2 s on the mini PC (measured 2026-11-19)
     endpoint: 'http://100.92.203.47:4500/api/filter-review',
     // Text-first: which units send their text (every YouTube tile, every Instagram post with a caption).
     text: { youtube: true, instagram: true, comments: true, maxComments: 8 },
@@ -36,9 +36,9 @@
     },
     removeMin: 0.6,
     rescueMin: 0.85,
-    // Whether a vision "fine" may show a rescuable picture at all. Off: measured 2026-11-19, the 2B model called fine
-    // pictures fine but missed known-bad ones, so a rescue would have shown two of the 53 known-bad pictures. It is
-    // turned on only for a model that keeps every known-bad picture removed (devices repo, the tuner's test).
+    // Whether a vision "fine" may show a rescuable picture at all. Off here (the floor); the configs turn it on for a
+    // model that keeps every known-bad picture removed with it on (devices repo, the tuner's test). Measured 2026-11-19:
+    // Qwen3-VL-2B missed a third of the known-bad pictures (rescue would have shown two); Qwen3-VL-4B kept all 53.
     rescue: false,
     holdNear: true,
     // A small share of the pictures the device is sure of are sent too, for the nightly tuner's numbers only: their
@@ -147,7 +147,7 @@
     const S = settings(opts && opts.settings);
     const B = g.IGFilterBridge;
     if (!S.on || !B || typeof B.secondOpinion !== 'function' || !Array.isArray(units) || !units.length) return null;
-    const list = units.slice(0, num(S.batch, 16)).map((u) => {
+    const list = units.slice(0, num(S.batch, 8)).map((u) => {
       const w = worth(u, S);
       const x = shape(u, S);
       if (!w.image) { delete x.image; delete x.imageUrl; }
